@@ -1,0 +1,163 @@
+// Future Kek language ideas.
+// This file is a scratchpad for features that are not part of the current core design.
+
+// ---------------------------------------------------------------------------
+// Compile-Time Execution
+// ---------------------------------------------------------------------------
+
+// Compile-time variables must be fully evaluable by the compiler.
+comptime u32 BufferSize = 1024 * 4;
+
+// Compile-time functions use normal function syntax with the comptime marker.
+// Early versions should keep these functions side-effect free and avoid C calls.
+comptime u32 AlignUp(u32 value, u32 alignment) {
+	u32 mask = alignment - 1;
+	return (value + mask) & ~mask;
+}
+
+u8 AlignedBuffer[AlignUp(BufferSize, 16)];
+
+// Compile-time values can also be passed as generic parameters.
+struct FixedBuffer<comptime u32 Size> {
+	u8 Data[Size];
+	u32 Used;
+};
+
+FixedBuffer<256> SmallBuffer;
+
+// Optional later idea: explicit compile-time blocks.
+comptime {
+	u32 GeneratedSize = AlignUp(300, 64);
+	CompilerMessage(GeneratedSize);
+}
+
+// Optional later idea: compile-time type information for diagnostics and code
+// generation. This should stay out of the first core version.
+comptime {
+	CompilerMessage(type_name(FixedBuffer<256>));
+}
+
+// ---------------------------------------------------------------------------
+// Attribute Syntax Idea
+// ---------------------------------------------------------------------------
+
+// The current examples use postfix layout markers like packed, aligned(8).
+// Attribute syntax could become a more general alternative later.
+@packed
+@aligned(8)
+struct AttributePackedAligned {
+	u8 Tag;
+	u32 Value;
+};
+
+// ---------------------------------------------------------------------------
+// Anonymous Functions And Lambdas
+// ---------------------------------------------------------------------------
+
+// Plain function values do not capture any surrounding variables.
+fn(i32, i32) -> i32 AddFunc = (i32 a, i32 b) -> i32 {
+	return a + b;
+};
+
+i32 LambdaResult = AddFunc(10, 20);
+
+// Expression-body lambda idea.
+fn(i32) -> i32 DoubleFunc = (i32 value) -> i32 value * 2;
+
+// Capturing lambdas should probably use a separate closure type so hidden
+// environment storage is explicit in the type system and C backend.
+i32 Offset = 5;
+
+closure(i32) -> i32 AddOffset = [Offset](i32 value) -> i32 {
+	return value + Offset;
+};
+
+// Reference captures should be explicit.
+i32 Counter = 0;
+
+closure() -> void IncrementCounter = [&Counter]() -> void {
+	Counter += 1;
+};
+
+// ---------------------------------------------------------------------------
+// Defer Idea
+// ---------------------------------------------------------------------------
+
+// Defer is currently a future idea. If added, multiple defers can exist in the
+// same scope and run in declaration order before the return expression is
+// evaluated.
+u8 DeferExample() {
+	u8 TmpValue; // Defaults to 0.
+
+	defer {
+		TmpValue = 42;
+	}
+
+	defer {
+		TmpValue += 1;
+	}
+
+	TmpValue = 69;
+
+	return TmpValue; // Returns 43.
+}
+
+// ---------------------------------------------------------------------------
+// Tagged Union Idea
+// ---------------------------------------------------------------------------
+
+// Current Kek only has plain C-style unions. This is one possible future
+// direction for a safer tagged union with automatic active-variant tracking.
+tagged union TaggedValue {
+	IntValue: i32 Value;
+	BytesValue: struct {
+		u8 Bytes[4];
+	};
+};
+
+i32 TaggedValue::AddIfInt(i32 amount) {
+	i32 result = amount;
+
+	switch this {
+		case IntValue as value {
+			result += value.Value;
+		}
+		case BytesValue {
+			result += 0;
+		}
+	}
+
+	return result;
+}
+
+// ---------------------------------------------------------------------------
+// Array Comprehension Idea
+// ---------------------------------------------------------------------------
+
+// Arrays are currently C-style fixed arrays. This is a possible future syntax
+// for compile-time or generated initialization.
+u8 GeneratedArray[8] = { for (u8 val) in Range<u8>(0, 8) val * 2; };
+
+// ---------------------------------------------------------------------------
+// Standard Library Ideas
+// ---------------------------------------------------------------------------
+
+// These types require explicit storage or allocator behavior.
+// Nothing here should imply hidden background allocation.
+
+List<u8> MyDynamicArray;
+List<u8, 255> MyDynamicArrayWithInitialCapacity;
+List<u8, 255, MyAllocator> MyDynamicArrayWithAllocator;
+
+LinkedList<u8> MyLinkedList;
+LinkedList<u8, MyAllocator> MyLinkedListWithAllocator;
+
+BinaryTree<u8> MyBinaryTree;
+QuadTree<u8> MyQuadTree;
+
+HashTable<key = ptr, value = u8> MyHashTable;
+HashTable<key = ptr, value = u8, memory = MyAllocator> MyHashTableWithAllocator;
+HashTable<key = ptr, value = u8, func = MyHashFunc> MyHashTableWithHashFunc;
+
+StringBuilder MyStringBuilder;
+StringBuilder<MyAllocator> MyStringBuilderWithAllocator;

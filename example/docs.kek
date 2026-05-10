@@ -1,0 +1,82 @@
+// Kek documentation comment design.
+//
+// Documentation comments use /// only.
+// A doc comment belongs to the declaration that immediately follows it.
+// Keep docs short and readable; tags are optional and should be used sparingly.
+
+/// Package DocsExample shows the standard Kek documentation style.
+/// Package docs should be placed near the top of a package entry file.
+
+alias RawHandle = ptr;
+
+/// Adds two signed 32-bit integers.
+/// Returns the sum of v1 and v2.
+export i32 Add(i32 v1, i32 v2) {
+	return v1 + v2;
+}
+
+/// Describes a fixed-size byte buffer.
+/// The buffer owns 256 bytes of inline storage.
+struct FixedBuffer {
+	/// Raw fixed storage.
+	u8 Data[256];
+
+	/// Number of bytes currently used.
+	/// Must be less than or equal to len(Data).
+	u32 Used;
+};
+
+/// Clears all used bytes in the buffer.
+/// After this call, this.Used is 0.
+void FixedBuffer::Clear() {
+	this.Used = 0;
+}
+
+/// File open mode.
+enum FileMode : u8 {
+	/// Open file for reading.
+	Read,
+
+	/// Open file for writing.
+	Write,
+
+	/// Open file for both reading and writing.
+	ReadWrite,
+};
+
+/// Result code returned by file operations.
+enum FileResult : u8 {
+	/// Operation succeeded.
+	Ok,
+
+	/// The requested file does not exist.
+	NotFound,
+
+	/// The operation is not allowed.
+	PermissionDenied,
+};
+
+/// Opens a file handle.
+/// path must point to a null-terminated C path.
+/// outHandle receives the opened handle on success.
+/// Returns FileResult::Ok on success, otherwise an error code.
+export FileResult OpenFile(ptr path, FileMode mode, ptr outHandle) {
+	return FileResult::NotFound;
+}
+
+/// Casts a raw handle to a pointer.
+/// Only valid when the handle actually stores a pointer.
+ptr HandleToPtr(RawHandle handle) {
+	return cast<ptr>(handle);
+}
+
+/// FixedBuffer layout invariants.
+assert(offsetof(FixedBuffer, Data) == 0);
+assert(sizeof(FixedBuffer) >= 260);
+
+// Optional lightweight tags, for cases where plain text is not clear enough:
+//
+// @param name  Parameter explanation.
+// @return      Return value explanation.
+// @see Symbol  Cross-reference to another symbol.
+// @warning     Important caution.

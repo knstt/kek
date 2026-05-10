@@ -1,0 +1,16 @@
+// This file belongs to the MyPackage package because it lives in the
+// example/MyPackage/ directory.
+//
+// All .kek files in the same directory are part of the same package namespace.
+// Code outside this directory can import the package with:
+//
+// using MyPackage;
+//
+// and then call this function as:
+//
+// MyPackage::MyPackageFunc();
+
+// Export makes the function visible to code importing this package.
+export void MyPackageFunc() {
+	return;
+}
