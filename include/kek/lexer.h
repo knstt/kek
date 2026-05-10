@@ -1,0 +1,137 @@
+#ifndef KEK_LEXER_H
+#define KEK_LEXER_H
+
+#include <stddef.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef enum KekTokenKind {
+	KEK_TOKEN_EOF = 0,
+	KEK_TOKEN_ERROR,
+
+	KEK_TOKEN_IDENTIFIER,
+	KEK_TOKEN_INTEGER,
+	KEK_TOKEN_FLOAT,
+	KEK_TOKEN_STRING,
+	KEK_TOKEN_CHAR,
+
+	KEK_TOKEN_KW_ALIAS,
+	KEK_TOKEN_KW_ALIGNOF,
+	KEK_TOKEN_KW_ASSERT,
+	KEK_TOKEN_KW_BREAK,
+	KEK_TOKEN_KW_CASE,
+	KEK_TOKEN_KW_CAST,
+	KEK_TOKEN_KW_CONTINUE,
+	KEK_TOKEN_KW_DEFAULT,
+	KEK_TOKEN_KW_DO,
+	KEK_TOKEN_KW_ELSE,
+	KEK_TOKEN_KW_ENUM,
+	KEK_TOKEN_KW_EXPORT,
+	KEK_TOKEN_KW_EXTERN,
+	KEK_TOKEN_KW_FALSE,
+	KEK_TOKEN_KW_FOR,
+	KEK_TOKEN_KW_IF,
+	KEK_TOKEN_KW_IN,
+	KEK_TOKEN_KW_LEN,
+	KEK_TOKEN_KW_OFFSETOF,
+	KEK_TOKEN_KW_PACKED,
+	KEK_TOKEN_KW_PANIC,
+	KEK_TOKEN_KW_RETURN,
+	KEK_TOKEN_KW_SIZEOF,
+	KEK_TOKEN_KW_STRUCT,
+	KEK_TOKEN_KW_SWITCH,
+	KEK_TOKEN_KW_THIS,
+	KEK_TOKEN_KW_TRUE,
+	KEK_TOKEN_KW_UNION,
+	KEK_TOKEN_KW_UNREACHABLE,
+	KEK_TOKEN_KW_USING,
+	KEK_TOKEN_KW_WHILE,
+
+	KEK_TOKEN_LPAREN,
+	KEK_TOKEN_RPAREN,
+	KEK_TOKEN_LBRACE,
+	KEK_TOKEN_RBRACE,
+	KEK_TOKEN_LBRACKET,
+	KEK_TOKEN_RBRACKET,
+	KEK_TOKEN_COMMA,
+	KEK_TOKEN_DOT,
+	KEK_TOKEN_SEMICOLON,
+	KEK_TOKEN_COLON,
+	KEK_TOKEN_COLON_COLON,
+	KEK_TOKEN_HASH,
+	KEK_TOKEN_AT,
+	KEK_TOKEN_ARROW,
+
+	KEK_TOKEN_PLUS,
+	KEK_TOKEN_MINUS,
+	KEK_TOKEN_STAR,
+	KEK_TOKEN_SLASH,
+	KEK_TOKEN_PERCENT,
+	KEK_TOKEN_AMP,
+	KEK_TOKEN_PIPE,
+	KEK_TOKEN_CARET,
+	KEK_TOKEN_TILDE,
+	KEK_TOKEN_BANG,
+	KEK_TOKEN_QUESTION,
+	KEK_TOKEN_EQUAL,
+	KEK_TOKEN_LESS,
+	KEK_TOKEN_GREATER,
+
+	KEK_TOKEN_PLUS_PLUS,
+	KEK_TOKEN_MINUS_MINUS,
+	KEK_TOKEN_PLUS_EQUAL,
+	KEK_TOKEN_MINUS_EQUAL,
+	KEK_TOKEN_STAR_EQUAL,
+	KEK_TOKEN_SLASH_EQUAL,
+	KEK_TOKEN_PERCENT_EQUAL,
+	KEK_TOKEN_AMP_EQUAL,
+	KEK_TOKEN_PIPE_EQUAL,
+	KEK_TOKEN_CARET_EQUAL,
+	KEK_TOKEN_EQUAL_EQUAL,
+	KEK_TOKEN_BANG_EQUAL,
+	KEK_TOKEN_LESS_EQUAL,
+	KEK_TOKEN_GREATER_EQUAL,
+	KEK_TOKEN_LESS_LESS,
+	KEK_TOKEN_GREATER_GREATER,
+	KEK_TOKEN_LESS_LESS_EQUAL,
+	KEK_TOKEN_GREATER_GREATER_EQUAL,
+	KEK_TOKEN_AMP_AMP,
+	KEK_TOKEN_PIPE_PIPE
+} KekTokenKind;
+
+typedef struct KekSourcePos {
+	size_t offset;
+	size_t line;
+	size_t column;
+} KekSourcePos;
+
+typedef struct KekToken {
+	KekTokenKind kind;
+	const char *start;
+	size_t length;
+	KekSourcePos pos;
+	const char *message;
+} KekToken;
+
+typedef struct KekLexer {
+	const char *source_name;
+	const char *source;
+	size_t length;
+	size_t index;
+	size_t line;
+	size_t column;
+	const char *error_message;
+} KekLexer;
+
+void kek_lexer_init(KekLexer *lexer, const char *source_name, const char *source, size_t length);
+KekToken kek_lexer_next(KekLexer *lexer);
+const char *kek_token_kind_name(KekTokenKind kind);
+int kek_token_is_keyword(KekTokenKind kind);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
