@@ -164,9 +164,10 @@ struct AstNode {
     enum AstNodeType type;
     struct SourceLocation location;
     struct Token token;
-    struct AstNode** children;
+    struct AstNode* firstChild;
+    struct AstNode* lastChild;
+    struct AstNode* nextSibling;
     size_t childCount;
-    size_t childCapacity;
 };
 
 struct Parser {
@@ -174,6 +175,9 @@ struct Parser {
     size_t count;
     size_t position;
     struct SourceFile* file;
+    struct AstNode* astNodes;
+    size_t astNodeCount;
+    size_t astNodeCapacity;
     int errorCount;
 };
 
@@ -182,7 +186,7 @@ void FreeFileTable(struct FileTable* table);
 
 struct Tokenizer CreateTokenizer(int fileIndex, struct FileTable* table);
 struct Token GetNextToken(struct Tokenizer* tokenizer);
-struct TokenArray TokenizeFile(struct Tokenizer* tokenizer);
+struct TokenArray TokenizeFile(struct Tokenizer* tokenizer, struct Token* storage, size_t capacity);
 const char* TokenLexeme(struct Token* token, struct SourceFile* file);
 void PrintToken(struct Token* token, struct SourceFile* file);
 void FreeTokenArray(struct TokenArray* array);

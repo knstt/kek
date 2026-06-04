@@ -62,12 +62,14 @@ void WriteAstJson(FILE* out, struct AstNode* node, struct SourceFile* file, int 
     fputs("\"children\": [", out);
     if (node->childCount > 0) {
         fputc('\n', out);
-        for (size_t i = 0; i < node->childCount; i++) {
-            WriteAstJson(out, node->children[i], file, indent + 2);
-            if (i + 1 < node->childCount) {
+        size_t index = 0;
+        for (struct AstNode* child = node->firstChild; child; child = child->nextSibling) {
+            WriteAstJson(out, child, file, indent + 2);
+            if (index + 1 < node->childCount) {
                 fputc(',', out);
             }
             fputc('\n', out);
+            index++;
         }
         for (int i = 0; i < indent + 1; i++) fputs("  ", out);
     }

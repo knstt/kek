@@ -9,29 +9,28 @@ const char* AstNodeTypeNames[] = {
     "Token",
 };
 
-static struct AstNode* CreateAstNode(enum AstNodeType type, struct SourceLocation location) {
-    struct AstNode* node = calloc(1, sizeof(struct AstNode));
-    if (!node) {
-        fprintf(stderr, "Error: Could not allocate AST node.\n");
+static struct AstNode* CreateAstNode(struct Parser* parser, enum AstNodeType type, struct SourceLocation location) {
+    if (parser->astNodeCount >= parser->astNodeCapacity) {
+        fprintf(stderr, "Error: AST node storage capacity exceeded.\n");
         exit(1);
     }
+
+    struct AstNode* node = &parser->astNodes[parser->astNodeCount++];
+    memset(node, 0, sizeof(*node));
     node->type = type;
     node->location = location;
     return node;
 }
 
 static void AddChild(struct AstNode* parent, struct AstNode* child) {
-    if (parent->childCount >= parent->childCapacity) {
-        size_t capacity = parent->childCapacity == 0 ? 8 : parent->childCapacity * 2;
-        struct AstNode** children = realloc(parent->children, capacity * sizeof(struct AstNode*));
-        if (!children) {
-            fprintf(stderr, "Error: Could not grow AST children.\n");
-            exit(1);
-        }
-        parent->children = children;
-        parent->childCapacity = capacity;
+    child->nextSibling = NULL;
+    if (parent->lastChild) {
+        parent->lastChild->nextSibling = child;
+    } else {
+        parent->firstChild = child;
     }
-    parent->children[parent->childCount++] = child;
+    parent->lastChild = child;
+    parent->childCount++;
 }
 
 static int IsPunctuationToken(struct Token* token, enum PunctuationType punctuation) {
@@ -71,33 +70,39 @@ static void FinishLocationFromChildren(struct AstNode* node) {
         return;
     }
 
-    struct SourceLocation first = node->children[0]->location;
-    struct SourceLocation last = node->children[node->childCount - 1]->location;
+    struct SourceLocation first = node->firstChild->location;
+    struct SourceLocation last = node->lastChild->location;
     node->location = first;
     if (last.offset + last.length >= first.offset) {
         node->location.length = (last.offset + last.length) - first.offset;
     }
 }
 
-static struct AstNode* ParseList(struct Parser* parser, enum AstNodeType listType, enum PunctuationType closePunctuation);
+static struct AstNode* ParseStatement(struct Parser* parser, enum PunctuationType closePunctuation);
 
 static struct AstNode* ParseTokenNode(struct Parser* parser) {
     struct Token token = parser->tokens[parser->position++];
-    struct AstNode* node = CreateAstNode(AST_TOKEN, token.location);
+    struct AstNode* node = CreateAstNode(parser, AST_TOKEN, token.location);
     node->token = token;
     return node;
 }
 
+static void ParseChildrenInto(struct Parser* parser, struct AstNode* parent, enum PunctuationType closePunctuation) {
+    while (parser->position < parser->count && !IsAstTerminator(&parser->tokens[parser->position], closePunctuation)) {
+        struct AstNode* statement = ParseStatement(parser, closePunctuation);
+        if (statement->childCount > 0) {
+            AddChild(parent, statement);
+        } else {
+            break;
+        }
+    }
+}
+
 static struct AstNode* ParseDelimited(struct Parser* parser, enum AstNodeType type, enum PunctuationType closePunctuation) {
     struct Token open = parser->tokens[parser->position++];
-    struct AstNode* node = CreateAstNode(type, open.location);
+    struct AstNode* node = CreateAstNode(parser, type, open.location);
 
-    struct AstNode* body = ParseList(parser, type, closePunctuation);
-    for (size_t i = 0; i < body->childCount; i++) {
-        AddChild(node, body->children[i]);
-    }
-    free(body->children);
-    free(body);
+    ParseChildrenInto(parser, node, closePunctuation);
 
     if (parser->position < parser->count && IsPunctuationToken(&parser->tokens[parser->position], closePunctuation)) {
         struct Token close = parser->tokens[parser->position++];
@@ -124,7 +129,7 @@ static struct AstNode* ParseDelimited(struct Parser* parser, enum AstNodeType ty
 }
 
 static struct AstNode* ParseStatement(struct Parser* parser, enum PunctuationType closePunctuation) {
-    struct AstNode* statement = CreateAstNode(AST_STATEMENT, parser->tokens[parser->position].location);
+    struct AstNode* statement = CreateAstNode(parser, AST_STATEMENT, parser->tokens[parser->position].location);
 
     while (parser->position < parser->count && !IsAstTerminator(&parser->tokens[parser->position], closePunctuation)) {
         struct Token* token = &parser->tokens[parser->position];
@@ -161,17 +166,9 @@ static struct AstNode* ParseStatement(struct Parser* parser, enum PunctuationTyp
 }
 
 static struct AstNode* ParseList(struct Parser* parser, enum AstNodeType listType, enum PunctuationType closePunctuation) {
-    struct AstNode* list = CreateAstNode(listType, parser->tokens[parser->position].location);
+    struct AstNode* list = CreateAstNode(parser, listType, parser->tokens[parser->position].location);
 
-    while (parser->position < parser->count && !IsAstTerminator(&parser->tokens[parser->position], closePunctuation)) {
-        struct AstNode* statement = ParseStatement(parser, closePunctuation);
-        if (statement->childCount > 0) {
-            AddChild(list, statement);
-        } else {
-            free(statement);
-            break;
-        }
-    }
+    ParseChildrenInto(parser, list, closePunctuation);
 
     if (closePunctuation == PUNCTUATION_COUNT
         && parser->position < parser->count
@@ -186,13 +183,8 @@ static struct AstNode* ParseList(struct Parser* parser, enum AstNodeType listTyp
 
 struct AstNode* ParseAst(struct Parser* parser) {
     struct SourceLocation location = {1, 1, 0, parser->file->length};
-    struct AstNode* root = CreateAstNode(AST_FILE, location);
-    struct AstNode* list = ParseList(parser, AST_FILE, PUNCTUATION_COUNT);
-    for (size_t i = 0; i < list->childCount; i++) {
-        AddChild(root, list->children[i]);
-    }
-    free(list->children);
-    free(list);
+    struct AstNode* root = ParseList(parser, AST_FILE, PUNCTUATION_COUNT);
+    root->location = location;
     return root;
 }
 
@@ -215,15 +207,11 @@ void PrintAst(struct AstNode* node, struct SourceFile* file, int indent) {
     }
     printf(" @ %zu:%zu len=%zu\n", node->location.line, node->location.column, node->location.length);
 
-    for (size_t i = 0; i < node->childCount; i++) {
-        PrintAst(node->children[i], file, indent + 1);
+    for (struct AstNode* child = node->firstChild; child; child = child->nextSibling) {
+        PrintAst(child, file, indent + 1);
     }
 }
 
 void FreeAst(struct AstNode* node) {
-    for (size_t i = 0; i < node->childCount; i++) {
-        FreeAst(node->children[i]);
-    }
-    free(node->children);
-    free(node);
+    (void)node;
 }

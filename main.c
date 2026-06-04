@@ -32,15 +32,24 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    struct SourceFile* sourceFile = &fileTable.files[fileIndex];
+    size_t tokenCapacity = sourceFile->length + 1;
+    struct Token tokenStorage[tokenCapacity];
+
     struct Tokenizer tokenizer = CreateTokenizer(fileIndex, &fileTable);
-    struct TokenArray tokens = TokenizeFile(&tokenizer);
+    struct TokenArray tokens = TokenizeFile(&tokenizer, tokenStorage, tokenCapacity);
     int result = 0;
+
+    size_t astNodeCapacity = tokens.count * 4 + 1;
+    struct AstNode astNodeStorage[astNodeCapacity];
 
     struct Parser parser = {0};
     parser.tokens = tokens.items;
     parser.count = tokens.count;
     parser.position = 0;
     parser.file = tokenizer.file;
+    parser.astNodes = astNodeStorage;
+    parser.astNodeCapacity = astNodeCapacity;
     struct AstNode* ast = ParseAst(&parser);
 
     if (parser.errorCount > 0) {

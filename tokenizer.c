@@ -285,20 +285,17 @@ void PrintToken(struct Token* token, struct SourceFile* file) {
 
 static void PushToken(struct TokenArray* array, struct Token token) {
     if (array->count >= array->capacity) {
-        size_t capacity = array->capacity == 0 ? 128 : array->capacity * 2;
-        struct Token* items = realloc(array->items, capacity * sizeof(struct Token));
-        if (!items) {
-            fprintf(stderr, "Error: Could not grow token array.\n");
-            exit(1);
-        }
-        array->items = items;
-        array->capacity = capacity;
+        fprintf(stderr, "Error: Token storage capacity exceeded.\n");
+        exit(1);
     }
     array->items[array->count++] = token;
 }
 
-struct TokenArray TokenizeFile(struct Tokenizer* tokenizer) {
+struct TokenArray TokenizeFile(struct Tokenizer* tokenizer, struct Token* storage, size_t capacity) {
     struct TokenArray array = {0};
+    array.items = storage;
+    array.capacity = capacity;
+
     for (;;) {
         struct Token token = GetNextToken(tokenizer);
         PushToken(&array, token);
@@ -310,7 +307,6 @@ struct TokenArray TokenizeFile(struct Tokenizer* tokenizer) {
 }
 
 void FreeTokenArray(struct TokenArray* array) {
-    free(array->items);
     array->items = NULL;
     array->count = 0;
     array->capacity = 0;
