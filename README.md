@@ -6,23 +6,42 @@ The name stands for nothing. That is the joke.
 
 Source files use the `.kek` extension.
 
-Build the lexer:
+Build:
 
 ```sh
-make
+cc -std=c11 -Wall -Wextra -pedantic main.c source.c tokenizer.c ast.c ast_json.c codegen_c.c -o kek
 ```
 
 Print tokens for a source file:
 
 ```sh
-build/keklex example/main.kek
+./kek tmp.kek
 ```
 
-Run the lexer tests:
+Print the tokenizer-backed AST:
 
 ```sh
-make test
+./kek --ast tmp.kek
 ```
+
+Write AST JSON:
+
+```sh
+./kek --ast-json tmp.kek ast.json
+```
+
+Generate C:
+
+```sh
+./kek --c tmp.kek
+./kek --c tmp.kek tmp.c
+```
+
+Open `ast_viewer.html` in a browser and load `ast.json` to inspect the tree.
+
+The AST is currently structural rather than semantic: file, statement, block,
+parenthesized group, bracket group, and token nodes. It is built from the
+existing tokenizer token stream.
 
 Examples:
 
