@@ -10,7 +10,7 @@
 //
 // MyPackage::MyPackageFunc();
 
-// Export makes the function visible to code importing this package.
-export void MyPackageFunc() {
+// Declarations are exported by default until visibility rules are added.
+void:MyPackageFunc() {
 	return;
 }

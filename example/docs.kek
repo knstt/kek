@@ -7,33 +7,33 @@
 /// Package DocsExample shows the standard Kek documentation style.
 /// Package docs should be placed near the top of a package entry file.
 
-alias RawHandle = ptr;
+alias:RawHandle = ptr;
 
 /// Adds two signed 32-bit integers.
 /// Returns the sum of v1 and v2.
-export i32 Add(i32 v1, i32 v2) {
-	return v1 + v2;
+i32:Add(i32:v1, i32:v2) {
+	return(v1 + v2);
 }
 
 /// Describes a fixed-size byte buffer.
 /// The buffer owns 256 bytes of inline storage.
-struct FixedBuffer {
+struct:FixedBuffer {
 	/// Raw fixed storage.
-	u8 Data[256];
+	u8:Data[256];
 
 	/// Number of bytes currently used.
 	/// Must be less than or equal to len(Data).
-	u32 Used;
+	u32:Used;
 };
 
 /// Clears all used bytes in the buffer.
 /// After this call, this.Used is 0.
-void FixedBuffer::Clear() {
+void:FixedBuffer::Clear() {
 	this.Used = 0;
 }
 
 /// File open mode.
-enum FileMode : u8 {
+enum:u8:FileMode {
 	/// Open file for reading.
 	Read,
 
@@ -45,7 +45,7 @@ enum FileMode : u8 {
 };
 
 /// Result code returned by file operations.
-enum FileResult : u8 {
+enum:u8:FileResult {
 	/// Operation succeeded.
 	Ok,
 
@@ -60,14 +60,14 @@ enum FileResult : u8 {
 /// path must point to a null-terminated C path.
 /// outHandle receives the opened handle on success.
 /// Returns FileResult::Ok on success, otherwise an error code.
-export FileResult OpenFile(ptr path, FileMode mode, ptr outHandle) {
-	return FileResult::NotFound;
+FileResult:OpenFile(ptr:path, FileMode:mode, ptr:outHandle) {
+	return(FileResult::NotFound);
 }
 
 /// Casts a raw handle to a pointer.
 /// Only valid when the handle actually stores a pointer.
-ptr HandleToPtr(RawHandle handle) {
-	return cast<ptr>(handle);
+ptr:HandleToPtr(RawHandle:handle) {
+	return(cast<ptr>(handle));
 }
 
 /// FixedBuffer layout invariants.
