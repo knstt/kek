@@ -7,6 +7,13 @@ struct CFunctionInfo {
     size_t paramCount;
 };
 
+struct CStructInfo {
+    char name[64];
+    char fieldNames[64][64];
+    char defaults[64][64];
+    size_t fieldCount;
+};
+
 struct CWriter {
     FILE* out;
     struct SourceFile* file;
@@ -16,7 +23,7 @@ struct CWriter {
     struct Token* previous;
     struct CFunctionInfo functions[64];
     size_t functionCount;
-    char structs[64][64];
+    struct CStructInfo structs[64];
     size_t structCount;
     char localNames[128][64];
     char localTypes[128][64];
@@ -118,18 +125,39 @@ static struct CFunctionInfo* AddFunctionInfo(struct CWriter* writer, const char*
 
 static int IsKnownStruct(struct CWriter* writer, const char* name) {
     for (size_t i = 0; i < writer->structCount; i++) {
-        if (strcmp(writer->structs[i], name) == 0) {
+        if (strcmp(writer->structs[i].name, name) == 0) {
             return 1;
         }
     }
     return 0;
 }
 
-static void AddKnownStruct(struct CWriter* writer, const char* name) {
-    if (IsKnownStruct(writer, name) || writer->structCount >= sizeof(writer->structs) / sizeof(writer->structs[0])) {
-        return;
+static struct CStructInfo* FindStructInfo(struct CWriter* writer, const char* name) {
+    for (size_t i = 0; i < writer->structCount; i++) {
+        if (strcmp(writer->structs[i].name, name) == 0) {
+            return &writer->structs[i];
+        }
     }
-    snprintf(writer->structs[writer->structCount++], sizeof(writer->structs[0]), "%s", name);
+    return NULL;
+}
+
+static struct CStructInfo* AddStructInfo(struct CWriter* writer, const char* name) {
+    struct CStructInfo* info = FindStructInfo(writer, name);
+    if (info) {
+        info->fieldCount = 0;
+        memset(info->fieldNames, 0, sizeof(info->fieldNames));
+        memset(info->defaults, 0, sizeof(info->defaults));
+        return info;
+    }
+
+    if (writer->structCount >= sizeof(writer->structs) / sizeof(writer->structs[0])) {
+        return NULL;
+    }
+
+    info = &writer->structs[writer->structCount++];
+    memset(info, 0, sizeof(*info));
+    snprintf(info->name, sizeof(info->name), "%s", name);
+    return info;
 }
 
 static void AddLocalType(struct CWriter* writer, const char* name, const char* type) {
@@ -229,6 +257,7 @@ static void WriteIndent(FILE* out, int indent) {
 }
 
 static void WritePrelude(FILE* out) {
+    fputs("#include <assert.h>\n", out);
     fputs("#include <stdint.h>\n", out);
     fputs("#include <stddef.h>\n\n", out);
     fputs("typedef uint8_t u8;\n", out);
@@ -308,6 +337,70 @@ static void WriteBlock(struct CWriter* writer, struct AstNode* block) {
     writer->previous = NULL;
 }
 
+static void WriteStructField(struct CWriter* writer, struct AstNode* field) {
+    struct AstNode* previousChild = NULL;
+    for (struct AstNode* child = field->firstChild; child; child = child->nextSibling) {
+        if (IsTokenNode(child) && IsOperatorToken(&child->token, OPERATOR_ASSIGN)) {
+            break;
+        }
+
+        if (ShouldSkipKekColon(child, previousChild)) {
+            previousChild = child;
+            continue;
+        }
+
+        switch (child->type) {
+            case AST_TOKEN:
+                WriteTokenNode(writer, child);
+                break;
+            case AST_BLOCK:
+                WriteBlock(writer, child);
+                break;
+            case AST_GROUP:
+                WriteDelimited(writer, child, '(', ')');
+                break;
+            case AST_INDEX:
+                WriteDelimited(writer, child, '[', ']');
+                break;
+            case AST_STATEMENT:
+            case AST_FILE:
+                WriteStatementList(writer, child, child->type == AST_FILE);
+                break;
+        }
+
+        previousChild = child;
+    }
+}
+
+static void WriteStructBlock(struct CWriter* writer, struct AstNode* block) {
+    fputs(" {\n", writer->out);
+    writer->indent++;
+    ResetStatementState(writer);
+    for (struct AstNode* field = block->firstChild; field; field = field->nextSibling) {
+        if (writer->atLineStart) {
+            WriteIndent(writer->out, writer->indent);
+            writer->atLineStart = 0;
+        }
+
+        WriteStructField(writer, field);
+
+        char separator = StatementSeparator(writer->file, field);
+        if (separator == ';' || separator == ',') {
+            fputc(separator, writer->out);
+        }
+        fputc('\n', writer->out);
+        ResetStatementState(writer);
+    }
+    if (writer->indent > 0) {
+        writer->indent--;
+    }
+    WriteIndent(writer->out, writer->indent);
+    fputc('}', writer->out);
+    writer->atLineStart = 0;
+    writer->needSpace = 0;
+    writer->previous = NULL;
+}
+
 static void WriteAttributeList(struct CWriter* writer, struct AstNode* attributes) {
     for (struct AstNode* statement = attributes->firstChild; statement; statement = statement->nextSibling) {
         if (!statement->firstChild || !IsTokenNode(statement->firstChild)) {
@@ -375,6 +468,56 @@ static int ParameterNameText(struct CWriter* writer, struct AstNode* parameter, 
         buffer[0] = '\0';
     }
     return 0;
+}
+
+static int FieldNameText(struct CWriter* writer, struct AstNode* field, char* buffer, size_t bufferSize) {
+    struct AstNode* type = field ? field->firstChild : NULL;
+    struct AstNode* colon = NextSibling(type);
+    struct AstNode* name = NextSibling(colon);
+    if (IsTokenNode(type)
+        && IsTokenNode(colon)
+        && IsPunctuationToken(&colon->token, PUNCTUATION_COLON)
+        && IsTokenNode(name)
+        && name->token.type == TOKEN_IDENTIFIER) {
+        CopyTokenText(&name->token, writer->file, buffer, bufferSize);
+        return 1;
+    }
+
+    if (bufferSize > 0) {
+        buffer[0] = '\0';
+    }
+    return 0;
+}
+
+static int FieldDefaultText(struct CWriter* writer, struct AstNode* field, char* buffer, size_t bufferSize) {
+    for (struct AstNode* child = field ? field->firstChild : NULL; child; child = child->nextSibling) {
+        if (IsTokenNode(child) && IsOperatorToken(&child->token, OPERATOR_ASSIGN)) {
+            struct AstNode* value = child->nextSibling;
+            if (IsTokenNode(value)) {
+                CopyTokenText(&value->token, writer->file, buffer, bufferSize);
+                return 1;
+            }
+            break;
+        }
+    }
+
+    if (bufferSize > 0) {
+        snprintf(buffer, bufferSize, "0");
+    }
+    return 0;
+}
+
+static void RegisterStructFields(struct CWriter* writer, struct CStructInfo* info, struct AstNode* block) {
+    if (!info || !block || block->type != AST_BLOCK) {
+        return;
+    }
+
+    for (struct AstNode* field = block->firstChild; field && info->fieldCount < 64; field = field->nextSibling) {
+        if (FieldNameText(writer, field, info->fieldNames[info->fieldCount], sizeof(info->fieldNames[info->fieldCount]))) {
+            FieldDefaultText(writer, field, info->defaults[info->fieldCount], sizeof(info->defaults[info->fieldCount]));
+            info->fieldCount++;
+        }
+    }
 }
 
 static void WriteParameter(struct CWriter* writer, struct AstNode* parameter) {
@@ -578,7 +721,8 @@ static int TryWriteStruct(struct CWriter* writer, struct AstNode* statement) {
 
     char structBuffer[64];
     CopyTokenText(&name->token, writer->file, structBuffer, sizeof(structBuffer));
-    AddKnownStruct(writer, structBuffer);
+    struct CStructInfo* info = AddStructInfo(writer, structBuffer);
+    RegisterStructFields(writer, info, block);
 
     fputs("struct", writer->out);
     if (AttributeListContains(writer, attributes, "packed")) {
@@ -591,7 +735,7 @@ static int TryWriteStruct(struct CWriter* writer, struct AstNode* statement) {
     WriteTokenNode(writer, name);
     writer->previous = &name->token;
     writer->needSpace = 0;
-    WriteBlock(writer, block);
+    WriteStructBlock(writer, block);
     return 1;
 }
 
@@ -755,6 +899,47 @@ static void WriteTokenNode(struct CWriter* writer, struct AstNode* node) {
     writer->previous = token;
 }
 
+static int TryWriteStructVariableDeclaration(struct CWriter* writer, struct AstNode* firstChild) {
+    if (!IsTokenNode(firstChild)
+        || firstChild->token.type != TOKEN_IDENTIFIER
+        || !IsTokenNode(firstChild->nextSibling)
+        || !IsPunctuationToken(&firstChild->nextSibling->token, PUNCTUATION_COLON)
+        || !IsTokenNode(firstChild->nextSibling->nextSibling)
+        || firstChild->nextSibling->nextSibling->token.type != TOKEN_IDENTIFIER) {
+        return 0;
+    }
+
+    char typeName[64];
+    char variableName[64];
+    CopyTokenText(&firstChild->token, writer->file, typeName, sizeof(typeName));
+    struct CStructInfo* info = FindStructInfo(writer, typeName);
+    if (!info) {
+        return 0;
+    }
+
+    struct AstNode* nameNode = firstChild->nextSibling->nextSibling;
+    if (nameNode->nextSibling) {
+        return 0;
+    }
+
+    CopyTokenText(&nameNode->token, writer->file, variableName, sizeof(variableName));
+    fprintf(writer->out, "struct %s %s = {", typeName, variableName);
+    if (info->fieldCount == 0) {
+        fputc('0', writer->out);
+    } else {
+        for (size_t i = 0; i < info->fieldCount; i++) {
+            if (i > 0) {
+                fputc(',', writer->out);
+            }
+            fprintf(writer->out, ".%s=%s", info->fieldNames[i], info->defaults[i][0] ? info->defaults[i] : "0");
+        }
+    }
+    fputc('}', writer->out);
+    writer->previous = &nameNode->token;
+    writer->needSpace = 0;
+    return 1;
+}
+
 static void WriteStatementChildren(struct CWriter* writer, struct AstNode* firstChild) {
     struct AstNode* previousChild = NULL;
 
@@ -769,6 +954,10 @@ static void WriteStatementChildren(struct CWriter* writer, struct AstNode* first
         CopyTokenText(&firstChild->token, writer->file, typeName, sizeof(typeName));
         CopyTokenText(&firstChild->nextSibling->nextSibling->token, writer->file, variableName, sizeof(variableName));
         AddLocalType(writer, variableName, typeName);
+    }
+
+    if (TryWriteStructVariableDeclaration(writer, firstChild)) {
+        return;
     }
 
     for (struct AstNode* child = firstChild; child; child = child->nextSibling) {

@@ -1,6 +1,6 @@
 [packed]struct:Packet{
-u8:kind;
-u32:id;
+u8:kind=4;
+u32:id=0;
 };
 
 [static,inline]int:add(int:a=0,int:b=0){
@@ -17,7 +17,8 @@ i64: main() {
     int:both = add(40, 2);
     int:one = add(a=42);
     Packet:packet;
-    packet.kind = 0;
+    assert(packet.kind == 4);
     u8:kind = packet.Add(3);
+    assert(kind == 7);
     return(both + one + kind);
 }
