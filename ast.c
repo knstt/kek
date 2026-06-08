@@ -89,11 +89,14 @@ static struct AstNode* ParseTokenNode(struct Parser* parser) {
 
 static void ParseChildrenInto(struct Parser* parser, struct AstNode* parent, enum PunctuationType closePunctuation) {
     while (parser->position < parser->count && !IsAstTerminator(&parser->tokens[parser->position], closePunctuation)) {
+        size_t previousPosition = parser->position;
         struct AstNode* statement = ParseStatement(parser, closePunctuation);
         if (statement->childCount > 0) {
             AddChild(parent, statement);
-        } else {
+        } else if (parser->position == previousPosition) {
             break;
+        } else {
+            continue;
         }
     }
 }

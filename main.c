@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
         result = 1;
     }
 
-    result = WriteCFile(out_c, &tokens, tokenizer.file);
+    result = WriteCFile(out_c, ast, tokenizer.file);
 
     if (result != 0) {
         fprintf(stderr, "Error writing C file\n");

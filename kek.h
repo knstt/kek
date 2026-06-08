@@ -199,7 +199,7 @@ int WriteAstJsonFile(const char* path, struct AstNode* ast, struct SourceFile* f
 void WriteAstJson(FILE* out, struct AstNode* node, struct SourceFile* file, int indent);
 void WriteJsonEscaped(FILE* out, const char* text, size_t length);
 
-int WriteCFile(const char* path, struct TokenArray* tokens, struct SourceFile* file);
-void WriteC(FILE* out, struct TokenArray* tokens, struct SourceFile* file);
+int WriteCFile(const char* path, struct AstNode* ast, struct SourceFile* file);
+void WriteC(FILE* out, struct AstNode* ast, struct SourceFile* file);
 
 #endif

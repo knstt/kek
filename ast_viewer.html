@@ -7,13 +7,18 @@
   <style>
     :root {
       color-scheme: light dark;
-      --bg: #f7f7f4;
+      --bg: #f6f6f2;
       --panel: #ffffff;
       --text: #1f2528;
       --muted: #687276;
-      --line: #d8dddf;
+      --line: #d6dcde;
+      --edge: #9aa7ab;
       --accent: #0b7285;
+      --accent-strong: #075c6b;
       --token: #7c3aed;
+      --token-bg: #f2edff;
+      --node-bg: #ffffff;
+      --node-stroke: #bac5c8;
       --shadow: 0 10px 30px rgba(20, 30, 35, 0.08);
     }
 
@@ -24,8 +29,13 @@
         --text: #f1f5f6;
         --muted: #a8b2b6;
         --line: #384247;
+        --edge: #68767b;
         --accent: #4dd0e1;
+        --accent-strong: #7ee5f0;
         --token: #c4a7ff;
+        --token-bg: #30294a;
+        --node-bg: #252b2f;
+        --node-stroke: #4a565c;
         --shadow: none;
       }
     }
@@ -48,7 +58,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 16px;
-      padding: 16px 20px;
+      padding: 14px 18px;
       border-bottom: 1px solid var(--line);
       background: var(--panel);
       position: sticky;
@@ -60,12 +70,14 @@
       margin: 0;
       font-size: 18px;
       font-weight: 700;
+      white-space: nowrap;
     }
 
     .controls {
       display: flex;
       align-items: center;
-      gap: 10px;
+      justify-content: flex-end;
+      gap: 8px;
       flex-wrap: wrap;
     }
 
@@ -78,6 +90,7 @@
       background: var(--panel);
       color: var(--text);
       border-radius: 6px;
+      min-height: 34px;
       padding: 7px 10px;
       font: inherit;
       cursor: pointer;
@@ -85,29 +98,162 @@
 
     button:hover {
       border-color: var(--accent);
+      color: var(--accent-strong);
+    }
+
+    button:disabled {
+      color: var(--muted);
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    .view-switch {
+      display: inline-flex;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .view-switch button {
+      border: 0;
+      border-radius: 0;
+    }
+
+    .view-switch button + button {
+      border-left: 1px solid var(--line);
+    }
+
+    .view-switch .active {
+      background: var(--accent);
+      color: var(--panel);
     }
 
     main {
-      padding: 20px;
+      height: calc(100vh - 64px);
+      padding: 16px;
     }
 
-    #tree {
-      max-width: 1200px;
-      margin: 0 auto;
+    #viewer {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      min-height: 420px;
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 8px;
       box-shadow: var(--shadow);
-      padding: 14px;
+      overflow: hidden;
+    }
+
+    #viewer[data-view="text"] {
       overflow: auto;
     }
 
+    #graph {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: var(--panel);
+      cursor: grab;
+      touch-action: none;
+    }
+
+    #graph[hidden],
+    #tree[hidden] {
+      display: none;
+    }
+
+    #graph.dragging {
+      cursor: grabbing;
+    }
+
     .empty {
-      max-width: 760px;
-      margin: 60px auto;
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
       color: var(--muted);
       text-align: center;
       line-height: 1.5;
+      pointer-events: none;
+    }
+
+    .empty[hidden] {
+      display: none;
+    }
+
+    .status {
+      position: absolute;
+      left: 12px;
+      bottom: 12px;
+      max-width: min(560px, calc(100% - 24px));
+      padding: 8px 10px;
+      color: var(--muted);
+      background: color-mix(in srgb, var(--panel) 92%, transparent);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font-size: 12px;
+      line-height: 1.35;
+      pointer-events: none;
+    }
+
+    .edge {
+      fill: none;
+      stroke: var(--edge);
+      stroke-width: 1.5;
+    }
+
+    .node {
+      cursor: pointer;
+    }
+
+    .node rect {
+      fill: var(--node-bg);
+      stroke: var(--node-stroke);
+      stroke-width: 1.25;
+      rx: 7;
+    }
+
+    .node:hover rect {
+      stroke: var(--accent);
+      stroke-width: 2;
+    }
+
+    .node-type {
+      fill: var(--accent-strong);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .node-token {
+      fill: var(--token);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+    }
+
+    .node-meta {
+      fill: var(--muted);
+      font-size: 11px;
+    }
+
+    .collapse-pill {
+      fill: var(--token-bg);
+      stroke: var(--node-stroke);
+    }
+
+    .collapse-text {
+      fill: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-anchor: middle;
+      dominant-baseline: central;
+    }
+
+    #tree {
+      min-height: 100%;
+      padding: 14px;
+      overflow: auto;
     }
 
     details {
@@ -128,7 +274,7 @@
       white-space: nowrap;
     }
 
-    .node-type {
+    .text-node-type {
       font-weight: 700;
       color: var(--accent);
     }
@@ -150,6 +296,22 @@
       border-left: 1px solid var(--line);
       white-space: nowrap;
     }
+
+    @media (max-width: 720px) {
+      header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .controls {
+        justify-content: flex-start;
+      }
+
+      main {
+        height: calc(100vh - 116px);
+        padding: 10px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -157,44 +319,308 @@
     <h1>Kek AST Viewer</h1>
     <div class="controls">
       <input id="fileInput" type="file" accept=".json,application/json">
-      <button id="expandAll" type="button">Expand</button>
-      <button id="collapseAll" type="button">Collapse</button>
+      <div class="view-switch" role="group" aria-label="View mode">
+        <button id="graphView" class="active" type="button">Graph</button>
+        <button id="textView" type="button">Text</button>
+      </div>
+      <button id="zoomOut" class="graph-control" type="button" disabled>-</button>
+      <button id="zoomIn" class="graph-control" type="button" disabled>+</button>
+      <button id="fitGraph" class="graph-control" type="button" disabled>Fit</button>
+      <button id="expandAll" type="button" disabled>Expand</button>
+      <button id="collapseAll" type="button" disabled>Collapse</button>
     </div>
   </header>
   <main>
-    <div id="tree" class="empty">Load JSON created with: <code>./kek --ast-json tmp.kek ast.json</code></div>
+    <div id="viewer">
+      <svg id="graph" role="img" aria-label="AST graph"></svg>
+      <div id="tree" hidden></div>
+      <div id="empty" class="empty">Load JSON created with: <code>./kek --ast-json tmp.kek ast.json</code></div>
+      <div id="status" class="status">No AST loaded</div>
+    </div>
   </main>
   <script>
+    const viewer = document.getElementById("viewer");
+    const graph = document.getElementById("graph");
     const tree = document.getElementById("tree");
+    const empty = document.getElementById("empty");
+    const status = document.getElementById("status");
     const fileInput = document.getElementById("fileInput");
+    const buttons = {
+      graphView: document.getElementById("graphView"),
+      textView: document.getElementById("textView"),
+      zoomOut: document.getElementById("zoomOut"),
+      zoomIn: document.getElementById("zoomIn"),
+      fitGraph: document.getElementById("fitGraph"),
+      expandAll: document.getElementById("expandAll"),
+      collapseAll: document.getElementById("collapseAll"),
+    };
+
+    const svgns = "http://www.w3.org/2000/svg";
+    const layout = {
+      nodeHeight: 68,
+      minNodeWidth: 164,
+      maxNodeWidth: 260,
+      horizontalGap: 28,
+      verticalGap: 86,
+      padding: 36,
+    };
+
+    let root = null;
+    let nodeId = 0;
+    let viewport = { x: 0, y: 0, scale: 1 };
+    let graphBounds = { width: 1, height: 1 };
+    let isDragging = false;
+    let dragStart = null;
+    let currentView = "graph";
+
+    function svgElement(name, attributes = {}) {
+      const element = document.createElementNS(svgns, name);
+      for (const [key, value] of Object.entries(attributes)) {
+        element.setAttribute(key, value);
+      }
+      return element;
+    }
 
     function text(value) {
       return document.createTextNode(value);
     }
 
-    function meta(node) {
+    function displayText(node) {
+      if (!node.tokenType) return "";
+      const value = JSON.stringify(node.text ?? "");
+      return `${node.tokenType} ${value}`;
+    }
+
+    function metaText(node) {
+      return `line ${node.line}, col ${node.column}`;
+    }
+
+    function fullMetaText(node) {
       return `line ${node.line}, col ${node.column}, off ${node.offset}, len ${node.length}`;
     }
 
-    function renderNode(node) {
-      const hasChildren = node.children && node.children.length > 0;
+    function shortText(value, maxLength) {
+      if (value.length <= maxLength) return value;
+      return `${value.slice(0, Math.max(0, maxLength - 1))}...`;
+    }
+
+    function prepareNode(node, depth = 0) {
+      node._id = nodeId++;
+      node._depth = depth;
+      node._collapsed = false;
+      node._children = Array.isArray(node.children) ? node.children : [];
+      for (const child of node._children) {
+        prepareNode(child, depth + 1);
+      }
+    }
+
+    function walk(node, callback) {
+      callback(node);
+      for (const child of node._children) {
+        walk(child, callback);
+      }
+    }
+
+    function visibleChildren(node) {
+      return node._collapsed ? [] : node._children;
+    }
+
+    function countNodes(node) {
+      let count = 0;
+      walk(node, () => count++);
+      return count;
+    }
+
+    function countVisibleNodes(node) {
+      let count = 1;
+      for (const child of visibleChildren(node)) {
+        count += countVisibleNodes(child);
+      }
+      return count;
+    }
+
+    function measureNode(node) {
+      const token = displayText(node);
+      const longest = Math.max(node.type.length, token.length, fullMetaText(node).length);
+      node._width = Math.min(layout.maxNodeWidth, Math.max(layout.minNodeWidth, longest * 7.1 + 28));
+    }
+
+    function measureSubtree(node) {
+      measureNode(node);
+      const children = visibleChildren(node);
+      if (children.length === 0) {
+        node._subtreeWidth = node._width;
+        return node._subtreeWidth;
+      }
+
+      let width = 0;
+      for (const child of children) {
+        width += measureSubtree(child);
+      }
+      width += layout.horizontalGap * (children.length - 1);
+      node._subtreeWidth = Math.max(node._width, width);
+      return node._subtreeWidth;
+    }
+
+    function assignPositions(node, left, depth) {
+      const children = visibleChildren(node);
+      node._x = left + node._subtreeWidth / 2;
+      node._y = layout.padding + depth * (layout.nodeHeight + layout.verticalGap);
+
+      if (children.length === 0) return;
+
+      let childLeft = left + Math.max(0, (node._subtreeWidth - children.reduce((sum, child) => sum + child._subtreeWidth, 0) - layout.horizontalGap * (children.length - 1)) / 2);
+      for (const child of children) {
+        assignPositions(child, childLeft, depth + 1);
+        childLeft += child._subtreeWidth + layout.horizontalGap;
+      }
+    }
+
+    function maxVisibleDepth(node) {
+      const children = visibleChildren(node);
+      if (children.length === 0) return node._depth;
+      return Math.max(...children.map(maxVisibleDepth));
+    }
+
+    function computeLayout() {
+      const width = measureSubtree(root);
+      assignPositions(root, layout.padding, 0);
+      const visibleDepth = maxVisibleDepth(root);
+      graphBounds = {
+        width: width + layout.padding * 2,
+        height: layout.padding * 2 + (visibleDepth + 1) * layout.nodeHeight + visibleDepth * layout.verticalGap,
+      };
+    }
+
+    function edgePath(parent, child) {
+      const startX = parent._x;
+      const startY = parent._y + layout.nodeHeight;
+      const endX = child._x;
+      const endY = child._y;
+      const midY = startY + (endY - startY) * 0.52;
+      return `M ${startX} ${startY} C ${startX} ${midY}, ${endX} ${midY}, ${endX} ${endY}`;
+    }
+
+    function appendEdges(group, node) {
+      for (const child of visibleChildren(node)) {
+        group.append(svgElement("path", { class: "edge", d: edgePath(node, child) }));
+        appendEdges(group, child);
+      }
+    }
+
+    function appendText(group, className, x, y, value) {
+      const text = svgElement("text", { class: className, x, y });
+      text.textContent = value;
+      group.append(text);
+    }
+
+    function appendNodes(group, node) {
+      const x = node._x - node._width / 2;
+      const y = node._y;
+      const nodeGroup = svgElement("g", { class: "node", transform: `translate(${x} ${y})`, tabindex: "0" });
+      nodeGroup.dataset.nodeId = node._id;
+
+      const title = svgElement("title");
+      title.textContent = `${node.type}${displayText(node) ? ` ${displayText(node)}` : ""} (${fullMetaText(node)})`;
+      nodeGroup.append(title);
+      nodeGroup.append(svgElement("rect", { width: node._width, height: layout.nodeHeight }));
+      appendText(nodeGroup, "node-type", 14, 22, node.type);
+
+      const token = displayText(node);
+      if (token) {
+        appendText(nodeGroup, "node-token", 14, 42, shortText(token, Math.floor((node._width - 28) / 7.2)));
+      } else {
+        appendText(nodeGroup, "node-meta", 14, 43, `${node._children.length} children`);
+      }
+
+      appendText(nodeGroup, "node-meta", 14, 60, metaText(node));
+
+      if (node._children.length > 0) {
+        nodeGroup.append(svgElement("circle", { class: "collapse-pill", cx: node._width - 18, cy: 18, r: 10 }));
+        appendText(nodeGroup, "collapse-text", node._width - 18, 18, node._collapsed ? "+" : "-");
+      }
+
+      nodeGroup.addEventListener("click", () => toggleNode(node._id));
+      nodeGroup.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          toggleNode(node._id);
+        }
+      });
+
+      group.append(nodeGroup);
+      for (const child of visibleChildren(node)) {
+        appendNodes(group, child);
+      }
+    }
+
+    function setControlsEnabled(enabled) {
+      buttons.zoomOut.disabled = !enabled || currentView !== "graph";
+      buttons.zoomIn.disabled = !enabled || currentView !== "graph";
+      buttons.fitGraph.disabled = !enabled || currentView !== "graph";
+      buttons.expandAll.disabled = !enabled;
+      buttons.collapseAll.disabled = !enabled;
+    }
+
+    function updateViewBox() {
+      graph.setAttribute("viewBox", `${viewport.x} ${viewport.y} ${viewer.clientWidth / viewport.scale} ${viewer.clientHeight / viewport.scale}`);
+      status.textContent = root
+        ? currentView === "graph"
+          ? `${countVisibleNodes(root)} visible nodes, ${countNodes(root)} total nodes, ${Math.round(viewport.scale * 100)}% zoom`
+          : `${countNodes(root)} total nodes`
+        : "No AST loaded";
+    }
+
+    function fitGraph() {
+      if (!root) return;
+      const scaleX = viewer.clientWidth / graphBounds.width;
+      const scaleY = viewer.clientHeight / graphBounds.height;
+      viewport.scale = Math.max(0.2, Math.min(1.4, Math.min(scaleX, scaleY) * 0.95));
+      viewport.x = (graphBounds.width - viewer.clientWidth / viewport.scale) / 2;
+      viewport.y = (graphBounds.height - viewer.clientHeight / viewport.scale) / 2;
+      updateViewBox();
+    }
+
+    function renderGraph({ preserveViewport = false } = {}) {
+      if (!root) return;
+      const previous = { ...viewport };
+      computeLayout();
+
+      graph.replaceChildren();
+      const edgeLayer = svgElement("g");
+      const nodeLayer = svgElement("g");
+      appendEdges(edgeLayer, root);
+      appendNodes(nodeLayer, root);
+      graph.append(edgeLayer, nodeLayer);
+
+      if (preserveViewport) {
+        viewport = previous;
+        updateViewBox();
+      } else {
+        fitGraph();
+      }
+    }
+
+    function renderTextNode(node) {
+      const hasChildren = node._children.length > 0;
       const label = document.createElement("span");
       const type = document.createElement("span");
-      type.className = "node-type";
+      type.className = "text-node-type";
       type.textContent = node.type;
       label.append(type);
 
-      if (node.tokenType) {
+      const tokenText = displayText(node);
+      if (tokenText) {
         label.append(text(" "));
         const token = document.createElement("span");
         token.className = "token";
-        token.textContent = `${node.tokenType} ${JSON.stringify(node.text)}`;
+        token.textContent = tokenText;
         label.append(token);
       }
 
       const location = document.createElement("span");
       location.className = "meta";
-      location.textContent = meta(node);
+      location.textContent = fullMetaText(node);
       label.append(location);
 
       if (!hasChildren) {
@@ -209,31 +635,195 @@
       const summary = document.createElement("summary");
       summary.append(label);
       details.append(summary);
-      for (const child of node.children) {
-        details.append(renderNode(child));
+      for (const child of node._children) {
+        details.append(renderTextNode(child));
       }
       return details;
     }
 
+    function renderTextTree() {
+      if (!root) return;
+      tree.replaceChildren(renderTextNode(root));
+    }
+
+    function findNodeById(id) {
+      let found = null;
+      walk(root, (node) => {
+        if (node._id === id) found = node;
+      });
+      return found;
+    }
+
+    function toggleNode(id) {
+      const node = findNodeById(id);
+      if (!node || node._children.length === 0) return;
+      node._collapsed = !node._collapsed;
+      renderGraph({ preserveViewport: true });
+    }
+
+    function setCollapsed(node, collapsed) {
+      if (node._children.length > 0) {
+        node._collapsed = collapsed;
+      }
+      for (const child of node._children) {
+        setCollapsed(child, collapsed);
+      }
+    }
+
+    function collapseFromDepth(node, depth) {
+      if (node._depth >= depth && node._children.length > 0) {
+        node._collapsed = true;
+      }
+      for (const child of node._children) {
+        collapseFromDepth(child, depth);
+      }
+    }
+
+    function setActiveView(view) {
+      currentView = view;
+      viewer.dataset.view = view;
+      graph.toggleAttribute("hidden", view !== "graph");
+      tree.hidden = view !== "text";
+      buttons.graphView.classList.toggle("active", view === "graph");
+      buttons.textView.classList.toggle("active", view === "text");
+      setControlsEnabled(!!root);
+      if (view === "graph" && root) {
+        updateViewBox();
+      } else {
+        status.textContent = root ? `${countNodes(root)} total nodes` : "No AST loaded";
+      }
+    }
+
     function renderAst(ast) {
-      tree.className = "";
-      tree.replaceChildren(renderNode(ast));
+      nodeId = 0;
+      root = ast;
+      prepareNode(root);
+      if (countNodes(root) > 50) {
+        collapseFromDepth(root, 1);
+      }
+      empty.hidden = true;
+      setControlsEnabled(true);
+      renderGraph();
+      renderTextTree();
+      setActiveView(currentView);
+    }
+
+    function showLoadError(error) {
+      root = null;
+      graph.replaceChildren();
+      tree.replaceChildren();
+      empty.hidden = false;
+      empty.textContent = `Could not load AST JSON: ${error.message}`;
+      setControlsEnabled(false);
+      updateViewBox();
+    }
+
+    async function loadAstUrl(url) {
+      try {
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`${response.status} ${response.statusText}`);
+        }
+        renderAst(await response.json());
+      } catch (error) {
+        showLoadError(error);
+      }
     }
 
     fileInput.addEventListener("change", async () => {
       const file = fileInput.files[0];
       if (!file) return;
-      const text = await file.text();
-      renderAst(JSON.parse(text));
+      try {
+        const source = await file.text();
+        renderAst(JSON.parse(source));
+      } catch (error) {
+        showLoadError(error);
+      }
     });
 
-    document.getElementById("expandAll").addEventListener("click", () => {
-      tree.querySelectorAll("details").forEach((detail) => detail.open = true);
+    buttons.zoomIn.addEventListener("click", () => {
+      viewport.scale = Math.min(3, viewport.scale * 1.2);
+      updateViewBox();
     });
 
-    document.getElementById("collapseAll").addEventListener("click", () => {
-      tree.querySelectorAll("details").forEach((detail) => detail.open = false);
+    buttons.zoomOut.addEventListener("click", () => {
+      viewport.scale = Math.max(0.15, viewport.scale / 1.2);
+      updateViewBox();
     });
+
+    buttons.fitGraph.addEventListener("click", fitGraph);
+
+    buttons.expandAll.addEventListener("click", () => {
+      if (!root) return;
+      if (currentView === "text") {
+        tree.querySelectorAll("details").forEach((detail) => detail.open = true);
+        return;
+      }
+      setCollapsed(root, false);
+      renderGraph();
+    });
+
+    buttons.collapseAll.addEventListener("click", () => {
+      if (!root) return;
+      if (currentView === "text") {
+        tree.querySelectorAll("details").forEach((detail) => detail.open = false);
+        return;
+      }
+      for (const child of root._children) {
+        setCollapsed(child, true);
+      }
+      renderGraph();
+    });
+
+    buttons.graphView.addEventListener("click", () => setActiveView("graph"));
+    buttons.textView.addEventListener("click", () => setActiveView("text"));
+
+    graph.addEventListener("pointerdown", (event) => {
+      if (!root) return;
+      isDragging = true;
+      dragStart = { x: event.clientX, y: event.clientY, viewX: viewport.x, viewY: viewport.y };
+      graph.classList.add("dragging");
+      graph.setPointerCapture(event.pointerId);
+    });
+
+    graph.addEventListener("pointermove", (event) => {
+      if (!isDragging || !dragStart) return;
+      viewport.x = dragStart.viewX - (event.clientX - dragStart.x) / viewport.scale;
+      viewport.y = dragStart.viewY - (event.clientY - dragStart.y) / viewport.scale;
+      updateViewBox();
+    });
+
+    graph.addEventListener("pointerup", (event) => {
+      isDragging = false;
+      dragStart = null;
+      graph.classList.remove("dragging");
+      graph.releasePointerCapture(event.pointerId);
+    });
+
+    graph.addEventListener("wheel", (event) => {
+      if (!root) return;
+      event.preventDefault();
+      const rect = graph.getBoundingClientRect();
+      const mouseX = viewport.x + (event.clientX - rect.left) / viewport.scale;
+      const mouseY = viewport.y + (event.clientY - rect.top) / viewport.scale;
+      const nextScale = Math.max(0.15, Math.min(3, viewport.scale * (event.deltaY < 0 ? 1.12 : 0.88)));
+      viewport.x = mouseX - (event.clientX - rect.left) / nextScale;
+      viewport.y = mouseY - (event.clientY - rect.top) / nextScale;
+      viewport.scale = nextScale;
+      updateViewBox();
+    }, { passive: false });
+
+    window.addEventListener("resize", () => {
+      if (root) updateViewBox();
+    });
+
+    updateViewBox();
+    setActiveView(currentView);
+
+    const astUrl = new URLSearchParams(window.location.search).get("json");
+    if (astUrl) {
+      loadAstUrl(astUrl);
+    }
   </script>
 </body>
 </html>

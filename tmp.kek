@@ -1,5 +1,23 @@
+[packed]struct:Packet{
+u8:kind;
+u32:id;
+};
 
+[static,inline]int:add(int:a=0,int:b=0){
+int:sum=a+b;
+return(sum);
+}
+
+u8:Packet::Add(u8:val=0){
+ this.kind += val;
+ return(this.kind);
+}
 
 i64: main() {
-    return(42);
+    int:both = add(40, 2);
+    int:one = add(a=42);
+    Packet:packet;
+    packet.kind = 0;
+    u8:kind = packet.Add(3);
+    return(both + one + kind);
 }
