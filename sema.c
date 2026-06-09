@@ -125,21 +125,21 @@ static struct KekScope* AddScope(struct KekProgram* program, enum KekScopeKind k
     return scope;
 }
 
-static int ScopeHasDuplicate(struct KekScope* scope, struct AstNode* name, struct KekDecl* decl) {
+static struct KekSymbol* ScopeFindDuplicate(struct KekScope* scope, struct AstNode* name, struct KekDecl* decl) {
     if (!scope || !name) {
-        return 0;
+        return NULL;
     }
 
     for (struct KekSymbol* symbol = scope->firstSymbol; symbol; symbol = symbol->nextInScope) {
         if (decl && symbol->decl && SameFunctionSymbolSlot(symbol->decl, decl, scope->file)) {
-            return 1;
+            return symbol;
         }
         if ((!decl || !symbol->decl || decl->kind != KEK_DECL_FUNCTION || symbol->decl->kind != KEK_DECL_FUNCTION)
             && SameSymbolName(symbol->name, name, scope->file)) {
-            return 1;
+            return symbol;
         }
     }
-    return 0;
+    return NULL;
 }
 
 static int AddSymbol(struct KekProgram* program, struct KekScope* scope, enum KekSymbolKind kind, struct AstNode* name, struct KekDecl* decl, struct KekParam* param, struct KekStmt* stmt) {
@@ -153,9 +153,14 @@ static int AddSymbol(struct KekProgram* program, struct KekScope* scope, enum Ke
         program->errorCount++;
         return -1;
     }
-    if (name && ScopeHasDuplicate(scope, name, decl)) {
+    struct KekSymbol* existing = name ? ScopeFindDuplicate(scope, name, decl) : NULL;
+    if (existing) {
         KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
             scope->file ? scope->file->fileIndex : -1, name->location, "duplicate symbol");
+        if (existing->name) {
+            KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_NOTE, KEK_PHASE_SEMANTIC,
+                existing->file ? existing->file->fileIndex : -1, existing->name->location, "previously defined here");
+        }
         program->errorCount++;
         return -1;
     }
@@ -193,6 +198,31 @@ static int IsTokenText(struct AstNode* node, struct SourceFile* file, const char
         && strncmp(file->content + node->token.location.offset, text, length) == 0;
 }
 
+static int IsBuiltinType(struct AstNode* name, struct SourceFile* file) {
+    return IsTokenText(name, file, "void")
+        || IsTokenText(name, file, "bool")
+        || IsTokenText(name, file, "byte")
+        || IsTokenText(name, file, "char")
+        || IsTokenText(name, file, "str")
+        || IsTokenText(name, file, "int")
+        || IsTokenText(name, file, "uint")
+        || IsTokenText(name, file, "i8")
+        || IsTokenText(name, file, "i16")
+        || IsTokenText(name, file, "i32")
+        || IsTokenText(name, file, "i64")
+        || IsTokenText(name, file, "u8")
+        || IsTokenText(name, file, "u16")
+        || IsTokenText(name, file, "u32")
+        || IsTokenText(name, file, "u64")
+        || IsTokenText(name, file, "f32")
+        || IsTokenText(name, file, "f64")
+        || IsTokenText(name, file, "size")
+        || IsTokenText(name, file, "usize")
+        || IsTokenText(name, file, "isize")
+        || IsTokenText(name, file, "uptr")
+        || IsTokenText(name, file, "iptr");
+}
+
 static struct KekSymbol* LookupSymbol(struct KekScope* scope, struct AstNode* name) {
     for (struct KekScope* current = scope; current; current = current->parent) {
         for (struct KekSymbol* symbol = current->firstSymbol; symbol; symbol = symbol->nextInScope) {
@@ -210,6 +240,25 @@ static int IsAssignableExpr(struct KekExpr* expr) {
             || expr->kind == KEK_EXPR_FIELD
             || expr->kind == KEK_EXPR_SCOPE
             || expr->kind == KEK_EXPR_INDEX);
+}
+
+static void CheckTypeSemantics(struct KekProgram* program, struct KekScope* scope, struct KekType* type) {
+    if (!type || !scope) {
+        return;
+    }
+
+    if (type->kind == KEK_TYPE_NAME && type->name) {
+        if (!IsBuiltinType(type->name, scope->file) && !LookupSymbol(scope, type->name)) {
+            KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
+                scope->file ? scope->file->fileIndex : -1, type->name->location, "unknown type");
+            program->errorCount++;
+        }
+    }
+
+    // Recursively check element types (for pointers, arrays, etc.)
+    if (type->element) {
+        CheckTypeSemantics(program, scope, type->element);
+    }
 }
 
 static void CheckExprSemantics(struct KekProgram* program, struct KekScope* scope, struct KekExpr* expr, int allowUnresolvedName) {
@@ -329,6 +378,7 @@ static void BuildStmtSymbols(struct KekProgram* program, struct KekScope* scope,
     }
 
     if (stmt->kind == KEK_STMT_DECL) {
+        CheckTypeSemantics(program, scope, stmt->declType);
         (void)AddSymbol(program, scope, KEK_SYMBOL_LOCAL, stmt->declName, NULL, NULL, stmt);
     }
 

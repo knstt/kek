@@ -364,7 +364,8 @@ static void WritePrelude(FILE* out) {
     fputs("typedef int64_t i64;\n", out);
     fputs("typedef float f32;\n", out);
     fputs("typedef double f64;\n", out);
-    fputs("typedef void* ptr;\n\n", out);
+    fputs("typedef void* ptr;\n", out);
+    fputs("typedef const char* str;\n\n", out);
 }
 
 static void ResetStatementState(struct CWriter* writer) {

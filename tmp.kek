@@ -133,7 +133,6 @@ i64: main() {
 
     byte:small = 7;
     assert(small == 7);
-
     int:both = add(40, 2);
     int:one = add(a=42);
     Packet:packet;
@@ -175,6 +174,7 @@ i64: main() {
         if (i == 1) {
             continue;
         }
+
         if (i == 3) {
             break;
         }
@@ -205,5 +205,9 @@ i64: main() {
 
     ::println("Hello, world!");
 
+
+    str:my_string = "Whats uuuuuuuuuuuuuuuuuuuuuup!";
+
+    ::println(my_string);
     return(both + one + kind);
 }
