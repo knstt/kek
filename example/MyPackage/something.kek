@@ -11,6 +11,10 @@
 // MyPackage::MyPackageFunc();
 
 // Declarations are exported by default until visibility rules are added.
-void:MyPackageFunc() {
-	return;
+u8:MyPackageFunc() {
+	return(69);
+}
+
+T:PkgGenericEcho<T>(T:value) {
+	return(value);
 }

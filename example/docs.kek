@@ -10,7 +10,9 @@
 alias:RawHandle = ptr;
 
 /// Adds two signed 32-bit integers.
-/// Returns the sum of v1 and v2.
+/// @v1 The first integer to add.
+/// @v2 The second integer to add.
+/// @return The sum of v1 and v2.
 i32:Add(i32:v1, i32:v2) {
 	return(v1 + v2);
 }
@@ -57,15 +59,17 @@ enum:u8:FileResult {
 };
 
 /// Opens a file handle.
-/// path must point to a null-terminated C path.
-/// outHandle receives the opened handle on success.
-/// Returns FileResult::Ok on success, otherwise an error code.
+/// @path must point to a null-terminated C path.
+/// @outHandle receives the opened handle on success.
+/// @return FileResult::Ok on success, otherwise an error code (@ref(FileResult)).
 FileResult:OpenFile(ptr:path, FileMode:mode, ptr:outHandle) {
 	return(FileResult::NotFound);
 }
 
 /// Casts a raw handle to a pointer.
 /// Only valid when the handle actually stores a pointer.
+/// @handle The raw handle to cast.
+/// @return The pointer value stored in the handle.
 ptr:HandleToPtr(RawHandle:handle) {
 	return(cast<ptr>(handle));
 }
@@ -76,7 +80,6 @@ assert(sizeof(FixedBuffer) >= 260);
 
 // Optional lightweight tags, for cases where plain text is not clear enough:
 //
-// @param name  Parameter explanation.
+// @<param>		Parameter explanation.
 // @return      Return value explanation.
-// @see Symbol  Cross-reference to another symbol.
-// @warning     Important caution.
+// @ref(Symbol) Cross-reference to another symbol.

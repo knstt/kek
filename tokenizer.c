@@ -23,7 +23,7 @@ const char* KeywordNames[] = {
 };
 
 const char* PunctuationNames[] = {
-    "(", ")", "{", "}", "[", "]", ";", ",", ":", "."
+    "(", ")", "{", "}", "[", "]", ";", ",", ":", ".", "#"
 };
 
 struct Tokenizer CreateTokenizer(int fileIndex, struct FileTable* table) {

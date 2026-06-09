@@ -1,0 +1,404 @@
+#include "kek.h"
+
+const char* KekSymbolKindNames[] = {
+    "Type",
+    "Function",
+    "Global",
+    "Param",
+    "Local",
+    "Import",
+    "Unknown",
+};
+
+const char* KekScopeKindNames[] = {
+    "Program",
+    "Module",
+    "Function",
+    "Block",
+    "Loop",
+};
+
+static enum KekSymbolKind SymbolKindForDecl(enum KekDeclKind kind) {
+    switch (kind) {
+        case KEK_DECL_IMPORT:
+        case KEK_DECL_USING:
+            return KEK_SYMBOL_IMPORT;
+        case KEK_DECL_STRUCT:
+        case KEK_DECL_ENUM:
+        case KEK_DECL_UNION:
+        case KEK_DECL_ALIAS:
+            return KEK_SYMBOL_TYPE;
+        case KEK_DECL_FUNCTION:
+        case KEK_DECL_EXTERN_C:
+            return KEK_SYMBOL_FUNCTION;
+        case KEK_DECL_VARIABLE:
+            return KEK_SYMBOL_GLOBAL;
+        case KEK_DECL_UNKNOWN:
+        case KEK_DECL_COUNT:
+            return KEK_SYMBOL_UNKNOWN;
+    }
+
+    return KEK_SYMBOL_UNKNOWN;
+}
+
+static int SameSymbolName(struct AstNode* left, struct AstNode* right, struct SourceFile* file) {
+    if (!left || !right || !file) {
+        return 0;
+    }
+    if (left->token.location.length != right->token.location.length) {
+        return 0;
+    }
+    return strncmp(file->content + left->token.location.offset,
+        file->content + right->token.location.offset,
+        left->token.location.length) == 0;
+}
+
+static int IsOperatorDeclName(struct AstNode* name) {
+    return name
+        && name->type == AST_TOKEN
+        && name->token.type == TOKEN_OPERATOR
+        && name->token.value.operator != OPERATOR_SCOPE
+        && name->token.value.operator != OPERATOR_ASSIGN;
+}
+
+static int DeclIsMethod(struct KekDecl* decl) {
+    struct AstNode* type = decl ? decl->type : NULL;
+    return decl
+        && decl->kind == KEK_DECL_FUNCTION
+        && type
+        && type->nextSibling
+        && type->nextSibling->nextSibling
+        && type->nextSibling->nextSibling->nextSibling
+        && type->nextSibling->nextSibling->nextSibling->type == AST_TOKEN
+        && type->nextSibling->nextSibling->nextSibling->token.type == TOKEN_OPERATOR
+        && type->nextSibling->nextSibling->nextSibling->token.value.operator == OPERATOR_SCOPE;
+}
+
+static struct AstNode* DeclReceiverName(struct KekDecl* decl) {
+    return DeclIsMethod(decl) ? decl->type->nextSibling->nextSibling : NULL;
+}
+
+static size_t DeclParamCount(struct KekDecl* decl) {
+    size_t count = 0;
+    for (struct KekParam* param = decl ? decl->firstParam : NULL; param; param = param->next) {
+        count++;
+    }
+    return count;
+}
+
+static int SameFunctionSymbolSlot(struct KekDecl* left, struct KekDecl* right, struct SourceFile* file) {
+    if (!left || !right || left->kind != KEK_DECL_FUNCTION || right->kind != KEK_DECL_FUNCTION) {
+        return 0;
+    }
+    if (!SameSymbolName(left->name, right->name, file)) {
+        return 0;
+    }
+
+    struct AstNode* leftReceiver = DeclReceiverName(left);
+    struct AstNode* rightReceiver = DeclReceiverName(right);
+    if ((leftReceiver || rightReceiver) && !SameSymbolName(leftReceiver, rightReceiver, file)) {
+        return 0;
+    }
+
+    if (IsOperatorDeclName(left->name) || IsOperatorDeclName(right->name)) {
+        return DeclParamCount(left) == DeclParamCount(right);
+    }
+    return 1;
+}
+
+static struct KekScope* AddScope(struct KekProgram* program, enum KekScopeKind kind, struct SourceFile* file, struct KekScope* parent) {
+    if (program->scopeCount >= program->scopeCapacity) {
+        fprintf(stderr, "Error: symbol scope storage capacity exceeded\n");
+        program->errorCount++;
+        return NULL;
+    }
+
+    struct KekScope* scope = &program->scopes[program->scopeCount++];
+    memset(scope, 0, sizeof(*scope));
+    scope->kind = kind;
+    scope->file = file;
+    scope->parent = parent;
+    if (kind < KEK_SCOPE_COUNT) {
+        program->scopeKindCounts[kind]++;
+    }
+    return scope;
+}
+
+static int ScopeHasDuplicate(struct KekScope* scope, struct AstNode* name, struct KekDecl* decl) {
+    if (!scope || !name) {
+        return 0;
+    }
+
+    for (struct KekSymbol* symbol = scope->firstSymbol; symbol; symbol = symbol->nextInScope) {
+        if (decl && symbol->decl && SameFunctionSymbolSlot(symbol->decl, decl, scope->file)) {
+            return 1;
+        }
+        if ((!decl || !symbol->decl || decl->kind != KEK_DECL_FUNCTION || symbol->decl->kind != KEK_DECL_FUNCTION)
+            && SameSymbolName(symbol->name, name, scope->file)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int AddSymbol(struct KekProgram* program, struct KekScope* scope, enum KekSymbolKind kind, struct AstNode* name, struct KekDecl* decl, struct KekParam* param, struct KekStmt* stmt) {
+    if (!scope) {
+        return -1;
+    }
+    if (program->symbolCount >= program->symbolCapacity) {
+        fprintf(stderr, "Error: symbol storage capacity exceeded\n");
+        program->errorCount++;
+        return -1;
+    }
+    if (name && ScopeHasDuplicate(scope, name, decl)) {
+        fprintf(stderr, "Semantic error at line %zu, column %zu: duplicate symbol\n",
+            name->location.line, name->location.column);
+        program->errorCount++;
+        return -1;
+    }
+
+    struct KekSymbol* symbol = &program->symbols[program->symbolCount++];
+    memset(symbol, 0, sizeof(*symbol));
+    symbol->kind = kind;
+    symbol->file = scope->file;
+    symbol->decl = decl;
+    symbol->param = param;
+    symbol->stmt = stmt;
+    symbol->name = name;
+    symbol->scope = scope;
+
+    if (scope->lastSymbol) {
+        scope->lastSymbol->nextInScope = symbol;
+    } else {
+        scope->firstSymbol = symbol;
+    }
+    scope->lastSymbol = symbol;
+    scope->symbolCount++;
+
+    if (kind < KEK_SYMBOL_COUNT) {
+        scope->symbolKindCounts[kind]++;
+        program->symbolKindCounts[kind]++;
+    }
+    return 0;
+}
+
+static int IsTokenText(struct AstNode* node, struct SourceFile* file, const char* text) {
+    size_t length = strlen(text);
+    return node
+        && file
+        && node->token.location.length == length
+        && strncmp(file->content + node->token.location.offset, text, length) == 0;
+}
+
+static struct KekSymbol* LookupSymbol(struct KekScope* scope, struct AstNode* name) {
+    for (struct KekScope* current = scope; current; current = current->parent) {
+        for (struct KekSymbol* symbol = current->firstSymbol; symbol; symbol = symbol->nextInScope) {
+            if (SameSymbolName(symbol->name, name, current->file)) {
+                return symbol;
+            }
+        }
+    }
+    return NULL;
+}
+
+static int IsAssignableExpr(struct KekExpr* expr) {
+    return expr
+        && (expr->kind == KEK_EXPR_NAME
+            || expr->kind == KEK_EXPR_FIELD
+            || expr->kind == KEK_EXPR_SCOPE
+            || expr->kind == KEK_EXPR_INDEX);
+}
+
+static void CheckExprSemantics(struct KekProgram* program, struct KekScope* scope, struct KekExpr* expr, int allowUnresolvedName) {
+    if (!expr || !scope) {
+        return;
+    }
+    program->semanticCheckCount++;
+
+    switch (expr->kind) {
+        case KEK_EXPR_NAME:
+            if (!allowUnresolvedName
+                && !IsTokenText(expr->token, scope->file, "this")
+                && !LookupSymbol(scope, expr->token)) {
+                fprintf(stderr, "Semantic error at line %zu, column %zu: unresolved name\n",
+                    expr->location.line, expr->location.column);
+                program->errorCount++;
+            }
+            break;
+        case KEK_EXPR_CALL:
+            if (!expr->callee) {
+                fprintf(stderr, "Semantic error at line %zu, column %zu: call without callee\n",
+                    expr->location.line, expr->location.column);
+                program->errorCount++;
+            }
+            CheckExprSemantics(program, scope, expr->callee, 1);
+            for (struct KekExpr* arg = expr->firstArg; arg; arg = arg->next) {
+                if (arg->kind == KEK_EXPR_ASSIGN && arg->left && arg->left->kind == KEK_EXPR_NAME) {
+                    program->semanticCheckCount++;
+                    CheckExprSemantics(program, scope, arg->right, 0);
+                } else {
+                    CheckExprSemantics(program, scope, arg, 0);
+                }
+            }
+            break;
+        case KEK_EXPR_FIELD:
+            CheckExprSemantics(program, scope, expr->left, 0);
+            break;
+        case KEK_EXPR_SCOPE:
+            CheckExprSemantics(program, scope, expr->left, 1);
+            break;
+        case KEK_EXPR_INDEX:
+            CheckExprSemantics(program, scope, expr->left, 0);
+            CheckExprSemantics(program, scope, expr->right, 0);
+            break;
+        case KEK_EXPR_UNARY:
+        case KEK_EXPR_CAST:
+        case KEK_EXPR_GROUP:
+            CheckExprSemantics(program, scope, expr->right, 0);
+            break;
+        case KEK_EXPR_STRUCT_LITERAL:
+            for (struct KekExpr* arg = expr->firstArg; arg; arg = arg->next) {
+                if (arg->kind == KEK_EXPR_ASSIGN && arg->left && arg->left->kind == KEK_EXPR_NAME) {
+                    program->semanticCheckCount++;
+                    CheckExprSemantics(program, scope, arg->right, 0);
+                } else {
+                    CheckExprSemantics(program, scope, arg, 0);
+                }
+            }
+            break;
+        case KEK_EXPR_BINARY:
+            CheckExprSemantics(program, scope, expr->left, 0);
+            CheckExprSemantics(program, scope, expr->right, 0);
+            break;
+        case KEK_EXPR_ASSIGN:
+            if (!IsAssignableExpr(expr->left)) {
+                fprintf(stderr, "Semantic error at line %zu, column %zu: assignment target is not assignable\n",
+                    expr->location.line, expr->location.column);
+                program->errorCount++;
+            }
+            CheckExprSemantics(program, scope, expr->left, 0);
+            CheckExprSemantics(program, scope, expr->right, 0);
+            break;
+        case KEK_EXPR_NUMBER:
+        case KEK_EXPR_STRING:
+        case KEK_EXPR_BOOL:
+        case KEK_EXPR_UNKNOWN:
+        case KEK_EXPR_COUNT:
+            break;
+    }
+}
+
+static void BuildStmtSymbols(struct KekProgram* program, struct KekScope* scope, struct KekStmt* stmt, int inFunction, int loopDepth, int switchDepth);
+
+static void BuildChildStmtSymbols(struct KekProgram* program, struct KekScope* scope, struct KekStmt* firstStmt, int inFunction, int loopDepth, int switchDepth) {
+    for (struct KekStmt* child = firstStmt; child; child = child->next) {
+        BuildStmtSymbols(program, scope, child, inFunction, loopDepth, switchDepth);
+    }
+}
+
+static void BuildStmtSymbols(struct KekProgram* program, struct KekScope* scope, struct KekStmt* stmt, int inFunction, int loopDepth, int switchDepth) {
+    if (!stmt || !scope) {
+        return;
+    }
+
+    if (stmt->kind == KEK_STMT_BLOCK) {
+        struct KekScope* blockScope = AddScope(program, KEK_SCOPE_BLOCK, scope->file, scope);
+        if (blockScope) {
+            blockScope->stmt = stmt;
+            BuildChildStmtSymbols(program, blockScope, stmt->firstChild, inFunction, loopDepth, switchDepth);
+        }
+        return;
+    }
+
+    if (stmt->kind == KEK_STMT_FOR) {
+        struct KekScope* loopScope = AddScope(program, KEK_SCOPE_LOOP, scope->file, scope);
+        if (loopScope) {
+            loopScope->stmt = stmt;
+            if (stmt->initStmt) {
+                BuildStmtSymbols(program, loopScope, stmt->initStmt, inFunction, loopDepth + 1, switchDepth);
+            }
+            CheckExprSemantics(program, loopScope, stmt->expr, 0);
+            CheckExprSemantics(program, loopScope, stmt->condition, 0);
+            CheckExprSemantics(program, loopScope, stmt->step, 0);
+            BuildChildStmtSymbols(program, loopScope, stmt->firstChild, inFunction, loopDepth + 1, switchDepth);
+        }
+        return;
+    }
+
+    if (stmt->kind == KEK_STMT_DECL) {
+        (void)AddSymbol(program, scope, KEK_SYMBOL_LOCAL, stmt->declName, NULL, NULL, stmt);
+    }
+
+    if (stmt->kind == KEK_STMT_RETURN && !inFunction) {
+        fprintf(stderr, "Semantic error at line %zu, column %zu: return outside function\n",
+            stmt->location.line, stmt->location.column);
+        program->errorCount++;
+    }
+    if (stmt->kind == KEK_STMT_BREAK && loopDepth == 0 && switchDepth == 0) {
+        fprintf(stderr, "Semantic error at line %zu, column %zu: break outside loop or switch\n",
+            stmt->location.line, stmt->location.column);
+        program->errorCount++;
+    }
+    if (stmt->kind == KEK_STMT_CONTINUE && loopDepth == 0) {
+        fprintf(stderr, "Semantic error at line %zu, column %zu: continue outside loop\n",
+            stmt->location.line, stmt->location.column);
+        program->errorCount++;
+    }
+
+    CheckExprSemantics(program, scope, stmt->expr, 0);
+    CheckExprSemantics(program, scope, stmt->condition, 0);
+    CheckExprSemantics(program, scope, stmt->step, 0);
+
+    if (stmt->kind == KEK_STMT_WHILE || stmt->kind == KEK_STMT_DO_WHILE) {
+        BuildChildStmtSymbols(program, scope, stmt->firstChild, inFunction, loopDepth + 1, switchDepth);
+    } else if (stmt->kind == KEK_STMT_SWITCH) {
+        BuildChildStmtSymbols(program, scope, stmt->firstChild, inFunction, loopDepth, switchDepth + 1);
+    } else {
+        BuildChildStmtSymbols(program, scope, stmt->firstChild, inFunction, loopDepth, switchDepth);
+    }
+}
+
+static void BuildFunctionSymbols(struct KekProgram* program, struct KekScope* moduleScope, struct KekDecl* decl) {
+    struct KekScope* functionScope = AddScope(program, KEK_SCOPE_FUNCTION, moduleScope->file, moduleScope);
+    if (!functionScope) {
+        return;
+    }
+    functionScope->decl = decl;
+
+    for (struct KekParam* param = decl->firstParam; param; param = param->next) {
+        (void)AddSymbol(program, functionScope, KEK_SYMBOL_PARAM, param->name, NULL, param, NULL);
+    }
+
+    BuildChildStmtSymbols(program, functionScope, decl->firstStmt, 1, 0, 0);
+}
+
+int BuildKekProgramSymbols(struct KekProgram* program, struct KekModule* modules, size_t moduleCount) {
+    if (!program || !modules) {
+        return -1;
+    }
+
+    struct KekScope* programScope = AddScope(program, KEK_SCOPE_PROGRAM, NULL, NULL);
+    if (!programScope) {
+        return -1;
+    }
+
+    for (size_t moduleIndex = 0; moduleIndex < moduleCount; moduleIndex++) {
+        struct KekModule* module = &modules[moduleIndex];
+        struct KekScope* moduleScope = AddScope(program, KEK_SCOPE_MODULE, module->file, programScope);
+        if (!moduleScope) {
+            return -1;
+        }
+
+        for (struct KekDecl* decl = module->firstDecl; decl; decl = decl->next) {
+            enum KekSymbolKind kind = SymbolKindForDecl(decl->kind);
+            if (AddSymbol(program, moduleScope, kind, decl->name, decl, NULL, NULL) != 0) {
+                return -1;
+            }
+            if (decl->kind == KEK_DECL_FUNCTION) {
+                BuildFunctionSymbols(program, moduleScope, decl);
+            }
+        }
+    }
+
+    return program->errorCount == 0 ? 0 : -1;
+}

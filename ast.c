@@ -6,6 +6,7 @@ const char* AstNodeTypeNames[] = {
     "Block",
     "Group",
     "Index",
+    "Generic",
     "Token",
 };
 
@@ -37,6 +38,17 @@ static int IsPunctuationToken(struct Token* token, enum PunctuationType punctuat
     return token->type == TOKEN_PUNCTUATION && token->value.punctuation == punctuation;
 }
 
+static int IsOperatorToken(struct Token* token, enum OperatorType operator) {
+    return token->type == TOKEN_OPERATOR && token->value.operator == operator;
+}
+
+static int TokenTextEquals(struct Parser* parser, struct Token* token, const char* text) {
+    size_t length = strlen(text);
+    return (token->type == TOKEN_IDENTIFIER || token->type == TOKEN_NUMBER || token->type == TOKEN_STRING)
+        && token->location.length == length
+        && strncmp(parser->file->content + token->location.offset, text, length) == 0;
+}
+
 static int IsClosingPunctuation(struct Token* token) {
     return IsPunctuationToken(token, PUNCTUATION_RIGHT_PAREN)
         || IsPunctuationToken(token, PUNCTUATION_RIGHT_BRACE)
@@ -65,6 +77,10 @@ static int IsAstTerminator(struct Token* token, enum PunctuationType closePunctu
     return 0;
 }
 
+static int IsGenericTerminator(struct Token* token) {
+    return token->type == TOKEN_EOF || IsOperatorToken(token, OPERATOR_GREATER);
+}
+
 static void FinishLocationFromChildren(struct AstNode* node) {
     if (node->childCount == 0) {
         return;
@@ -79,6 +95,7 @@ static void FinishLocationFromChildren(struct AstNode* node) {
 }
 
 static struct AstNode* ParseStatement(struct Parser* parser, enum PunctuationType closePunctuation);
+static int ShouldParseGenericList(struct Parser* parser, struct AstNode* previousChild);
 
 static struct AstNode* ParseTokenNode(struct Parser* parser) {
     struct Token token = parser->tokens[parser->position++];
@@ -131,6 +148,98 @@ static struct AstNode* ParseDelimited(struct Parser* parser, enum AstNodeType ty
     return node;
 }
 
+static struct AstNode* ParseGenericDelimited(struct Parser* parser) {
+    struct Token open = parser->tokens[parser->position++];
+    struct AstNode* node = CreateAstNode(parser, AST_GENERIC, open.location);
+
+    while (parser->position < parser->count && !IsGenericTerminator(&parser->tokens[parser->position])) {
+        struct AstNode* statement = CreateAstNode(parser, AST_STATEMENT, parser->tokens[parser->position].location);
+        while (parser->position < parser->count && !IsGenericTerminator(&parser->tokens[parser->position])) {
+            struct Token* token = &parser->tokens[parser->position];
+            if (IsPunctuationToken(token, PUNCTUATION_COMMA)) {
+                parser->position++;
+                break;
+            }
+            if (IsPunctuationToken(token, PUNCTUATION_LEFT_PAREN)) {
+                AddChild(statement, ParseDelimited(parser, AST_GROUP, PUNCTUATION_RIGHT_PAREN));
+                continue;
+            }
+            if (IsPunctuationToken(token, PUNCTUATION_LEFT_BRACKET)) {
+                AddChild(statement, ParseDelimited(parser, AST_INDEX, PUNCTUATION_RIGHT_BRACKET));
+                continue;
+            }
+            if (ShouldParseGenericList(parser, statement->lastChild)) {
+                AddChild(statement, ParseGenericDelimited(parser));
+                continue;
+            }
+            AddChild(statement, ParseTokenNode(parser));
+        }
+        FinishLocationFromChildren(statement);
+        if (statement->childCount > 0) {
+            AddChild(node, statement);
+        }
+    }
+
+    if (parser->position < parser->count && IsOperatorToken(&parser->tokens[parser->position], OPERATOR_GREATER)) {
+        struct Token close = parser->tokens[parser->position++];
+        node->location = open.location;
+        node->location.length = (close.location.offset + close.location.length) - open.location.offset;
+    } else if (parser->position < parser->count) {
+        ReportParseError(parser, &parser->tokens[parser->position], "expected '>'");
+    } else {
+        ReportParseError(parser, &open, "unterminated generic list");
+    }
+
+    if (node->childCount > 0 && node->location.length == open.location.length) {
+        FinishLocationFromChildren(node);
+        node->location.offset = open.location.offset;
+        node->location.line = open.location.line;
+        node->location.column = open.location.column;
+    }
+    return node;
+}
+
+static int ShouldParseGenericList(struct Parser* parser, struct AstNode* previousChild) {
+    if (!previousChild || previousChild->type != AST_TOKEN || previousChild->token.type != TOKEN_IDENTIFIER) {
+        return 0;
+    }
+    if (TokenTextEquals(parser, &previousChild->token, "cast")) {
+        return 0;
+    }
+    if (parser->position >= parser->count || !IsOperatorToken(&parser->tokens[parser->position], OPERATOR_LESS)) {
+        return 0;
+    }
+
+    int depth = 0;
+    for (size_t i = parser->position; i < parser->count; i++) {
+        struct Token* token = &parser->tokens[i];
+        if (IsOperatorToken(token, OPERATOR_LESS)) {
+            depth++;
+            continue;
+        }
+        if (IsOperatorToken(token, OPERATOR_GREATER)) {
+            depth--;
+            if (depth == 0) {
+                return 1;
+            }
+            continue;
+        }
+        if (depth == 1
+            && token->type == TOKEN_PUNCTUATION
+            && token->value.punctuation == PUNCTUATION_DOT) {
+            return 0;
+        }
+        if (token->type == TOKEN_EOF
+            || IsPunctuationToken(token, PUNCTUATION_SEMICOLON)
+            || IsPunctuationToken(token, PUNCTUATION_RIGHT_PAREN)
+            || IsPunctuationToken(token, PUNCTUATION_LEFT_BRACE)
+            || IsPunctuationToken(token, PUNCTUATION_RIGHT_BRACE)) {
+            return 0;
+        }
+    }
+    return 0;
+}
+
 static struct AstNode* ParseStatement(struct Parser* parser, enum PunctuationType closePunctuation) {
     struct AstNode* statement = CreateAstNode(parser, AST_STATEMENT, parser->tokens[parser->position].location);
 
@@ -158,6 +267,11 @@ static struct AstNode* ParseStatement(struct Parser* parser, enum PunctuationTyp
 
         if (IsPunctuationToken(token, PUNCTUATION_LEFT_BRACKET)) {
             AddChild(statement, ParseDelimited(parser, AST_INDEX, PUNCTUATION_RIGHT_BRACKET));
+            continue;
+        }
+
+        if (ShouldParseGenericList(parser, statement->lastChild)) {
+            AddChild(statement, ParseGenericDelimited(parser));
             continue;
         }
 

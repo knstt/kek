@@ -114,6 +114,7 @@ enum PunctuationType {
     PUNCTUATION_COMMA,
     PUNCTUATION_COLON,
     PUNCTUATION_DOT,
+    PUNCTUATION_HASH,
 
     PUNCTUATION_COUNT
 };
@@ -155,6 +156,7 @@ enum AstNodeType {
     AST_BLOCK,
     AST_GROUP,
     AST_INDEX,
+    AST_GENERIC,
     AST_TOKEN,
 };
 
@@ -181,6 +183,276 @@ struct Parser {
     int errorCount;
 };
 
+enum KekDeclKind {
+    KEK_DECL_IMPORT,
+    KEK_DECL_USING,
+    KEK_DECL_ALIAS,
+    KEK_DECL_EXTERN_C,
+    KEK_DECL_STRUCT,
+    KEK_DECL_ENUM,
+    KEK_DECL_UNION,
+    KEK_DECL_FUNCTION,
+    KEK_DECL_VARIABLE,
+    KEK_DECL_UNKNOWN,
+
+    KEK_DECL_COUNT
+};
+
+enum KekStmtKind {
+    KEK_STMT_BLOCK,
+    KEK_STMT_DECL,
+    KEK_STMT_EXPR,
+    KEK_STMT_IF,
+    KEK_STMT_ELSE,
+    KEK_STMT_WHILE,
+    KEK_STMT_DO_WHILE,
+    KEK_STMT_FOR,
+    KEK_STMT_SWITCH,
+    KEK_STMT_CASE,
+    KEK_STMT_DEFAULT,
+    KEK_STMT_RETURN,
+    KEK_STMT_BREAK,
+    KEK_STMT_CONTINUE,
+    KEK_STMT_UNKNOWN,
+
+    KEK_STMT_COUNT
+};
+
+enum KekExprKind {
+    KEK_EXPR_NAME,
+    KEK_EXPR_NUMBER,
+    KEK_EXPR_STRING,
+    KEK_EXPR_BOOL,
+    KEK_EXPR_CALL,
+    KEK_EXPR_FIELD,
+    KEK_EXPR_SCOPE,
+    KEK_EXPR_INDEX,
+    KEK_EXPR_GROUP,
+    KEK_EXPR_STRUCT_LITERAL,
+    KEK_EXPR_UNARY,
+    KEK_EXPR_BINARY,
+    KEK_EXPR_ASSIGN,
+    KEK_EXPR_CAST,
+    KEK_EXPR_UNKNOWN,
+
+    KEK_EXPR_COUNT
+};
+
+enum KekTypeKind {
+    KEK_TYPE_BUILTIN,
+    KEK_TYPE_NAME,
+    KEK_TYPE_POINTER,
+    KEK_TYPE_ARRAY,
+    KEK_TYPE_FUNCTION,
+    KEK_TYPE_UNKNOWN,
+
+    KEK_TYPE_COUNT
+};
+
+enum KekSymbolKind {
+    KEK_SYMBOL_TYPE,
+    KEK_SYMBOL_FUNCTION,
+    KEK_SYMBOL_GLOBAL,
+    KEK_SYMBOL_PARAM,
+    KEK_SYMBOL_LOCAL,
+    KEK_SYMBOL_IMPORT,
+    KEK_SYMBOL_UNKNOWN,
+
+    KEK_SYMBOL_COUNT
+};
+
+enum KekScopeKind {
+    KEK_SCOPE_PROGRAM,
+    KEK_SCOPE_MODULE,
+    KEK_SCOPE_FUNCTION,
+    KEK_SCOPE_BLOCK,
+    KEK_SCOPE_LOOP,
+
+    KEK_SCOPE_COUNT
+};
+
+extern const char* KekDeclKindNames[];
+extern const char* KekStmtKindNames[];
+extern const char* KekExprKindNames[];
+extern const char* KekTypeKindNames[];
+extern const char* KekSymbolKindNames[];
+extern const char* KekScopeKindNames[];
+
+struct KekType;
+struct KekExpr;
+struct KekStmt;
+struct KekParam;
+struct KekField;
+struct KekVariant;
+
+struct KekType {
+    enum KekTypeKind kind;
+    struct SourceLocation location;
+    struct AstNode* source;
+    struct AstNode* name;
+    struct AstNode* genericArgs;
+    struct KekType* element;
+    struct KekExpr* arraySize;
+    struct KekType* next;
+};
+
+struct KekExpr {
+    enum KekExprKind kind;
+    struct SourceLocation location;
+    struct AstNode* source;
+    struct AstNode* token;
+    struct KekExpr* left;
+    struct KekExpr* right;
+    struct KekExpr* callee;
+    struct KekType* type;
+    struct AstNode* genericArgs;
+    struct KekExpr* firstArg;
+    struct KekExpr* lastArg;
+    struct KekExpr* next;
+};
+
+struct KekStmt {
+    enum KekStmtKind kind;
+    struct SourceLocation location;
+    struct AstNode* source;
+    struct KekType* declType;
+    struct AstNode* declName;
+    struct KekExpr* expr;
+    struct KekExpr* condition;
+    struct KekExpr* step;
+    struct KekStmt* initStmt;
+    struct KekStmt* firstChild;
+    struct KekStmt* lastChild;
+    struct KekStmt* next;
+};
+
+struct KekParam {
+    struct SourceLocation location;
+    struct AstNode* source;
+    struct KekType* type;
+    struct AstNode* name;
+    struct KekExpr* defaultValue;
+    struct KekParam* next;
+};
+
+struct KekField {
+    struct SourceLocation location;
+    struct AstNode* source;
+    struct KekType* type;
+    struct AstNode* name;
+    struct KekExpr* defaultValue;
+    struct KekField* next;
+};
+
+struct KekVariant {
+    struct SourceLocation location;
+    struct AstNode* source;
+    struct AstNode* name;
+    struct KekExpr* value;
+    struct KekVariant* next;
+};
+
+struct KekDecl {
+    enum KekDeclKind kind;
+    struct SourceLocation location;
+    struct AstNode* source;
+    struct AstNode* name;
+    struct AstNode* type;
+    struct AstNode* body;
+    struct AstNode* genericParams;
+    struct KekType* parsedType;
+    struct KekParam* firstParam;
+    struct KekParam* lastParam;
+    struct KekField* firstField;
+    struct KekField* lastField;
+    struct KekVariant* firstVariant;
+    struct KekVariant* lastVariant;
+    struct KekStmt* firstStmt;
+    struct KekStmt* lastStmt;
+    struct KekDecl* next;
+};
+
+struct KekModule {
+    struct SourceFile* file;
+    struct KekDecl* firstDecl;
+    struct KekDecl* lastDecl;
+    size_t declCount;
+    size_t declKindCounts[KEK_DECL_COUNT];
+    size_t stmtKindCounts[KEK_STMT_COUNT];
+    size_t exprKindCounts[KEK_EXPR_COUNT];
+    size_t typeKindCounts[KEK_TYPE_COUNT];
+    size_t paramCount;
+    size_t fieldCount;
+    size_t variantCount;
+    size_t typedStmtCount;
+    size_t typedExprCount;
+    size_t typedTypeCount;
+    int errorCount;
+};
+
+struct KekFrontend {
+    struct SourceFile* file;
+    struct KekDecl* decls;
+    size_t declCount;
+    size_t declCapacity;
+    struct KekType* types;
+    size_t typeCount;
+    size_t typeCapacity;
+    struct KekExpr* exprs;
+    size_t exprCount;
+    size_t exprCapacity;
+    struct KekStmt* stmts;
+    size_t stmtCount;
+    size_t stmtCapacity;
+    struct KekParam* params;
+    size_t paramCount;
+    size_t paramCapacity;
+    struct KekField* fields;
+    size_t fieldCount;
+    size_t fieldCapacity;
+    struct KekVariant* variants;
+    size_t variantCount;
+    size_t variantCapacity;
+    int errorCount;
+};
+
+struct KekSymbol {
+    enum KekSymbolKind kind;
+    struct SourceFile* file;
+    struct KekDecl* decl;
+    struct KekParam* param;
+    struct KekStmt* stmt;
+    struct AstNode* name;
+    struct KekScope* scope;
+    struct KekSymbol* nextInScope;
+};
+
+struct KekScope {
+    enum KekScopeKind kind;
+    struct SourceFile* file;
+    struct KekDecl* decl;
+    struct KekStmt* stmt;
+    struct KekScope* parent;
+    struct KekScope* next;
+    struct KekSymbol* firstSymbol;
+    struct KekSymbol* lastSymbol;
+    size_t symbolCount;
+    size_t symbolKindCounts[KEK_SYMBOL_COUNT];
+};
+
+struct KekProgram {
+    struct KekSymbol* symbols;
+    size_t symbolCount;
+    size_t symbolCapacity;
+    size_t symbolKindCounts[KEK_SYMBOL_COUNT];
+    struct KekScope* scopes;
+    size_t scopeCount;
+    size_t scopeCapacity;
+    size_t scopeKindCounts[KEK_SCOPE_COUNT];
+    size_t semanticCheckCount;
+    int errorCount;
+};
+
 int ReadFile(const char* path, struct FileTable* table);
 void FreeFileTable(struct FileTable* table);
 
@@ -195,11 +467,18 @@ struct AstNode* ParseAst(struct Parser* parser);
 void PrintAst(struct AstNode* node, struct SourceFile* file, int indent);
 void FreeAst(struct AstNode* node);
 
+struct KekModule ParseKekModule(struct KekFrontend* frontend, struct AstNode* ast, struct SourceFile* file);
+void PrintKekModuleSummary(struct KekModule* module);
+int WriteKekModuleSummaryFile(const char* path, struct KekModule* modules, size_t moduleCount, struct KekProgram* program);
+int BuildKekProgramSymbols(struct KekProgram* program, struct KekModule* modules, size_t moduleCount);
+
 int WriteAstJsonFile(const char* path, struct AstNode* ast, struct SourceFile* file);
 void WriteAstJson(FILE* out, struct AstNode* node, struct SourceFile* file, int indent);
 void WriteJsonEscaped(FILE* out, const char* text, size_t length);
 
 int WriteCFile(const char* path, struct AstNode* ast, struct SourceFile* file);
+int WriteCFileForFiles(const char* path, struct AstNode** asts, struct SourceFile** files, size_t count);
+int WriteTypedCFileForModules(const char* path, struct KekModule* modules, size_t count);
 void WriteC(FILE* out, struct AstNode* ast, struct SourceFile* file);
 
 #endif
