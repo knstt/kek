@@ -28,6 +28,8 @@ const char* KekStmtKindNames[] = {
     "Return",
     "Break",
     "Continue",
+    "Unreachable",
+    "Panic",
     "Unknown",
 };
 
@@ -46,6 +48,10 @@ const char* KekExprKindNames[] = {
     "Binary",
     "Assign",
     "Cast",
+    "Sizeof",
+    "Alignof",
+    "Offsetof",
+    "Len",
     "Unknown",
 };
 
@@ -440,6 +446,74 @@ static struct KekExpr* ParsePrimaryExpr(struct KekFrontend* frontend, struct Kek
         return expr;
     }
 
+    // sizeof(Type) or sizeof(expr)
+    if (IsTokenNode(node) && TokenTextEquals(node, module->file, "sizeof")) {
+        struct KekExpr* expr = AddExpr(frontend, module, KEK_EXPR_SIZEOF, node);
+        struct AstNode* argGroup = Next(node);
+        if (expr && argGroup && argGroup->type == AST_GROUP && argGroup->firstChild) {
+            // AST_GROUP contains AST_STATEMENT, which contains the actual tokens
+            struct AstNode* arg = argGroup->firstChild->firstChild;
+            // Try to parse as type first, fallback to expression
+            expr->type = ParseType(frontend, module, arg, NULL);
+            if (!expr->type || expr->type->kind == KEK_TYPE_UNKNOWN) {
+                expr->right = ParseGroupExpr(frontend, module, argGroup);
+                expr->type = NULL;
+            }
+            *current = Next(argGroup);
+        } else {
+            *current = Next(node);
+        }
+        return expr;
+    }
+
+    // alignof(Type)
+    if (IsTokenNode(node) && TokenTextEquals(node, module->file, "alignof")) {
+        struct KekExpr* expr = AddExpr(frontend, module, KEK_EXPR_ALIGNOF, node);
+        struct AstNode* argGroup = Next(node);
+        if (expr && argGroup && argGroup->type == AST_GROUP && argGroup->firstChild) {
+            struct AstNode* arg = argGroup->firstChild->firstChild;
+            expr->type = ParseType(frontend, module, arg, NULL);
+            *current = Next(argGroup);
+        } else {
+            *current = Next(node);
+        }
+        return expr;
+    }
+
+    // offsetof(Type, field)
+    if (IsTokenNode(node) && TokenTextEquals(node, module->file, "offsetof")) {
+        struct KekExpr* expr = AddExpr(frontend, module, KEK_EXPR_OFFSETOF, node);
+        struct AstNode* argGroup = Next(node);
+        if (expr && argGroup && argGroup->type == AST_GROUP && argGroup->firstChild) {
+            struct AstNode* stmt = argGroup->firstChild;
+            struct AstNode* arg = stmt->firstChild;
+            // First arg is type
+            expr->type = ParseType(frontend, module, arg, NULL);
+            // Skip comma (which separates statements in the group), field is in next statement
+            struct AstNode* fieldStmt = stmt->nextSibling;
+            if (fieldStmt && fieldStmt->firstChild && IsTokenNode(fieldStmt->firstChild)) {
+                expr->right = AddExpr(frontend, module, KEK_EXPR_NAME, fieldStmt->firstChild);
+            }
+            *current = Next(argGroup);
+        } else {
+            *current = Next(node);
+        }
+        return expr;
+    }
+
+    // len(array)
+    if (IsTokenNode(node) && TokenTextEquals(node, module->file, "len")) {
+        struct KekExpr* expr = AddExpr(frontend, module, KEK_EXPR_LEN, node);
+        struct AstNode* argGroup = Next(node);
+        if (expr && argGroup && argGroup->type == AST_GROUP) {
+            expr->right = ParseGroupExpr(frontend, module, argGroup);
+            *current = Next(argGroup);
+        } else {
+            *current = Next(node);
+        }
+        return expr;
+    }
+
     if (IsUnaryExprOperator(node)) {
         struct KekExpr* expr = AddExpr(frontend, module, KEK_EXPR_UNARY, node);
         *current = Next(node);
@@ -712,6 +786,12 @@ static enum KekStmtKind ClassifyStatementKind(struct AstNode* first) {
     if (IsKeywordNode(first, KEYWORD_CONTINUE)) {
         return KEK_STMT_CONTINUE;
     }
+    if (IsKeywordNode(first, KEYWORD_UNREACHABLE)) {
+        return KEK_STMT_UNREACHABLE;
+    }
+    if (IsKeywordNode(first, KEYWORD_PANIC)) {
+        return KEK_STMT_PANIC;
+    }
     if (LooksLikeDecl(first)) {
         return KEK_STMT_DECL;
     }
@@ -769,7 +849,17 @@ static struct KekStmt* ParseStatement(struct KekFrontend* frontend, struct KekMo
     } else if (kind == KEK_STMT_DEFAULT) {
         struct AstNode* colon = Next(first);
         if (IsPunctuationNode(colon, PUNCTUATION_COLON) && Next(colon)) {
-            stmt->expr = ParseExprUntil(frontend, module, Next(colon), NULL);
+            struct AstNode* afterColon = Next(colon);
+            // If it's a block, don't parse as expression - it will be handled as child statements
+            if (afterColon->type != AST_BLOCK) {
+                stmt->expr = ParseExprUntil(frontend, module, afterColon, NULL);
+            }
+        }
+    } else if (kind == KEK_STMT_PANIC) {
+        // panic("message") - parse the argument from the group
+        struct AstNode* argGroup = Next(first);
+        if (argGroup && argGroup->type == AST_GROUP) {
+            stmt->expr = ParseGroupExpr(frontend, module, argGroup);
         }
     } else if (kind == KEK_STMT_EXPR) {
         stmt->expr = ParseExprUntil(frontend, module, first, NULL);

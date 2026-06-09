@@ -83,6 +83,32 @@ static const char* CTokenText(struct Token* token, struct SourceFile* file, char
         }
         memcpy(buffer, file->content + token->location.offset, length);
         buffer[length] = '\0';
+
+        // Handle number literal normalization for C compatibility
+        if (token->type == TOKEN_NUMBER && length > 0) {
+            // Strip underscores from numeric literals
+            char* src = buffer;
+            char* dst = buffer;
+            while (*src) {
+                if (*src != '_') {
+                    *dst++ = *src;
+                }
+                src++;
+            }
+            *dst = '\0';
+
+            // Convert binary literals (0b...) to hex for C11 compatibility
+            if (buffer[0] == '0' && (buffer[1] == 'b' || buffer[1] == 'B')) {
+                unsigned long long value = 0;
+                char* p = buffer + 2;
+                while (*p == '0' || *p == '1') {
+                    value = (value << 1) | (*p - '0');
+                    p++;
+                }
+                snprintf(buffer, bufferSize, "0x%llX", value);
+            }
+        }
+
         return buffer;
     }
 
@@ -533,6 +559,35 @@ static int AttributeListContains(struct CWriter* writer, struct AstNode* attribu
     return 0;
 }
 
+// Get value for aligned(N) attribute, returns 0 if not found
+static int GetAlignedValue(struct CWriter* writer, struct AstNode* attributes) {
+    if (!attributes || attributes->type != AST_INDEX) {
+        return 0;
+    }
+
+    for (struct AstNode* statement = attributes->firstChild; statement; statement = statement->nextSibling) {
+        struct AstNode* first = statement->firstChild;
+        if (!first || !IsTokenNode(first)) {
+            continue;
+        }
+        char buffer[256];
+        const char* text = CTokenText(&first->token, writer->file, buffer, sizeof(buffer));
+        if (strcmp(text, "aligned") == 0) {
+            // Look for the value in a group: aligned(8)
+            struct AstNode* group = first->nextSibling;
+            if (group && group->type == AST_GROUP && group->firstChild && group->firstChild->firstChild) {
+                struct AstNode* valueNode = group->firstChild->firstChild;
+                if (IsTokenNode(valueNode) && valueNode->token.type == TOKEN_NUMBER) {
+                    CopyTokenText(&valueNode->token, writer->file, buffer, sizeof(buffer));
+                    return atoi(buffer);
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
 static int ParameterDefaultText(struct CWriter* writer, struct AstNode* parameter, char* buffer, size_t bufferSize) {
     for (struct AstNode* child = parameter->firstChild; child; child = child->nextSibling) {
         if (IsTokenNode(child) && IsOperatorToken(&child->token, OPERATOR_ASSIGN)) {
@@ -911,8 +966,20 @@ static int TryWriteStruct(struct CWriter* writer, struct AstNode* statement) {
     RegisterStructFields(writer, info, block);
 
     fputs("struct", writer->out);
-    if (AttributeListContains(writer, attributes, "packed")) {
-        fputs(" __attribute__((packed))", writer->out);
+    int isPacked = AttributeListContains(writer, attributes, "packed");
+    int alignedValue = GetAlignedValue(writer, attributes);
+    if (isPacked || alignedValue > 0) {
+        fputs(" __attribute__((", writer->out);
+        if (isPacked) {
+            fputs("packed", writer->out);
+            if (alignedValue > 0) {
+                fputc(',', writer->out);
+            }
+        }
+        if (alignedValue > 0) {
+            fprintf(writer->out, "aligned(%d)", alignedValue);
+        }
+        fputs("))", writer->out);
     }
 
     fputc(' ', writer->out);
@@ -2199,6 +2266,44 @@ static void WriteTypedExpr(struct CWriter* writer, struct KekExpr* expr) {
             WriteTypedExpr(writer, expr->right);
             fputs("))", writer->out);
             break;
+        case KEK_EXPR_SIZEOF:
+            fputs("sizeof(", writer->out);
+            if (expr->type) {
+                WriteTypedBaseType(writer, expr->type);
+            } else if (expr->right) {
+                WriteTypedExpr(writer, expr->right);
+            }
+            fputc(')', writer->out);
+            break;
+        case KEK_EXPR_ALIGNOF:
+            fputs("_Alignof(", writer->out);
+            if (expr->type) {
+                WriteTypedBaseType(writer, expr->type);
+            }
+            fputc(')', writer->out);
+            break;
+        case KEK_EXPR_OFFSETOF:
+            fputs("offsetof(", writer->out);
+            if (expr->type) {
+                WriteTypedBaseType(writer, expr->type);
+            }
+            fputc(',', writer->out);
+            if (expr->right) {
+                WriteTypedExpr(writer, expr->right);
+            }
+            fputc(')', writer->out);
+            break;
+        case KEK_EXPR_LEN:
+            fputs("(sizeof(", writer->out);
+            if (expr->right) {
+                WriteTypedExpr(writer, expr->right);
+            }
+            fputs(")/sizeof((", writer->out);
+            if (expr->right) {
+                WriteTypedExpr(writer, expr->right);
+            }
+            fputs(")[0]))", writer->out);
+            break;
         case KEK_EXPR_UNKNOWN:
         case KEK_EXPR_COUNT:
             if (expr->source) {
@@ -2339,7 +2444,10 @@ static void WriteTypedStatement(struct CWriter* writer, struct KekStmt* stmt) {
             break;
         case KEK_STMT_DEFAULT:
             fputs("default:", writer->out);
-            if (stmt->expr) {
+            if (FirstTypedBlockChild(stmt)) {
+                fputc(' ', writer->out);
+                WriteTypedBlock(writer, FirstTypedBlockChild(stmt));
+            } else if (stmt->expr) {
                 fputc(' ', writer->out);
                 WriteTypedExpr(writer, stmt->expr);
                 fputc(';', writer->out);
@@ -2359,6 +2467,18 @@ static void WriteTypedStatement(struct CWriter* writer, struct KekStmt* stmt) {
             break;
         case KEK_STMT_CONTINUE:
             fputs("continue;", writer->out);
+            break;
+        case KEK_STMT_UNREACHABLE:
+            fputs("__builtin_unreachable();", writer->out);
+            break;
+        case KEK_STMT_PANIC:
+            fputs("do { fprintf(stderr, \"panic: %s\\n\", ", writer->out);
+            if (stmt->expr) {
+                WriteTypedExpr(writer, stmt->expr);
+            } else {
+                fputs("\"\"", writer->out);
+            }
+            fputs("); abort(); } while(0);", writer->out);
             break;
         case KEK_STMT_UNKNOWN:
         case KEK_STMT_COUNT:
@@ -2454,6 +2574,14 @@ static void RegisterTypedDeclForCodegen(struct CWriter* writer, struct KekDecl* 
 static int TypedDeclHasAttribute(struct CWriter* writer, struct KekDecl* decl, const char* name) {
     struct AstNode* first = decl && decl->source ? decl->source->firstChild : NULL;
     return first && first->type == AST_INDEX && AttributeListContains(writer, first, name);
+}
+
+static int TypedDeclGetAlignedValue(struct CWriter* writer, struct KekDecl* decl) {
+    struct AstNode* first = decl && decl->source ? decl->source->firstChild : NULL;
+    if (first && first->type == AST_INDEX) {
+        return GetAlignedValue(writer, first);
+    }
+    return 0;
 }
 
 static void WriteTypedParams(struct CWriter* writer, struct KekDecl* decl) {
@@ -2552,8 +2680,22 @@ static void WriteTypedDecl(struct CWriter* writer, struct KekDecl* decl) {
             break;
         case KEK_DECL_STRUCT:
             fputs("struct", writer->out);
-            if (TypedDeclHasAttribute(writer, decl, "packed")) {
-                fputs(" __attribute__((packed))", writer->out);
+            {
+                int isPacked = TypedDeclHasAttribute(writer, decl, "packed");
+                int alignedValue = TypedDeclGetAlignedValue(writer, decl);
+                if (isPacked || alignedValue > 0) {
+                    fputs(" __attribute__((", writer->out);
+                    if (isPacked) {
+                        fputs("packed", writer->out);
+                        if (alignedValue > 0) {
+                            fputc(',', writer->out);
+                        }
+                    }
+                    if (alignedValue > 0) {
+                        fprintf(writer->out, "aligned(%d)", alignedValue);
+                    }
+                    fputs("))", writer->out);
+                }
             }
             fputc(' ', writer->out);
             fputs(TypedNodeText(writer, decl->name, name, sizeof(name)), writer->out);

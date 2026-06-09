@@ -28,6 +28,21 @@ void println(const char* str) {
 }
 
 alias:byte = u8;
+alias:usize = u64;
+
+// Struct with aligned attribute
+[packed,aligned(8)]struct:AlignedPacket {
+u8:tag;
+u32:data;
+};
+
+// Struct with nested internal struct
+struct:Container {
+u32:id;
+struct:Inner {
+    u8:value;
+};
+};
 
 [packed]struct:Packet{
 u8:kind=4;
@@ -198,6 +213,60 @@ i64: main() {
 
     u8:bytes[4] = {1, 2, 3, 4};
     assert(bytes[2] == 3);
+
+    // Binary and hex literals with separators
+    u8:bitMask = 0b1010_0001;
+    assert(bitMask == 161);
+    u32:hexColor = 0xFF_AA_00_12;
+    assert(hexColor == 0xFFAA0012);
+
+    // sizeof, alignof
+    usize:packetSize = sizeof(Packet);
+    assert(packetSize == 5);
+    usize:alignedSize = alignof(AlignedPacket);
+    assert(alignedSize == 8);
+    // offsetof
+    usize:fieldOffset = offsetof(Packet, id);
+    assert(fieldOffset == 1);
+
+    // Compile-time assert with alignof
+    assert(alignof(AlignedPacket) == 8);
+
+    // len() for fixed arrays
+    u8:testArray[8] = {0};
+    usize:arrayLen = len(testArray);
+    assert(arrayLen == 8);
+    assert(len(bytes) == 4);
+
+    // Multi-dimensional arrays
+    u8:matrix[2][3] = {0};
+    matrix[0][0] = 1;
+    matrix[1][2] = 6;
+    assert(matrix[0][0] == 1);
+    assert(matrix[1][2] == 6);
+
+    // Nested struct access - TODO: not yet implemented in codegen
+    // Container:container;
+    // container.id = 42;
+    // container.Inner.value = 7;
+    // assert(container.id == 42);
+    // assert(container.Inner.value == 7);
+
+    // unreachable in switch default
+    u8:unreachableTest = 1;
+    switch(unreachableTest) {
+        case(1): {
+            break;
+        }
+        default: {
+            unreachable;
+        }
+    }
+
+    // panic test (in unreachable condition to verify codegen without aborting)
+    if (false) {
+        panic("This should never happen");
+    }
 
     ptr:mem = ::malloc(16);
     assert(mem != 0);

@@ -308,6 +308,14 @@ static void CheckExprSemantics(struct KekProgram* program, struct KekScope* scop
         case KEK_EXPR_GROUP:
             CheckExprSemantics(program, scope, expr->right, 0);
             break;
+        case KEK_EXPR_SIZEOF:
+        case KEK_EXPR_ALIGNOF:
+        case KEK_EXPR_OFFSETOF:
+            // Type-based builtins - type is checked separately, right may be field name
+            break;
+        case KEK_EXPR_LEN:
+            CheckExprSemantics(program, scope, expr->right, 0);
+            break;
         case KEK_EXPR_STRUCT_LITERAL:
             for (struct KekExpr* arg = expr->firstArg; arg; arg = arg->next) {
                 if (arg->kind == KEK_EXPR_ASSIGN && arg->left && arg->left->kind == KEK_EXPR_NAME) {

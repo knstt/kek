@@ -158,8 +158,6 @@ assert(len(MyArray) == 16);
 u8:MyMatrix[4][4] = {0};
 
 u8:MyValue = MyArray[0];  // First element.
-MyValue = MyArray[-1];    // Last element. Negative indexes count from the end.
-MyValue = MyArray[-2];    // Second-to-last element.
 
 for (u8:i = 0; i < 10; i++) {
 	if (i == 2) {
