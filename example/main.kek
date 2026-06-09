@@ -2,7 +2,7 @@
 
 // Packages map directly to directories.
 // This imports all Kek files under example/MyPackage/ as the MyPackage package.
-using MyPackage;
+#import(example/MyPackage);
 
 // Variables and struct fields are zero-initialized by default.
 // A compile-time default value can override that zero value.
@@ -204,20 +204,20 @@ if (!false) {
 }
 
 // Switch follows C-style control flow: explicit break and a default case.
-switch MyEnumValue {
-	case MyEnum::None: {
+switch(MyEnumValue) {
+	case(MyEnum::None): {
 		MyFunc(0);
 		break;
 	}
-	case MyEnum::First: {
+	case(MyEnum::First): {
 		MyFunc(1);
 		break;
 	}
-	case MyEnum::Second: {
+	case(MyEnum::Second): {
 		MyFunc(2);
 		break;
 	}
-	case MyEnum::Third: {
+	case(MyEnum::Third): {
 		MyFunc(3);
 		break;
 	}
@@ -246,6 +246,3 @@ do {
 if (Tmp < 0) {
 	panic("Tmp must not be negative");
 }
-
-
-29ß429

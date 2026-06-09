@@ -4,14 +4,14 @@
 // All .kek files in the same directory are part of the same package namespace.
 // Code outside this directory can import the package with:
 //
-// using MyPackage;
+// #import(example/MyPackage);
 //
 // and then call this function as:
 //
 // MyPackage::MyPackageFunc();
 
 // Declarations are exported by default until visibility rules are added.
-u8:MyPackageFunc() {
+i32:MyPackageFunc() {
 	return(69);
 }
 
