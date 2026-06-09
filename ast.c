@@ -12,8 +12,13 @@ const char* AstNodeTypeNames[] = {
 
 static struct AstNode* CreateAstNode(struct Parser* parser, enum AstNodeType type, struct SourceLocation location) {
     if (parser->astNodeCount >= parser->astNodeCapacity) {
-        fprintf(stderr, "Error: AST node storage capacity exceeded.\n");
-        exit(1);
+        KekAddDiagnostic(parser->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_PARSE,
+            parser->file ? parser->file->fileIndex : -1, location, "AST node storage capacity exceeded");
+        parser->errorCount++;
+        if (parser->astNodeCapacity > 0) {
+            return &parser->astNodes[parser->astNodeCapacity - 1];
+        }
+        return NULL;
     }
 
     struct AstNode* node = &parser->astNodes[parser->astNodeCount++];
@@ -55,12 +60,17 @@ static int IsClosingPunctuation(struct Token* token) {
         || IsPunctuationToken(token, PUNCTUATION_RIGHT_BRACKET);
 }
 
+static int IsTriviaToken(struct Token* token) {
+    return token->type == TOKEN_COMMENT || token->type == TOKEN_DOC_COMMENT;
+}
+
 static const char* PunctuationName(enum PunctuationType punctuation) {
     return punctuation < PUNCTUATION_COUNT ? PunctuationNames[punctuation] : "<end of file>";
 }
 
 static void ReportParseError(struct Parser* parser, struct Token* token, const char* message) {
-    fprintf(stderr, "Syntax error at line %zu, column %zu: %s\n", token->location.line, token->location.column, message);
+    KekAddDiagnostic(parser->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_PARSE,
+        parser->file ? parser->file->fileIndex : -1, token->location, message);
     parser->errorCount++;
 }
 
@@ -106,6 +116,10 @@ static struct AstNode* ParseTokenNode(struct Parser* parser) {
 
 static void ParseChildrenInto(struct Parser* parser, struct AstNode* parent, enum PunctuationType closePunctuation) {
     while (parser->position < parser->count && !IsAstTerminator(&parser->tokens[parser->position], closePunctuation)) {
+        if (IsTriviaToken(&parser->tokens[parser->position])) {
+            parser->position++;
+            continue;
+        }
         size_t previousPosition = parser->position;
         struct AstNode* statement = ParseStatement(parser, closePunctuation);
         if (statement->childCount > 0) {
@@ -153,9 +167,17 @@ static struct AstNode* ParseGenericDelimited(struct Parser* parser) {
     struct AstNode* node = CreateAstNode(parser, AST_GENERIC, open.location);
 
     while (parser->position < parser->count && !IsGenericTerminator(&parser->tokens[parser->position])) {
+        if (IsTriviaToken(&parser->tokens[parser->position])) {
+            parser->position++;
+            continue;
+        }
         struct AstNode* statement = CreateAstNode(parser, AST_STATEMENT, parser->tokens[parser->position].location);
         while (parser->position < parser->count && !IsGenericTerminator(&parser->tokens[parser->position])) {
             struct Token* token = &parser->tokens[parser->position];
+            if (IsTriviaToken(token)) {
+                parser->position++;
+                continue;
+            }
             if (IsPunctuationToken(token, PUNCTUATION_COMMA)) {
                 parser->position++;
                 break;
@@ -245,6 +267,11 @@ static struct AstNode* ParseStatement(struct Parser* parser, enum PunctuationTyp
 
     while (parser->position < parser->count && !IsAstTerminator(&parser->tokens[parser->position], closePunctuation)) {
         struct Token* token = &parser->tokens[parser->position];
+
+        if (IsTriviaToken(token)) {
+            parser->position++;
+            continue;
+        }
 
         if (IsPunctuationToken(token, PUNCTUATION_SEMICOLON) || IsPunctuationToken(token, PUNCTUATION_COMMA)) {
             parser->position++;

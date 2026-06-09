@@ -105,7 +105,10 @@ static struct AstNode* Next(struct AstNode* node) {
 
 static struct KekType* AddType(struct KekFrontend* frontend, struct KekModule* module, enum KekTypeKind kind, struct AstNode* source) {
     if (frontend->typeCount >= frontend->typeCapacity) {
-        fprintf(stderr, "Error: typed type storage capacity exceeded in %s\n", module->file->path);
+        KekAddDiagnostic(frontend->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_TYPED_PARSE,
+            module->file ? module->file->fileIndex : -1,
+            source ? source->location : (struct SourceLocation){0},
+            "typed type storage capacity exceeded");
         frontend->errorCount++;
         module->errorCount++;
         return NULL;
@@ -125,7 +128,10 @@ static struct KekType* AddType(struct KekFrontend* frontend, struct KekModule* m
 
 static struct KekExpr* AddExpr(struct KekFrontend* frontend, struct KekModule* module, enum KekExprKind kind, struct AstNode* source) {
     if (frontend->exprCount >= frontend->exprCapacity) {
-        fprintf(stderr, "Error: typed expression storage capacity exceeded in %s\n", module->file->path);
+        KekAddDiagnostic(frontend->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_TYPED_PARSE,
+            module->file ? module->file->fileIndex : -1,
+            source ? source->location : (struct SourceLocation){0},
+            "typed expression storage capacity exceeded");
         frontend->errorCount++;
         module->errorCount++;
         return NULL;
@@ -148,7 +154,10 @@ static struct KekExpr* AddExpr(struct KekFrontend* frontend, struct KekModule* m
 
 static struct KekStmt* AddStmt(struct KekFrontend* frontend, struct KekModule* module, enum KekStmtKind kind, struct AstNode* source) {
     if (frontend->stmtCount >= frontend->stmtCapacity) {
-        fprintf(stderr, "Error: typed statement storage capacity exceeded in %s\n", module->file->path);
+        KekAddDiagnostic(frontend->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_TYPED_PARSE,
+            module->file ? module->file->fileIndex : -1,
+            source ? source->location : (struct SourceLocation){0},
+            "typed statement storage capacity exceeded");
         frontend->errorCount++;
         module->errorCount++;
         return NULL;
@@ -168,7 +177,10 @@ static struct KekStmt* AddStmt(struct KekFrontend* frontend, struct KekModule* m
 
 static struct KekParam* AddParam(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* source) {
     if (frontend->paramCount >= frontend->paramCapacity) {
-        fprintf(stderr, "Error: typed parameter storage capacity exceeded in %s\n", module->file->path);
+        KekAddDiagnostic(frontend->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_TYPED_PARSE,
+            module->file ? module->file->fileIndex : -1,
+            source ? source->location : (struct SourceLocation){0},
+            "typed parameter storage capacity exceeded");
         frontend->errorCount++;
         module->errorCount++;
         return NULL;
@@ -184,7 +196,10 @@ static struct KekParam* AddParam(struct KekFrontend* frontend, struct KekModule*
 
 static struct KekField* AddField(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* source) {
     if (frontend->fieldCount >= frontend->fieldCapacity) {
-        fprintf(stderr, "Error: typed field storage capacity exceeded in %s\n", module->file->path);
+        KekAddDiagnostic(frontend->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_TYPED_PARSE,
+            module->file ? module->file->fileIndex : -1,
+            source ? source->location : (struct SourceLocation){0},
+            "typed field storage capacity exceeded");
         frontend->errorCount++;
         module->errorCount++;
         return NULL;
@@ -200,7 +215,10 @@ static struct KekField* AddField(struct KekFrontend* frontend, struct KekModule*
 
 static struct KekVariant* AddVariant(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* source) {
     if (frontend->variantCount >= frontend->variantCapacity) {
-        fprintf(stderr, "Error: typed variant storage capacity exceeded in %s\n", module->file->path);
+        KekAddDiagnostic(frontend->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_TYPED_PARSE,
+            module->file ? module->file->fileIndex : -1,
+            source ? source->location : (struct SourceLocation){0},
+            "typed variant storage capacity exceeded");
         frontend->errorCount++;
         module->errorCount++;
         return NULL;
@@ -216,7 +234,10 @@ static struct KekVariant* AddVariant(struct KekFrontend* frontend, struct KekMod
 
 static struct KekDecl* AddDecl(struct KekFrontend* frontend, struct KekModule* module, enum KekDeclKind kind, struct AstNode* source) {
     if (frontend->declCount >= frontend->declCapacity) {
-        fprintf(stderr, "Error: typed declaration storage capacity exceeded in %s\n", module->file->path);
+        KekAddDiagnostic(frontend->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_TYPED_PARSE,
+            module->file ? module->file->fileIndex : -1,
+            source ? source->location : (struct SourceLocation){0},
+            "typed declaration storage capacity exceeded");
         frontend->errorCount++;
         module->errorCount++;
         return NULL;
@@ -1114,8 +1135,8 @@ struct KekModule ParseKekModule(struct KekFrontend* frontend, struct AstNode* as
         module.declKindCounts[KEK_DECL_UNKNOWN]--;
         module.declKindCounts[decl->kind]++;
         if (decl->kind == KEK_DECL_UNKNOWN) {
-            fprintf(stderr, "Typed parse error at line %zu, column %zu: unknown top-level declaration in %s\n",
-                decl->location.line, decl->location.column, file->path);
+            KekAddDiagnostic(frontend->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_TYPED_PARSE,
+                file ? file->fileIndex : -1, decl->location, "unknown top-level declaration");
             module.errorCount++;
             frontend->errorCount++;
         }
@@ -1179,7 +1200,6 @@ void PrintKekModuleSummary(struct KekModule* module) {
 int WriteKekModuleSummaryFile(const char* path, struct KekModule* modules, size_t moduleCount, struct KekProgram* program) {
     FILE* out = fopen(path, "w");
     if (!out) {
-        fprintf(stderr, "Error: Could not open %s for writing.\n", path);
         return -1;
     }
 

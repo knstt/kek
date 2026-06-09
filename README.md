@@ -9,13 +9,13 @@ Source files use the `.kek` extension.
 Build:
 
 ```sh
-cc -std=c11 -Wall -Wextra -pedantic main.c source.c tokenizer.c ast.c ast_json.c codegen_c.c -o kek
+make build
 ```
 
 Run the fixed smoke compile:
 
 ```sh
-./kek
+bin/kek
 ```
 
 This reads `tmp.kek`, writes generated C to `out/out.c`, writes AST JSON
@@ -27,7 +27,8 @@ Run the smoke test:
 make test
 ```
 
-Open `ast_viewer.html` in a browser and load `ast.json` to inspect the tree.
+Open `ast_viewer.html` in a browser and load `out/ast.json` to inspect the
+tree.
 
 The AST is currently structural rather than semantic: file, statement, block,
 parenthesized group, bracket group, and token nodes. It is built from the

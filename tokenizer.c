@@ -5,6 +5,8 @@ const char* TokenTypeNames[] = {
     "IDENTIFIER",
     "NUMBER",
     "STRING",
+    "COMMENT",
+    "DOC_COMMENT",
     "OPERATOR",
     "KEYWORD",
     "PUNCTUATION",
@@ -27,11 +29,19 @@ const char* PunctuationNames[] = {
 };
 
 struct Tokenizer CreateTokenizer(int fileIndex, struct FileTable* table) {
+    struct KekLexOptions options = {0};
+    return CreateTokenizerWithOptions(fileIndex, table, options);
+}
+
+struct Tokenizer CreateTokenizerWithOptions(int fileIndex, struct FileTable* table, struct KekLexOptions options) {
     struct Tokenizer tokenizer = {0};
     tokenizer.file = &table->files[fileIndex];
+    tokenizer.fileIndex = fileIndex;
     tokenizer.position = 0;
     tokenizer.line = 1;
     tokenizer.column = 1;
+    tokenizer.emitComments = options.emitComments;
+    tokenizer.diagnostics = options.diagnostics;
     return tokenizer;
 }
 
@@ -66,6 +76,18 @@ static void Advance(struct Tokenizer* tokenizer, size_t count) {
 }
 
 static struct Token CreateTextToken(enum TokenType type, size_t start, size_t length, size_t line, size_t column) {
+    struct Token token = {0};
+    token.type = type;
+    token.value.text.offset = start;
+    token.value.text.length = length;
+    token.location.line = line;
+    token.location.column = column;
+    token.location.offset = start;
+    token.location.length = length;
+    return token;
+}
+
+static struct Token CreateCommentToken(enum TokenType type, size_t start, size_t length, size_t line, size_t column) {
     struct Token token = {0};
     token.type = type;
     token.value.text.offset = start;
@@ -143,13 +165,17 @@ static int IsKeywordAt(struct Tokenizer* tokenizer, size_t start, size_t length)
     return -1;
 }
 
+static void SkipWhitespace(struct Tokenizer* tokenizer) {
+    char c = PeekChar(tokenizer);
+    while (c != '\0' && isspace((unsigned char)c)) {
+        Advance(tokenizer, 1);
+        c = PeekChar(tokenizer);
+    }
+}
+
 static void SkipWhitespaceAndComments(struct Tokenizer* tokenizer) {
     for (;;) {
-        char c = PeekChar(tokenizer);
-        while (c != '\0' && isspace((unsigned char)c)) {
-            Advance(tokenizer, 1);
-            c = PeekChar(tokenizer);
-        }
+        SkipWhitespace(tokenizer);
 
         if (PeekChar(tokenizer) == '/' && PeekCharAt(tokenizer, 1) == '/') {
             while (PeekChar(tokenizer) != '\0' && PeekChar(tokenizer) != '\n') {
@@ -174,9 +200,45 @@ static void SkipWhitespaceAndComments(struct Tokenizer* tokenizer) {
     }
 }
 
+static struct Token ReadLineComment(struct Tokenizer* tokenizer) {
+    size_t start = tokenizer->position;
+    size_t line = tokenizer->line;
+    size_t column = tokenizer->column;
+    enum TokenType type = PeekCharAt(tokenizer, 2) == '/' ? TOKEN_DOC_COMMENT : TOKEN_COMMENT;
+    while (PeekChar(tokenizer) != '\0' && PeekChar(tokenizer) != '\n') {
+        Advance(tokenizer, 1);
+    }
+    return CreateCommentToken(type, start, tokenizer->position - start, line, column);
+}
+
+static struct Token ReadBlockComment(struct Tokenizer* tokenizer) {
+    size_t start = tokenizer->position;
+    size_t line = tokenizer->line;
+    size_t column = tokenizer->column;
+    Advance(tokenizer, 2);
+    while (PeekChar(tokenizer) != '\0') {
+        if (PeekChar(tokenizer) == '*' && PeekCharAt(tokenizer, 1) == '/') {
+            Advance(tokenizer, 2);
+            break;
+        }
+        Advance(tokenizer, 1);
+    }
+    return CreateCommentToken(TOKEN_COMMENT, start, tokenizer->position - start, line, column);
+}
+
 struct Token GetNextToken(struct Tokenizer* tokenizer) {
     struct Token token = {0};
-    SkipWhitespaceAndComments(tokenizer);
+    if (tokenizer->emitComments) {
+        SkipWhitespace(tokenizer);
+        if (PeekChar(tokenizer) == '/' && PeekCharAt(tokenizer, 1) == '/') {
+            return ReadLineComment(tokenizer);
+        }
+        if (PeekChar(tokenizer) == '/' && PeekCharAt(tokenizer, 1) == '*') {
+            return ReadBlockComment(tokenizer);
+        }
+    } else {
+        SkipWhitespaceAndComments(tokenizer);
+    }
 
     char c = PeekChar(tokenizer);
     if (c == '\0') {
@@ -240,7 +302,8 @@ struct Token GetNextToken(struct Tokenizer* tokenizer) {
         return CreatePunctuationToken((enum PunctuationType)puncIndex, start, length, line, column);
     }
 
-    fprintf(stderr, "Warning: Unrecognized character '%c' at line %zu, column %zu\n", c, line, column);
+    KekAddDiagnosticFormat(tokenizer->diagnostics, KEK_DIAGNOSTIC_WARNING, KEK_PHASE_LEX, tokenizer->fileIndex,
+        (struct SourceLocation){line, column, start, 1}, "unrecognized character '%c'", c);
     Advance(tokenizer, 1);
     return CreateTextToken(TOKEN_IDENTIFIER, start, 1, line, column);
 }
@@ -266,6 +329,8 @@ void PrintToken(struct Token* token, struct SourceFile* file) {
         case TOKEN_IDENTIFIER:
         case TOKEN_NUMBER:
         case TOKEN_STRING:
+        case TOKEN_COMMENT:
+        case TOKEN_DOC_COMMENT:
             if (token->location.offset + token->location.length <= file->length) {
                 printf("%.*s\n", (int)token->location.length, file->content + token->location.offset);
             } else {
@@ -283,12 +348,14 @@ void PrintToken(struct Token* token, struct SourceFile* file) {
     }
 }
 
-static void PushToken(struct TokenArray* array, struct Token token) {
+static int PushToken(struct TokenArray* array, struct Tokenizer* tokenizer, struct Token token) {
     if (array->count >= array->capacity) {
-        fprintf(stderr, "Error: Token storage capacity exceeded.\n");
-        exit(1);
+        KekAddDiagnostic(tokenizer->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_LEX,
+            tokenizer->fileIndex, token.location, "token storage capacity exceeded");
+        return -1;
     }
     array->items[array->count++] = token;
+    return 0;
 }
 
 struct TokenArray TokenizeFile(struct Tokenizer* tokenizer, struct Token* storage, size_t capacity) {
@@ -298,7 +365,9 @@ struct TokenArray TokenizeFile(struct Tokenizer* tokenizer, struct Token* storag
 
     for (;;) {
         struct Token token = GetNextToken(tokenizer);
-        PushToken(&array, token);
+        if (PushToken(&array, tokenizer, token) != 0) {
+            break;
+        }
         if (token.type == TOKEN_EOF) {
             break;
         }

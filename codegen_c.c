@@ -1506,7 +1506,6 @@ static void PackagePrefixFromPath(const char* path, char* buffer, size_t bufferS
 int WriteCFileForFiles(const char* path, struct AstNode** asts, struct SourceFile** files, size_t count) {
     FILE* out = fopen(path, "w");
     if (!out) {
-        fprintf(stderr, "Error: Could not open %s for writing.\n", path);
         return -1;
     }
 
@@ -2718,7 +2717,6 @@ static void CollectGenericDeclUses(struct CWriter* writer, struct KekModule* mod
 int WriteTypedCFileForModules(const char* path, struct KekModule* modules, size_t count) {
     FILE* out = fopen(path, "w");
     if (!out) {
-        fprintf(stderr, "Error: Could not open %s for writing.\n", path);
         return -1;
     }
 
@@ -2784,7 +2782,6 @@ int WriteTypedCFileForModules(const char* path, struct KekModule* modules, size_
 int WriteCFile(const char* path, struct AstNode* ast, struct SourceFile* file) {
     FILE* out = fopen(path, "w");
     if (!out) {
-        fprintf(stderr, "Error: Could not open %s for writing.\n", path);
         return -1;
     }
     WriteC(out, ast, file);

@@ -15,6 +15,7 @@ struct SourceFile {
     char path[MAX_PATH_LENGTH];
     char* content;
     size_t length;
+    int fileIndex;
 };
 
 struct SourceLocation {
@@ -29,11 +30,43 @@ struct FileTable {
     size_t count;
 };
 
+enum KekDiagnosticSeverity {
+    KEK_DIAGNOSTIC_NOTE,
+    KEK_DIAGNOSTIC_WARNING,
+    KEK_DIAGNOSTIC_ERROR,
+};
+
+enum KekDiagnosticPhase {
+    KEK_PHASE_SOURCE,
+    KEK_PHASE_LEX,
+    KEK_PHASE_PARSE,
+    KEK_PHASE_TYPED_PARSE,
+    KEK_PHASE_SEMANTIC,
+    KEK_PHASE_CODEGEN,
+};
+
+struct KekDiagnostic {
+    enum KekDiagnosticSeverity severity;
+    enum KekDiagnosticPhase phase;
+    int fileIndex;
+    struct SourceLocation location;
+    char message[256];
+};
+
+struct KekDiagnosticBag {
+    struct KekDiagnostic* items;
+    size_t count;
+    size_t capacity;
+    size_t errorCount;
+};
+
 enum TokenType {
     TOKEN_EOF,
     TOKEN_IDENTIFIER,
     TOKEN_NUMBER,
     TOKEN_STRING,
+    TOKEN_COMMENT,
+    TOKEN_DOC_COMMENT,
     TOKEN_OPERATOR,
     TOKEN_KEYWORD,
     TOKEN_PUNCTUATION,
@@ -139,9 +172,12 @@ struct Token {
 
 struct Tokenizer {
     struct SourceFile* file;
+    int fileIndex;
     size_t position;
     size_t line;
     size_t column;
+    int emitComments;
+    struct KekDiagnosticBag* diagnostics;
 };
 
 struct TokenArray {
@@ -181,6 +217,7 @@ struct Parser {
     size_t astNodeCount;
     size_t astNodeCapacity;
     int errorCount;
+    struct KekDiagnosticBag* diagnostics;
 };
 
 enum KekDeclKind {
@@ -370,6 +407,8 @@ struct KekDecl {
     struct KekStmt* firstStmt;
     struct KekStmt* lastStmt;
     struct KekDecl* next;
+    int hasDocComment;
+    struct SourceLocation docCommentLocation;
 };
 
 struct KekModule {
@@ -414,6 +453,7 @@ struct KekFrontend {
     size_t variantCount;
     size_t variantCapacity;
     int errorCount;
+    struct KekDiagnosticBag* diagnostics;
 };
 
 struct KekSymbol {
@@ -451,12 +491,55 @@ struct KekProgram {
     size_t scopeKindCounts[KEK_SCOPE_COUNT];
     size_t semanticCheckCount;
     int errorCount;
+    struct KekDiagnosticBag* diagnostics;
 };
 
+struct KekCompilationUnit {
+    int fileIndex;
+    struct Token* tokens;
+    struct AstNode* astNodes;
+    struct AstNode* ast;
+    struct KekDecl* decls;
+    struct KekType* types;
+    struct KekExpr* exprs;
+    struct KekStmt* stmts;
+    struct KekParam* params;
+    struct KekField* fields;
+    struct KekVariant* variants;
+    struct KekModule module;
+};
+
+struct KekCompilation {
+    struct FileTable fileTable;
+    struct KekCompilationUnit units[MAX_FILES];
+    struct KekModule modules[MAX_FILES];
+    size_t unitCount;
+    int entryFileIndex;
+    struct KekProgram program;
+    struct KekSymbol* symbols;
+    struct KekScope* scopes;
+    struct KekDiagnosticBag diagnostics;
+};
+
+struct KekLexOptions {
+    int emitComments;
+    struct KekDiagnosticBag* diagnostics;
+};
+
+void InitKekDiagnosticBag(struct KekDiagnosticBag* bag, struct KekDiagnostic* storage, size_t capacity);
+void KekAddDiagnostic(struct KekDiagnosticBag* bag, enum KekDiagnosticSeverity severity, enum KekDiagnosticPhase phase, int fileIndex, struct SourceLocation location, const char* message);
+void KekAddDiagnosticFormat(struct KekDiagnosticBag* bag, enum KekDiagnosticSeverity severity, enum KekDiagnosticPhase phase, int fileIndex, struct SourceLocation location, const char* format, ...);
+void PrintKekDiagnostics(FILE* out, struct KekDiagnosticBag* bag, struct FileTable* table);
+
 int ReadFile(const char* path, struct FileTable* table);
+int ReadFileWithDiagnostics(const char* path, struct FileTable* table, struct KekDiagnosticBag* diagnostics);
 void FreeFileTable(struct FileTable* table);
+const char* SourceLocationText(struct SourceFile* file, struct SourceLocation location, size_t* length);
+const char* TokenText(struct Token* token, struct SourceFile* file, size_t* length);
+const char* AstNodeText(struct AstNode* node, struct SourceFile* file, size_t* length);
 
 struct Tokenizer CreateTokenizer(int fileIndex, struct FileTable* table);
+struct Tokenizer CreateTokenizerWithOptions(int fileIndex, struct FileTable* table, struct KekLexOptions options);
 struct Token GetNextToken(struct Tokenizer* tokenizer);
 struct TokenArray TokenizeFile(struct Tokenizer* tokenizer, struct Token* storage, size_t capacity);
 const char* TokenLexeme(struct Token* token, struct SourceFile* file);
@@ -480,5 +563,14 @@ int WriteCFile(const char* path, struct AstNode* ast, struct SourceFile* file);
 int WriteCFileForFiles(const char* path, struct AstNode** asts, struct SourceFile** files, size_t count);
 int WriteTypedCFileForModules(const char* path, struct KekModule* modules, size_t count);
 void WriteC(FILE* out, struct AstNode* ast, struct SourceFile* file);
+
+void FreeKekCompilationUnit(struct KekCompilationUnit* unit);
+void InitKekCompilation(struct KekCompilation* compilation, struct KekDiagnostic* diagnostics, size_t diagnosticCapacity);
+void FreeKekCompilation(struct KekCompilation* compilation);
+int LoadKekCompilation(struct KekCompilation* compilation, const char* entryPath);
+int BuildKekCompilation(struct KekCompilation* compilation);
+int WriteKekCompilationOutputs(struct KekCompilation* compilation, const char* cPath, const char* astJsonPath, const char* summaryPath);
+int CompileKekSmoke(const char* entryPath, const char* cPath, const char* astJsonPath, const char* summaryPath, struct KekCompilation* compilation);
+void AttachKekDocComments(struct KekModule* module, struct TokenArray* tokens, struct SourceFile* file);
 
 #endif

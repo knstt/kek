@@ -108,7 +108,8 @@ static int SameFunctionSymbolSlot(struct KekDecl* left, struct KekDecl* right, s
 
 static struct KekScope* AddScope(struct KekProgram* program, enum KekScopeKind kind, struct SourceFile* file, struct KekScope* parent) {
     if (program->scopeCount >= program->scopeCapacity) {
-        fprintf(stderr, "Error: symbol scope storage capacity exceeded\n");
+        KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
+            file ? file->fileIndex : -1, (struct SourceLocation){0}, "symbol scope storage capacity exceeded");
         program->errorCount++;
         return NULL;
     }
@@ -146,13 +147,15 @@ static int AddSymbol(struct KekProgram* program, struct KekScope* scope, enum Ke
         return -1;
     }
     if (program->symbolCount >= program->symbolCapacity) {
-        fprintf(stderr, "Error: symbol storage capacity exceeded\n");
+        KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
+            scope->file ? scope->file->fileIndex : -1, name ? name->location : (struct SourceLocation){0},
+            "symbol storage capacity exceeded");
         program->errorCount++;
         return -1;
     }
     if (name && ScopeHasDuplicate(scope, name, decl)) {
-        fprintf(stderr, "Semantic error at line %zu, column %zu: duplicate symbol\n",
-            name->location.line, name->location.column);
+        KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
+            scope->file ? scope->file->fileIndex : -1, name->location, "duplicate symbol");
         program->errorCount++;
         return -1;
     }
@@ -220,15 +223,15 @@ static void CheckExprSemantics(struct KekProgram* program, struct KekScope* scop
             if (!allowUnresolvedName
                 && !IsTokenText(expr->token, scope->file, "this")
                 && !LookupSymbol(scope, expr->token)) {
-                fprintf(stderr, "Semantic error at line %zu, column %zu: unresolved name\n",
-                    expr->location.line, expr->location.column);
+                KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
+                    scope->file ? scope->file->fileIndex : -1, expr->location, "unresolved name");
                 program->errorCount++;
             }
             break;
         case KEK_EXPR_CALL:
             if (!expr->callee) {
-                fprintf(stderr, "Semantic error at line %zu, column %zu: call without callee\n",
-                    expr->location.line, expr->location.column);
+                KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
+                    scope->file ? scope->file->fileIndex : -1, expr->location, "call without callee");
                 program->errorCount++;
             }
             CheckExprSemantics(program, scope, expr->callee, 1);
@@ -272,8 +275,8 @@ static void CheckExprSemantics(struct KekProgram* program, struct KekScope* scop
             break;
         case KEK_EXPR_ASSIGN:
             if (!IsAssignableExpr(expr->left)) {
-                fprintf(stderr, "Semantic error at line %zu, column %zu: assignment target is not assignable\n",
-                    expr->location.line, expr->location.column);
+                KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
+                    scope->file ? scope->file->fileIndex : -1, expr->location, "assignment target is not assignable");
                 program->errorCount++;
             }
             CheckExprSemantics(program, scope, expr->left, 0);
@@ -330,18 +333,18 @@ static void BuildStmtSymbols(struct KekProgram* program, struct KekScope* scope,
     }
 
     if (stmt->kind == KEK_STMT_RETURN && !inFunction) {
-        fprintf(stderr, "Semantic error at line %zu, column %zu: return outside function\n",
-            stmt->location.line, stmt->location.column);
+        KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
+            scope->file ? scope->file->fileIndex : -1, stmt->location, "return outside function");
         program->errorCount++;
     }
     if (stmt->kind == KEK_STMT_BREAK && loopDepth == 0 && switchDepth == 0) {
-        fprintf(stderr, "Semantic error at line %zu, column %zu: break outside loop or switch\n",
-            stmt->location.line, stmt->location.column);
+        KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
+            scope->file ? scope->file->fileIndex : -1, stmt->location, "break outside loop or switch");
         program->errorCount++;
     }
     if (stmt->kind == KEK_STMT_CONTINUE && loopDepth == 0) {
-        fprintf(stderr, "Semantic error at line %zu, column %zu: continue outside loop\n",
-            stmt->location.line, stmt->location.column);
+        KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
+            scope->file ? scope->file->fileIndex : -1, stmt->location, "continue outside loop");
         program->errorCount++;
     }
 

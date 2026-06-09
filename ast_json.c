@@ -82,7 +82,6 @@ void WriteAstJson(FILE* out, struct AstNode* node, struct SourceFile* file, int 
 int WriteAstJsonFile(const char* path, struct AstNode* ast, struct SourceFile* file) {
     FILE* out = fopen(path, "w");
     if (!out) {
-        fprintf(stderr, "Error: Could not open %s for writing.\n", path);
         return -1;
     }
     WriteAstJson(out, ast, file, 0);

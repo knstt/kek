@@ -2,7 +2,8 @@
 # Configure the C source files explicitly via the SRCS variable.
 PROJECT ?= kek
 BIN_DIR ?= bin
-SRCS ?=main.c ast.c parser.c sema.c tokenizer.c ast_json.c source.c codegen_c.c
+CORE_SRCS ?= ast.c parser.c sema.c tokenizer.c ast_json.c source.c diagnostics.c compilation.c codegen_c.c
+SRCS ?= main.c $(CORE_SRCS)
 CFLAGS ?= -std=c11 -O2 -Wall -Wextra -pedantic
 CC := $(shell command -v gcc 2>/dev/null || command -v cc 2>/dev/null || true)
 INSTALL_DIR ?= /usr/local/bin
@@ -10,12 +11,14 @@ SMOKE_BIN ?= out/tmp
 SMOKE_EXPECTED_EXIT ?= 91
 PYTHON ?= python3
 
-.PHONY: help build c-build test fmt lint clean install noop-build
+.PHONY: help build c-build test api-test fmt lint clean install noop-build
 
 help:
 	@printf "Usage:\n"
-	@printf "  make build          Build the project (set SRCS manually)\n"
+	@printf "  make build          Build the compiler into $(BIN_DIR)/$(PROJECT)\n"
 	@printf "  make test           Build and run the tmp.kek smoke test\n"
+	@printf "  make fmt            Normalize generated smoke C output, if present\n"
+	@printf "  make lint           Build with the configured warning flags\n"
 	@printf "  make clean          Remove build artifacts\n"
 	@printf "\nSet the SRCS variable in this Makefile or pass it on the make command line, e.g.\n"
 	@printf "  make SRCS=\"main.c source.c\" build\n"
@@ -61,6 +64,26 @@ test:
 	$(PYTHON) tools/normalize_c.py < out/out.c > out/out.min.norm.c; \
 	diff -u out/out.pretty.norm.c out/out.min.norm.c >/dev/null
 	@echo "Whitespace smoke test passed"
+	@$(MAKE) api-test
+
+api-test:
+	@if [ -z "$(CC)" ]; then echo "C compiler not found in PATH"; exit 1; fi
+	@mkdir -p out
+	@$(MAKE) build
+	@$(BIN_DIR)/$(PROJECT)
+	@echo "Building API/tooling tests -> out/api_tests"
+	@$(CC) $(CFLAGS) -o out/api_tests tests.c $(CORE_SRCS)
+	@out/api_tests
+
+fmt:
+	@if [ -f out/out.c ]; then \
+		$(PYTHON) tools/normalize_c.py < out/out.c > out/out.norm.c; \
+		echo "Wrote out/out.norm.c"; \
+	else \
+		echo "Nothing to format: out/out.c does not exist"; \
+	fi
+
+lint: build
 
 clean:
 	@echo "Cleaning build artifacts..."
