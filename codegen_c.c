@@ -2501,7 +2501,10 @@ static void RegisterTypedStruct(struct CWriter* writer, struct KekDecl* decl) {
     }
     for (struct KekField* field = decl->firstField; field && info->fieldCount < 64; field = field->next) {
         CopyTypedNodeText(writer, field->name, info->fieldNames[info->fieldCount], sizeof(info->fieldNames[info->fieldCount]));
-        if (field->defaultValue) {
+        if (field->isNestedStruct) {
+            // Nested struct initializes to {0}
+            snprintf(info->defaults[info->fieldCount], sizeof(info->defaults[info->fieldCount]), "{0}");
+        } else if (field->defaultValue) {
             CopyExprSource(writer, field->defaultValue, info->defaults[info->fieldCount], sizeof(info->defaults[info->fieldCount]));
         } else {
             snprintf(info->defaults[info->fieldCount], sizeof(info->defaults[info->fieldCount]), "0");
@@ -2703,8 +2706,23 @@ static void WriteTypedDecl(struct CWriter* writer, struct KekDecl* decl) {
             writer->indent++;
             for (struct KekField* field = decl->firstField; field; field = field->next) {
                 WriteIndent(writer->out, writer->indent);
-                WriteTypedTypeAndName(writer, field->type, field->name);
-                fputs(";\n", writer->out);
+                if (field->isNestedStruct) {
+                    // Nested struct: emit inline struct definition
+                    char nestedName[128];
+                    fputs("struct {\n", writer->out);
+                    writer->indent++;
+                    for (struct KekField* nested = field->nestedFields; nested; nested = nested->next) {
+                        WriteIndent(writer->out, writer->indent);
+                        WriteTypedTypeAndName(writer, nested->type, nested->name);
+                        fputs(";\n", writer->out);
+                    }
+                    writer->indent--;
+                    WriteIndent(writer->out, writer->indent);
+                    fprintf(writer->out, "} %s;\n", TypedNodeText(writer, field->name, nestedName, sizeof(nestedName)));
+                } else {
+                    WriteTypedTypeAndName(writer, field->type, field->name);
+                    fputs(";\n", writer->out);
+                }
             }
             writer->indent--;
             fputs("};", writer->out);

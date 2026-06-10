@@ -1121,13 +1121,51 @@ static void BuildParamList(struct KekFrontend* frontend, struct KekModule* modul
     }
 }
 
+// Check if a node is a nested struct definition: struct:Name { ... }
+static int IsNestedStructDecl(struct AstNode* first) {
+    if (!IsKeywordNode(first, KEYWORD_STRUCT)) {
+        return 0;
+    }
+    struct AstNode* colon = Next(first);
+    if (!IsPunctuationNode(colon, PUNCTUATION_COLON)) {
+        return 0;
+    }
+    struct AstNode* name = Next(colon);
+    if (!IsTokenNode(name) || name->token.type != TOKEN_IDENTIFIER) {
+        return 0;
+    }
+    struct AstNode* block = Next(name);
+    return block && block->type == AST_BLOCK;
+}
+
+static void BuildNestedStructFields(struct KekFrontend* frontend, struct KekModule* module, struct KekField* parentField, struct AstNode* block);
+
 static void BuildStructFields(struct KekFrontend* frontend, struct KekModule* module, struct KekDecl* decl) {
     if (!decl->body || decl->body->type != AST_BLOCK) {
         return;
     }
 
     for (struct AstNode* field = decl->body->firstChild; field; field = field->nextSibling) {
-        if (LooksLikeDecl(field->firstChild)) {
+        // Check for nested struct FIRST (before LooksLikeDecl, since struct:Name also matches Type:Name pattern)
+        if (IsNestedStructDecl(field->firstChild)) {
+            // Nested struct: struct:Name { ... }
+            struct AstNode* keyword = field->firstChild;
+            struct AstNode* colon = Next(keyword);
+            struct AstNode* name = Next(colon);
+            struct AstNode* block = Next(name);
+
+            struct KekField* nestedField = AddField(frontend, module, field);
+            if (!nestedField) {
+                return;
+            }
+            nestedField->name = name;
+            nestedField->isNestedStruct = 1;
+
+            // Recursively parse nested struct fields
+            BuildNestedStructFields(frontend, module, nestedField, block);
+
+            AddDeclField(decl, nestedField);
+        } else if (LooksLikeDecl(field->firstChild)) {
             struct AstNode* fieldName = DeclNameAfterType(field->firstChild);
             struct KekField* typedField = AddField(frontend, module, field);
             if (!typedField) {
@@ -1140,6 +1178,36 @@ static void BuildStructFields(struct KekFrontend* frontend, struct KekModule* mo
                 typedField->defaultValue = ParseExprUntil(frontend, module, Next(afterField), NULL);
             }
             AddDeclField(decl, typedField);
+        }
+    }
+}
+
+static void BuildNestedStructFields(struct KekFrontend* frontend, struct KekModule* module, struct KekField* parentField, struct AstNode* block) {
+    if (!block || block->type != AST_BLOCK) {
+        return;
+    }
+
+    for (struct AstNode* field = block->firstChild; field; field = field->nextSibling) {
+        if (LooksLikeDecl(field->firstChild)) {
+            struct AstNode* fieldName = DeclNameAfterType(field->firstChild);
+            struct KekField* typedField = AddField(frontend, module, field);
+            if (!typedField) {
+                return;
+            }
+            typedField->type = ParseType(frontend, module, field->firstChild, fieldName);
+            typedField->name = fieldName;
+            struct AstNode* afterField = AfterNameAndArraySuffixes(fieldName);
+            if (afterField && IsOperatorNode(afterField, OPERATOR_ASSIGN)) {
+                typedField->defaultValue = ParseExprUntil(frontend, module, Next(afterField), NULL);
+            }
+            // Add to nested fields list
+            if (parentField->lastNestedField) {
+                parentField->lastNestedField->next = typedField;
+            } else {
+                parentField->nestedFields = typedField;
+            }
+            parentField->lastNestedField = typedField;
+            typedField->next = NULL;
         }
     }
 }

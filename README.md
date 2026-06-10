@@ -89,7 +89,7 @@ not required for the first self-host.
 - [x] `[aligned(N)]` struct attribute
 - [x] `unreachable` keyword
 - [x] `panic("msg")` statement
-- [ ] Nested/internal structs
+- [x] Nested/internal structs
 - [ ] `for..in` loops and `Range<T>()` iterator
 - [ ] Port tokenizer to Kek
 - [ ] Port typed parser to Kek

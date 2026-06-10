@@ -387,6 +387,9 @@ struct KekField {
     struct AstNode* name;
     struct KekExpr* defaultValue;
     struct KekField* next;
+    struct KekField* nestedFields;  // For nested struct definitions
+    struct KekField* lastNestedField;
+    int isNestedStruct;
 };
 
 struct KekVariant {

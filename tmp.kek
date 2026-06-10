@@ -245,12 +245,12 @@ i64: main() {
     assert(matrix[0][0] == 1);
     assert(matrix[1][2] == 6);
 
-    // Nested struct access - TODO: not yet implemented in codegen
-    // Container:container;
-    // container.id = 42;
-    // container.Inner.value = 7;
-    // assert(container.id == 42);
-    // assert(container.Inner.value == 7);
+    // Nested struct access
+    Container:container;
+    container.id = 42;
+    container.Inner.value = 7;
+    assert(container.id == 42);
+    assert(container.Inner.value == 7);
 
     // unreachable in switch default
     u8:unreachableTest = 1;
