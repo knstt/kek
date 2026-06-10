@@ -322,13 +322,13 @@ i64: main() {
     }
     assert(mulCheck == 36); // (1+2+3)*(1+2+3) = 6*6 = 36
 
-    // Each over struct array (commented out due to codegen issue with struct array init)
-    // Vec2:vecArr[3] = {{x=1,y=2},{x=3,y=4},{x=5,y=6}};
-    // int:vecXSum = 0;
-    // each<Vec2:v>(vecArr){
-    //     vecXSum += v.x;
-    // }
-    // assert(vecXSum == 9);
+    // Each over struct array
+    Vec2:vecArr[3] = {{x=1,y=2},{x=3,y=4},{x=5,y=6}};
+    int:vecXSum = 0;
+    each<Vec2:v>(vecArr){
+        vecXSum += v.x;
+    }
+    assert(vecXSum == 9);
 
     // Each with index accessing array elements
     int:idxTest[3] = {100, 200, 300};

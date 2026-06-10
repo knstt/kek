@@ -22,6 +22,7 @@ const char* KekStmtKindNames[] = {
     "While",
     "DoWhile",
     "For",
+    "Each",
     "Switch",
     "Case",
     "Default",
@@ -52,6 +53,7 @@ const char* KekExprKindNames[] = {
     "Alignof",
     "Offsetof",
     "Len",
+    "Range",
     "Unknown",
 };
 
@@ -514,6 +516,45 @@ static struct KekExpr* ParsePrimaryExpr(struct KekFrontend* frontend, struct Kek
         return expr;
     }
 
+    // range<Type>(start, end[, step])
+    if (IsTokenNode(node) && TokenTextEquals(node, module->file, "range")) {
+        struct KekExpr* expr = AddExpr(frontend, module, KEK_EXPR_RANGE, node);
+        struct AstNode* generic = Next(node);
+        struct AstNode* argGroup = NULL;
+
+        // Parse generic type argument <Type>
+        if (expr && IsGenericNode(generic)) {
+            struct AstNode* typeArg = generic->firstChild ? generic->firstChild->firstChild : NULL;
+            if (typeArg) {
+                expr->type = ParseType(frontend, module, typeArg, NULL);
+            }
+            argGroup = Next(generic);
+        } else {
+            argGroup = generic;
+        }
+
+        // Parse arguments (start, end[, step])
+        if (expr && argGroup && argGroup->type == AST_GROUP) {
+            struct AstNode* startStmt = argGroup->firstChild;
+            struct AstNode* endStmt = startStmt ? startStmt->nextSibling : NULL;
+            struct AstNode* stepStmt = endStmt ? endStmt->nextSibling : NULL;
+
+            if (startStmt && startStmt->firstChild) {
+                expr->left = ParseExprUntil(frontend, module, startStmt->firstChild, NULL);
+            }
+            if (endStmt && endStmt->firstChild) {
+                expr->right = ParseExprUntil(frontend, module, endStmt->firstChild, NULL);
+            }
+            if (stepStmt && stepStmt->firstChild) {
+                expr->step = ParseExprUntil(frontend, module, stepStmt->firstChild, NULL);
+            }
+            *current = Next(argGroup);
+        } else {
+            *current = Next(node);
+        }
+        return expr;
+    }
+
     if (IsUnaryExprOperator(node)) {
         struct KekExpr* expr = AddExpr(frontend, module, KEK_EXPR_UNARY, node);
         *current = Next(node);
@@ -768,6 +809,9 @@ static enum KekStmtKind ClassifyStatementKind(struct AstNode* first) {
     if (IsKeywordNode(first, KEYWORD_FOR)) {
         return KEK_STMT_FOR;
     }
+    if (IsKeywordNode(first, KEYWORD_EACH)) {
+        return KEK_STMT_EACH;
+    }
     if (IsKeywordNode(first, KEYWORD_SWITCH)) {
         return KEK_STMT_SWITCH;
     }
@@ -840,6 +884,49 @@ static struct KekStmt* ParseStatement(struct KekFrontend* frontend, struct KekMo
         }
         if (step && step->firstChild) {
             stmt->step = ParseExprUntil(frontend, module, step->firstChild, NULL);
+        }
+    } else if (kind == KEK_STMT_EACH) {
+        // each<Type:varName>(iterable){ body }
+        // each<IndexType:idx, Type:varName>(iterable){ body }
+        struct AstNode* generic = Next(first);
+        struct AstNode* iterableGroup = NULL;
+
+        if (IsGenericNode(generic)) {
+            // Parse variable declarations from generic args
+            struct AstNode* firstDecl = generic->firstChild;
+            struct AstNode* secondDecl = firstDecl ? firstDecl->nextSibling : NULL;
+
+            if (secondDecl) {
+                // Two declarations: index and value
+                // Parse index variable (first declaration)
+                struct AstNode* indexTypeNode = firstDecl->firstChild;
+                if (indexTypeNode && LooksLikeDecl(indexTypeNode)) {
+                    stmt->indexName = DeclNameAfterType(indexTypeNode);
+                    stmt->indexType = ParseType(frontend, module, indexTypeNode, stmt->indexName);
+                }
+                // Parse value variable (second declaration)
+                struct AstNode* valueTypeNode = secondDecl->firstChild;
+                if (valueTypeNode && LooksLikeDecl(valueTypeNode)) {
+                    stmt->declName = DeclNameAfterType(valueTypeNode);
+                    stmt->declType = ParseType(frontend, module, valueTypeNode, stmt->declName);
+                }
+            } else if (firstDecl) {
+                // Single declaration: value only
+                struct AstNode* valueTypeNode = firstDecl->firstChild;
+                if (valueTypeNode && LooksLikeDecl(valueTypeNode)) {
+                    stmt->declName = DeclNameAfterType(valueTypeNode);
+                    stmt->declType = ParseType(frontend, module, valueTypeNode, stmt->declName);
+                }
+            }
+
+            iterableGroup = Next(generic);
+        } else {
+            iterableGroup = generic;
+        }
+
+        // Parse iterable expression from group
+        if (iterableGroup && iterableGroup->type == AST_GROUP) {
+            stmt->expr = ParseFirstGroupStatementExpr(frontend, module, iterableGroup);
         }
     } else if (kind == KEK_STMT_IF || kind == KEK_STMT_WHILE || kind == KEK_STMT_SWITCH || kind == KEK_STMT_CASE) {
         stmt->condition = ParseFirstGroupStatementExpr(frontend, module, Next(first));

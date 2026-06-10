@@ -123,6 +123,7 @@ enum KeywordType {
     KEYWORD_CASE,
     KEYWORD_DEFAULT,
     KEYWORD_IN,
+    KEYWORD_EACH,
     KEYWORD_PACKED,
     KEYWORD_ALIGNED,
     KEYWORD_COMPTIME,
@@ -246,6 +247,7 @@ enum KekStmtKind {
     KEK_STMT_WHILE,
     KEK_STMT_DO_WHILE,
     KEK_STMT_FOR,
+    KEK_STMT_EACH,
     KEK_STMT_SWITCH,
     KEK_STMT_CASE,
     KEK_STMT_DEFAULT,
@@ -278,6 +280,7 @@ enum KekExprKind {
     KEK_EXPR_ALIGNOF,
     KEK_EXPR_OFFSETOF,
     KEK_EXPR_LEN,
+    KEK_EXPR_RANGE,
     KEK_EXPR_UNKNOWN,
 
     KEK_EXPR_COUNT
@@ -354,6 +357,7 @@ struct KekExpr {
     struct KekExpr* firstArg;
     struct KekExpr* lastArg;
     struct KekExpr* next;
+    struct KekExpr* step;         // Step expression (for range)
 };
 
 struct KekStmt {
@@ -369,6 +373,8 @@ struct KekStmt {
     struct KekStmt* firstChild;
     struct KekStmt* lastChild;
     struct KekStmt* next;
+    struct KekType* indexType;    // Type of index variable (for each)
+    struct AstNode* indexName;    // Name of index variable (for each)
 };
 
 struct KekParam {

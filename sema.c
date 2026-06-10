@@ -316,6 +316,14 @@ static void CheckExprSemantics(struct KekProgram* program, struct KekScope* scop
         case KEK_EXPR_LEN:
             CheckExprSemantics(program, scope, expr->right, 0);
             break;
+        case KEK_EXPR_RANGE:
+            // Range expression: check start, end, and optional step
+            CheckExprSemantics(program, scope, expr->left, 0);
+            CheckExprSemantics(program, scope, expr->right, 0);
+            if (expr->step) {
+                CheckExprSemantics(program, scope, expr->step, 0);
+            }
+            break;
         case KEK_EXPR_STRUCT_LITERAL:
             for (struct KekExpr* arg = expr->firstArg; arg; arg = arg->next) {
                 if (arg->kind == KEK_EXPR_ASSIGN && arg->left && arg->left->kind == KEK_EXPR_NAME) {
@@ -385,6 +393,27 @@ static void BuildStmtSymbols(struct KekProgram* program, struct KekScope* scope,
         return;
     }
 
+    if (stmt->kind == KEK_STMT_EACH) {
+        struct KekScope* loopScope = AddScope(program, KEK_SCOPE_LOOP, scope->file, scope);
+        if (loopScope) {
+            loopScope->stmt = stmt;
+            // Check the iterable expression
+            CheckExprSemantics(program, loopScope, stmt->expr, 0);
+            // Check types (indexType and declType are parsed types, not expressions)
+            CheckTypeSemantics(program, loopScope, stmt->indexType);
+            CheckTypeSemantics(program, loopScope, stmt->declType);
+            // Add loop variables as local symbols in the loop scope
+            if (stmt->indexName) {
+                (void)AddSymbol(program, loopScope, KEK_SYMBOL_LOCAL, stmt->indexName, NULL, NULL, stmt);
+            }
+            if (stmt->declName) {
+                (void)AddSymbol(program, loopScope, KEK_SYMBOL_LOCAL, stmt->declName, NULL, NULL, stmt);
+            }
+            BuildChildStmtSymbols(program, loopScope, stmt->firstChild, inFunction, loopDepth + 1, switchDepth);
+        }
+        return;
+    }
+
     if (stmt->kind == KEK_STMT_DECL) {
         CheckTypeSemantics(program, scope, stmt->declType);
         (void)AddSymbol(program, scope, KEK_SYMBOL_LOCAL, stmt->declName, NULL, NULL, stmt);
@@ -410,7 +439,7 @@ static void BuildStmtSymbols(struct KekProgram* program, struct KekScope* scope,
     CheckExprSemantics(program, scope, stmt->condition, 0);
     CheckExprSemantics(program, scope, stmt->step, 0);
 
-    if (stmt->kind == KEK_STMT_WHILE || stmt->kind == KEK_STMT_DO_WHILE) {
+    if (stmt->kind == KEK_STMT_WHILE || stmt->kind == KEK_STMT_DO_WHILE || stmt->kind == KEK_STMT_EACH) {
         BuildChildStmtSymbols(program, scope, stmt->firstChild, inFunction, loopDepth + 1, switchDepth);
     } else if (stmt->kind == KEK_STMT_SWITCH) {
         BuildChildStmtSymbols(program, scope, stmt->firstChild, inFunction, loopDepth, switchDepth + 1);

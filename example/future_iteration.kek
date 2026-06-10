@@ -1,0 +1,170 @@
+// ============================================
+// Future iteration constructs
+// ============================================
+// These are ideas for later implementation
+// Currently only `each` and `range` are supported
+
+// ============================================
+// Map examples
+// ============================================
+
+// Simple map - double values
+u8:doubled[4]=map<u8:val>(bytes){
+    return(val*2);
+};
+
+// Map with complex logic
+int:transformed[5]=map<int:val>(numbers){
+    if(val>50){
+        return(val*10);
+    }
+    return(val);
+};
+
+// Map to extract just scores from structs
+i32:scores[4]=map<Player:p>(players){
+    return(p.score);
+};
+
+// Map to create modified structs
+Player:leveledUp[4]=map<Player:p>(players){
+    return(Player:{
+        id=p.id,
+        score=p.score,
+        level=p.level+1,
+        active=p.active
+    });
+};
+
+// Range with map - generate squares
+int:squares[10]=map<int:n>(range<int>(0,10)){
+    return(n*n);
+};
+// squares == [0,1,4,9,16,25,36,49,64,81]
+
+// ============================================
+// Reduce examples
+// ============================================
+
+// Sum all values
+int:total=reduce<int:acc,int:val>(numbers,0){
+    return(acc+val);
+};
+
+// Product of all values
+int:product=reduce<int:acc,int:val>(numbers,1){
+    return(acc*val);
+};
+
+// Find minimum
+int:minimum=reduce<int:acc,int:val>(numbers,numbers[0]){
+    if(val<acc){
+        return(val);
+    }
+    return(acc);
+};
+
+// Sum scores from struct array
+i32:totalScore=reduce<i32:acc,Player:p>(players,0){
+    return(acc+p.score);
+};
+
+// Find player with highest score
+Player:topPlayer=reduce<Player:best,Player:p>(players,players[0]){
+    if(p.score>best.score){
+        return(p);
+    }
+    return(best);
+};
+
+// Nested reduce - calculate total score per team
+i32:teamScores[2]={0};
+each<usize:i,Team:t>(teams){
+    teamScores[i]=reduce<i32:acc,Player:p>(t.members,0){
+        return(acc+p.score);
+    };
+}
+
+// Range with reduce - factorial of 5
+int:factorial=reduce<int:acc,int:n>(range<int>(1,6),1){
+    return(acc*n);
+};
+// factorial == 1*2*3*4*5 == 120
+
+// ============================================
+// Filter examples
+// ============================================
+
+// Filter values greater than 20
+int:big[5]=filter<int:val>(numbers){
+    return(val>20);
+};
+
+// Filter even numbers
+int:evens[5]=filter<int:val>(numbers){
+    return(val%2==0);
+};
+
+// Filter structs by field
+Player:activePlayers[4]=filter<Player:p>(players){
+    return(p.active);
+};
+
+// Range with filter - get even numbers from range
+int:evensFromRange[5]=filter<int:n>(range<int>(0,10)){
+    return(n%2==0);
+};
+// evensFromRange == [0,2,4,6,8]
+
+// ============================================
+// Chained operations
+// ============================================
+
+// Filter active, map to scores, reduce to sum
+// Note: This syntax is verbose; consider pipe operator for future
+i32:activeScoreSum=reduce<i32:acc,i32:score>(
+    map<Player:p>(
+        filter<Player:p>(players){
+            return(p.active);
+        }
+    ){
+        return(p.score);
+    },
+    0
+){
+    return(acc+score);
+};
+
+// Using intermediate variables (clearer alternative)
+Player:active[4]=filter<Player:p>(players){
+    return(p.active);
+};
+i32:activeScores[4]=map<Player:p>(active){
+    return(p.score);
+};
+i32:activeTotal=reduce<i32:acc,i32:val>(activeScores,0){
+    return(acc+val);
+};
+
+// ============================================
+// Complex nested example
+// ============================================
+
+struct:TeamScore{
+    u32:teamId;
+    i32:totalScore;
+};
+
+TeamScore:teamTotals[2]=map<Team:t>(teams){
+    i32:total=reduce<i32:acc,Player:p>(t.members,0){
+        return(acc+p.score);
+    };
+    return(TeamScore:{teamId=t.id,totalScore=total});
+};
+
+TeamScore:winningTeam=reduce<TeamScore:best,TeamScore:ts>(teamTotals,teamTotals[0]){
+    if(ts.totalScore>best.totalScore){
+        return(ts);
+    }
+    return(best);
+};

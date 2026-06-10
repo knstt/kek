@@ -45,6 +45,7 @@ struct CWriter {
     struct AstNode* genericArgs;
     struct SourceFile* genericArgFile;
     char namespacePrefix[64];
+    int eachIndexCounter;
 };
 
 static int IsWordToken(struct Token* token) {
@@ -2304,6 +2305,13 @@ static void WriteTypedExpr(struct CWriter* writer, struct KekExpr* expr) {
             }
             fputs(")[0]))", writer->out);
             break;
+        case KEK_EXPR_RANGE:
+            // Range expressions are primarily handled inline by KEK_STMT_EACH codegen.
+            // If range appears in other contexts (e.g., array init), emit source for now.
+            if (expr->source) {
+                WriteSourceSlice(writer->out, writer->file, expr->source->location);
+            }
+            break;
         case KEK_EXPR_UNKNOWN:
         case KEK_EXPR_COUNT:
             if (expr->source) {
@@ -2428,6 +2436,85 @@ static void WriteTypedStatement(struct CWriter* writer, struct KekStmt* stmt) {
             fputs(") ", writer->out);
             WriteTypedBlock(writer, FirstTypedBlockChild(stmt));
             break;
+        case KEK_STMT_EACH: {
+            // each<Type:val>(arr){ body } or each<IndexType:i, Type:val>(arr){ body }
+            char idxName[64];
+            char valName[64];
+
+            // Determine index variable name
+            if (stmt->indexName) {
+                // User provided index variable
+                CopyTypedNodeText(writer, stmt->indexName, idxName, sizeof(idxName));
+            } else {
+                // Generate hidden index variable
+                snprintf(idxName, sizeof(idxName), "__kek_each_idx_%d", writer->eachIndexCounter++);
+            }
+
+            // Get value variable name
+            CopyTypedNodeText(writer, stmt->declName, valName, sizeof(valName));
+
+            // Check if iterating over a range expression
+            if (stmt->expr && stmt->expr->kind == KEK_EXPR_RANGE) {
+                // Optimized: direct for loop over range
+                // for (Type var = start; var < end; var += step) { body }
+                struct KekExpr* range = stmt->expr;
+
+                fputs("for (", writer->out);
+                WriteTypedBaseType(writer, stmt->declType);
+                fprintf(writer->out, " %s = ", valName);
+                WriteTypedExpr(writer, range->left);  // start
+                fprintf(writer->out, "; %s < ", valName);
+                WriteTypedExpr(writer, range->right); // end
+                fprintf(writer->out, "; %s += ", valName);
+                if (range->step) {
+                    WriteTypedExpr(writer, range->step);
+                } else {
+                    fputc('1', writer->out);
+                }
+                fputs(") ", writer->out);
+                WriteTypedBlock(writer, FirstTypedBlockChild(stmt));
+            } else {
+                // Array iteration
+                // for (IndexType idx = 0; idx < (sizeof(arr)/sizeof(arr[0])); idx++) {
+                //     Type val = arr[idx];
+                //     body
+                // }
+                fputs("for (", writer->out);
+                if (stmt->indexType) {
+                    WriteTypedBaseType(writer, stmt->indexType);
+                } else {
+                    fputs("size_t", writer->out);
+                }
+                fprintf(writer->out, " %s = 0; %s < (sizeof(", idxName, idxName);
+                WriteTypedExpr(writer, stmt->expr);
+                fputs(")/sizeof((", writer->out);
+                WriteTypedExpr(writer, stmt->expr);
+                fprintf(writer->out, ")[0])); %s++) {\n", idxName);
+                writer->indent++;
+
+                // Declare value variable at the top of the block
+                WriteIndent(writer->out, writer->indent);
+                WriteTypedBaseType(writer, stmt->declType);
+                fprintf(writer->out, " %s = (", valName);
+                WriteTypedExpr(writer, stmt->expr);
+                fprintf(writer->out, ")[%s];\n", idxName);
+
+                // Write body statements from the block
+                struct KekStmt* block = FirstTypedBlockChild(stmt);
+                if (block) {
+                    for (struct KekStmt* child = block->firstChild; child; child = child->next) {
+                        WriteIndent(writer->out, writer->indent);
+                        WriteTypedStatement(writer, child);
+                        fputc('\n', writer->out);
+                    }
+                }
+
+                writer->indent--;
+                WriteIndent(writer->out, writer->indent);
+                fputc('}', writer->out);
+            }
+            break;
+        }
         case KEK_STMT_SWITCH:
             fputs("switch (", writer->out);
             WriteTypedExpr(writer, stmt->condition);

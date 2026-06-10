@@ -299,7 +299,8 @@ int BuildKekCompilation(struct KekCompilation* compilation) {
             + compilation->modules[i].typedStmtCount;
         scopeCapacity += compilation->modules[i].declKindCounts[KEK_DECL_FUNCTION]
             + compilation->modules[i].stmtKindCounts[KEK_STMT_BLOCK]
-            + compilation->modules[i].stmtKindCounts[KEK_STMT_FOR];
+            + compilation->modules[i].stmtKindCounts[KEK_STMT_FOR]
+            + compilation->modules[i].stmtKindCounts[KEK_STMT_EACH];
     }
 
     compilation->symbols = malloc(sizeof(*compilation->symbols) * symbolCapacity);

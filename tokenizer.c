@@ -20,7 +20,7 @@ const char* OperatorNames[] = {
 const char* KeywordNames[] = {
     "if", "else", "while", "for", "return", "do", "break", "continue",
     "using", "alias", "export", "extern", "enum", "struct", "union",
-    "switch", "case", "default", "in", "packed", "aligned", "comptime",
+    "switch", "case", "default", "in", "each", "packed", "aligned", "comptime",
     "defer", "tagged", "true", "false", "unreachable", "panic"
 };
 
