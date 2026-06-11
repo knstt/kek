@@ -256,6 +256,7 @@ enum KekStmtKind {
     KEK_STMT_CONTINUE,
     KEK_STMT_UNREACHABLE,
     KEK_STMT_PANIC,
+    KEK_STMT_DEFER,
     KEK_STMT_UNKNOWN,
 
     KEK_STMT_COUNT
@@ -353,6 +354,7 @@ struct KekExpr {
     struct KekExpr* right;
     struct KekExpr* callee;
     struct KekType* type;
+    struct KekType* resolvedType;     // Computed type of this expression
     struct AstNode* genericArgs;
     struct KekExpr* firstArg;
     struct KekExpr* lastArg;
@@ -480,6 +482,7 @@ struct KekSymbol {
     struct KekParam* param;
     struct KekStmt* stmt;
     struct AstNode* name;
+    struct KekType* type;             // Type of this symbol (for variables, params)
     struct KekScope* scope;
     struct KekSymbol* nextInScope;
 };

@@ -31,6 +31,7 @@ const char* KekStmtKindNames[] = {
     "Continue",
     "Unreachable",
     "Panic",
+    "Defer",
     "Unknown",
 };
 
@@ -835,6 +836,9 @@ static enum KekStmtKind ClassifyStatementKind(struct AstNode* first) {
     }
     if (IsKeywordNode(first, KEYWORD_PANIC)) {
         return KEK_STMT_PANIC;
+    }
+    if (IsKeywordNode(first, KEYWORD_DEFER)) {
+        return KEK_STMT_DEFER;
     }
     if (LooksLikeDecl(first)) {
         return KEK_STMT_DECL;
