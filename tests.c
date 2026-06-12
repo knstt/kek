@@ -58,6 +58,35 @@ static int HasDiagnostic(struct KekDiagnosticBag* bag, enum KekDiagnosticPhase p
     return 0;
 }
 
+static int FileContains(const char* path, const char* text) {
+    FILE* file = fopen(path, "rb");
+    if (!file) {
+        return 0;
+    }
+    if (fseek(file, 0, SEEK_END) != 0) {
+        fclose(file);
+        return 0;
+    }
+    long length = ftell(file);
+    if (length < 0) {
+        fclose(file);
+        return 0;
+    }
+    rewind(file);
+
+    char* buffer = malloc((size_t)length + 1);
+    if (!buffer) {
+        fclose(file);
+        return 0;
+    }
+    size_t read = fread(buffer, 1, (size_t)length, file);
+    fclose(file);
+    buffer[read] = '\0';
+    int contains = strstr(buffer, text) != NULL;
+    free(buffer);
+    return contains;
+}
+
 static int TestCompilationApiRegression(void) {
     struct KekDiagnostic diagnostics[256];
     struct KekCompilation compilation;
@@ -78,6 +107,51 @@ static int TestCompilationApiRegression(void) {
     }
     if (!FilesEqual("out/module.txt", "out/api_module.txt")) {
         return Fail("compilation API generated different module summary");
+    }
+    return 0;
+}
+
+static int TestDeferExternStructAndAddressOf(void) {
+    const char* source =
+        "extern \"C\" {\n"
+        "struct CPoint { int x; int y; };\n"
+        "void touch(struct CPoint* point) { point->x += 1; }\n"
+        "}\n"
+        "i64:main(){\n"
+        "CPoint:point = { x = 1, y = 2 };\n"
+        "ptr:pointer = &point;\n"
+        "assert(pointer != 0);\n"
+        "::touch(&point);\n"
+        "int:value = 0;\n"
+        "if (true) { defer value += 1; defer { value += 2; } assert(value == 0); }\n"
+        "assert(value == 3);\n"
+        "assert(point.x == 2);\n"
+        "return(0);\n"
+        "}\n";
+
+    if (WriteTextFile("out/features.kek", source) != 0) {
+        return Fail("could not write feature fixture");
+    }
+
+    struct KekDiagnostic diagnostics[128];
+    struct KekCompilation compilation;
+    InitKekCompilation(&compilation, diagnostics, sizeof(diagnostics) / sizeof(diagnostics[0]));
+    int result = CompileKekSmoke("out/features.kek", "out/features.c", "out/features.json", "out/features.txt", &compilation);
+    if (result != 0) {
+        PrintKekDiagnostics(stderr, &compilation.diagnostics, &compilation.fileTable);
+        FreeKekCompilation(&compilation);
+        return Fail("feature fixture did not compile");
+    }
+    FreeKekCompilation(&compilation);
+
+    if (!FileContains("out/features.c", "struct CPoint point=")) {
+        return Fail("extern C struct type was not emitted as a C struct");
+    }
+    if (!FileContains("out/features.c", "ptr pointer=&point;")) {
+        return Fail("address-of instance did not emit native pointer expression");
+    }
+    if (!FileContains("out/features.c", "value+=2;") || !FileContains("out/features.c", "value+=1;")) {
+        return Fail("defer statements were not emitted");
     }
     return 0;
 }
@@ -211,6 +285,9 @@ int main(void) {
         return 1;
     }
     if (TestToolingLexComments() != 0) {
+        return 1;
+    }
+    if (TestDeferExternStructAndAddressOf() != 0) {
         return 1;
     }
     if (TestDiagnostics() != 0) {

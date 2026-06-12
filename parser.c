@@ -25,6 +25,7 @@ const char* KekStmtKindNames[] = {
     "Switch",
     "Case",
     "Default",
+    "Defer",
     "Return",
     "Break",
     "Continue",
@@ -703,6 +704,9 @@ static enum KekStmtKind ClassifyStatementKind(struct AstNode* first) {
     if (IsKeywordNode(first, KEYWORD_DEFAULT)) {
         return KEK_STMT_DEFAULT;
     }
+    if (IsKeywordNode(first, KEYWORD_DEFER)) {
+        return KEK_STMT_DEFER;
+    }
     if (IsKeywordNode(first, KEYWORD_RETURN)) {
         return KEK_STMT_RETURN;
     }
@@ -770,6 +774,11 @@ static struct KekStmt* ParseStatement(struct KekFrontend* frontend, struct KekMo
         struct AstNode* colon = Next(first);
         if (IsPunctuationNode(colon, PUNCTUATION_COLON) && Next(colon)) {
             stmt->expr = ParseExprUntil(frontend, module, Next(colon), NULL);
+        }
+    } else if (kind == KEK_STMT_DEFER) {
+        struct AstNode* deferred = Next(first);
+        if (deferred && deferred->type != AST_BLOCK) {
+            stmt->expr = ParseExprUntil(frontend, module, deferred, NULL);
         }
     } else if (kind == KEK_STMT_EXPR) {
         stmt->expr = ParseExprUntil(frontend, module, first, NULL);

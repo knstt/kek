@@ -45,6 +45,8 @@ struct CWriter {
     struct AstNode* genericArgs;
     struct SourceFile* genericArgFile;
     char namespacePrefix[64];
+    struct KekStmt* deferred[128];
+    size_t deferCount;
 };
 
 static int IsWordToken(struct Token* token) {
@@ -250,6 +252,61 @@ static struct CStructInfo* AddStructInfo(struct CWriter* writer, const char* nam
     memset(info, 0, sizeof(*info));
     snprintf(info->name, sizeof(info->name), "%s", name);
     return info;
+}
+
+static int IsCIdentifierStart(char c) {
+    return isalpha((unsigned char)c) || c == '_';
+}
+
+static int IsCIdentifierPart(char c) {
+    return isalnum((unsigned char)c) || c == '_';
+}
+
+static void RegisterExternCStructs(struct CWriter* writer, struct KekDecl* decl) {
+    if (!writer || !decl || !decl->body || !writer->file || decl->body->location.length < 2) {
+        return;
+    }
+
+    size_t start = decl->body->location.offset + 1;
+    size_t end = decl->body->location.offset + decl->body->location.length - 1;
+    const char* content = writer->file->content;
+    const char keyword[] = "struct";
+    const size_t keywordLength = sizeof(keyword) - 1;
+
+    for (size_t i = start; i + keywordLength < end; i++) {
+        if (strncmp(content + i, keyword, keywordLength) != 0) {
+            continue;
+        }
+        if (i > start && IsCIdentifierPart(content[i - 1])) {
+            continue;
+        }
+        if (i + keywordLength < end && IsCIdentifierPart(content[i + keywordLength])) {
+            continue;
+        }
+
+        size_t nameStart = i + keywordLength;
+        while (nameStart < end && isspace((unsigned char)content[nameStart])) {
+            nameStart++;
+        }
+        if (nameStart >= end || !IsCIdentifierStart(content[nameStart])) {
+            continue;
+        }
+
+        size_t nameEnd = nameStart + 1;
+        while (nameEnd < end && IsCIdentifierPart(content[nameEnd])) {
+            nameEnd++;
+        }
+
+        char name[64];
+        size_t length = nameEnd - nameStart;
+        if (length >= sizeof(name)) {
+            length = sizeof(name) - 1;
+        }
+        memcpy(name, content + nameStart, length);
+        name[length] = '\0';
+        (void)AddStructInfo(writer, name);
+        i = nameEnd;
+    }
 }
 
 static void AddLocalType(struct CWriter* writer, const char* name, const char* type) {
@@ -2082,6 +2139,9 @@ static const char* ExprOperatorMangle(struct KekExpr* expr) {
 static int TryWriteTypedUnaryOperatorCall(struct CWriter* writer, struct KekExpr* expr) {
     const char* operandType = TypedExprLocalType(writer, expr ? expr->right : NULL);
     const char* opName = ExprOperatorMangle(expr);
+    if (expr && expr->token && IsOperatorToken(&expr->token->token, OPERATOR_BITWISE_AND)) {
+        return 0;
+    }
     if (!operandType || !opName || !IsKnownStruct(writer, operandType)) {
         return 0;
     }
@@ -2208,15 +2268,59 @@ static void WriteTypedExpr(struct CWriter* writer, struct KekExpr* expr) {
 }
 
 static void WriteTypedStatement(struct CWriter* writer, struct KekStmt* stmt);
+static void WriteTypedBlock(struct CWriter* writer, struct KekStmt* block);
+static struct KekStmt* FirstTypedBlockChild(struct KekStmt* stmt);
+
+static void WriteDeferredStatement(struct CWriter* writer, struct KekStmt* stmt) {
+    if (!stmt || stmt->kind != KEK_STMT_DEFER) {
+        return;
+    }
+
+    struct KekStmt* block = FirstTypedBlockChild(stmt);
+    if (block) {
+        WriteTypedBlock(writer, block);
+        return;
+    }
+
+    WriteTypedExpr(writer, stmt->expr);
+    fputc(';', writer->out);
+}
+
+static void WriteDeferredRange(struct CWriter* writer, size_t start, size_t end) {
+    while (end > start) {
+        end--;
+        WriteIndent(writer->out, writer->indent);
+        WriteDeferredStatement(writer, writer->deferred[end]);
+        fputc('\n', writer->out);
+    }
+}
+
+static void WriteAllActiveDefers(struct CWriter* writer) {
+    WriteDeferredRange(writer, 0, writer->deferCount);
+}
 
 static void WriteTypedBlock(struct CWriter* writer, struct KekStmt* block) {
     fputs("{\n", writer->out);
     writer->indent++;
+    size_t blockDeferStart = writer->deferCount;
     for (struct KekStmt* child = block ? block->firstChild : NULL; child; child = child->next) {
+        if (child->kind == KEK_STMT_DEFER) {
+            if (writer->deferCount < sizeof(writer->deferred) / sizeof(writer->deferred[0])) {
+                writer->deferred[writer->deferCount++] = child;
+            }
+            continue;
+        }
+        if (child->kind == KEK_STMT_RETURN) {
+            WriteAllActiveDefers(writer);
+        } else if (child->kind == KEK_STMT_BREAK || child->kind == KEK_STMT_CONTINUE) {
+            WriteDeferredRange(writer, blockDeferStart, writer->deferCount);
+        }
         WriteIndent(writer->out, writer->indent);
         WriteTypedStatement(writer, child);
         fputc('\n', writer->out);
     }
+    WriteDeferredRange(writer, blockDeferStart, writer->deferCount);
+    writer->deferCount = blockDeferStart;
     if (writer->indent > 0) {
         writer->indent--;
     }
@@ -2344,6 +2448,9 @@ static void WriteTypedStatement(struct CWriter* writer, struct KekStmt* stmt) {
                 fputc(';', writer->out);
             }
             break;
+        case KEK_STMT_DEFER:
+            WriteDeferredStatement(writer, stmt);
+            break;
         case KEK_STMT_RETURN:
             fputs("return", writer->out);
             if (stmt->expr) {
@@ -2443,6 +2550,8 @@ static void RegisterTypedDeclForCodegen(struct CWriter* writer, struct KekDecl* 
     }
     if (decl->kind == KEK_DECL_STRUCT) {
         RegisterTypedStruct(writer, decl);
+    } else if (decl->kind == KEK_DECL_EXTERN_C) {
+        RegisterExternCStructs(writer, decl);
     } else if (decl->kind == KEK_DECL_FUNCTION) {
         char functionName[128];
         TypedFunctionName(writer, decl, functionName, sizeof(functionName));

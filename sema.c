@@ -347,6 +347,11 @@ static void BuildStmtSymbols(struct KekProgram* program, struct KekScope* scope,
             scope->file ? scope->file->fileIndex : -1, stmt->location, "continue outside loop");
         program->errorCount++;
     }
+    if (stmt->kind == KEK_STMT_DEFER && !inFunction) {
+        KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
+            scope->file ? scope->file->fileIndex : -1, stmt->location, "defer outside function");
+        program->errorCount++;
+    }
 
     CheckExprSemantics(program, scope, stmt->expr, 0);
     CheckExprSemantics(program, scope, stmt->condition, 0);

@@ -10,6 +10,11 @@ typedef FILE KekFile;
 typedef size_t KekSize;
 typedef int KekStatus;
 
+struct CPoint {
+    int x;
+    int y;
+};
+
 void* kek_alloc(KekSize size) { return malloc(size); }
 void kek_free(void* memory) { free(memory); }
 KekFile* kek_file_open(const char* path, const char* mode) { return fopen(path, mode); }
@@ -113,6 +118,8 @@ i64: main() {
     assert(genericPair.second == 300);
 
     Vec2:vecA = { x = 2, y = 3 };
+    ptr:vecPtr = &vecA;
+    assert(vecPtr != 0);
     Vec2:vecB = { y = 7, x = 5 }; // Test that field order doesn't matter
     Vec2:vecExpected;
     vecExpected.x = 7;
@@ -162,6 +169,9 @@ i64: main() {
     value.kind = kind;
     assert(value.kind == 7);
 
+    CPoint:cPoint = { x = 9, y = 4 };
+    assert(cPoint.x == 9);
+
     u8:branchValue = 0;
     if (kind == 7) {
         branchValue = 1;
@@ -195,6 +205,16 @@ i64: main() {
 
     u8:castValue = cast<u8>(whileValue + 6);
     assert(castValue == 7);
+
+    int:deferValue = 0;
+    if (true) {
+        defer deferValue += 5;
+        defer {
+            deferValue += 10;
+        }
+        assert(deferValue == 0);
+    }
+    assert(deferValue == 15);
 
     u8:bytes[4] = {1, 2, 3, 4};
     assert(bytes[2] == 3);
