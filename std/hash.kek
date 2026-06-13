@@ -1,0 +1,3 @@
+// HashMap and HashSet need function-pointer aliases or policy structs with
+// callable fields. The design is documented in docs/stdlib-design.md; the
+// bootstrap compiler does not support those function pointer aliases yet.

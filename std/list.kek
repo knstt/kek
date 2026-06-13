@@ -1,0 +1,115 @@
+struct:ListNode<T> {
+	T:value;
+	ptr<ListNode<T>>:next;
+	ptr<ListNode<T>>:prev;
+};
+
+struct:LinkedList<T> {
+	ptr<ListNode<T>>:first;
+	ptr<ListNode<T>>:last;
+	usize:len;
+	Allocator:allocator;
+};
+
+LinkedList<T>:LinkedListNew<T>(Allocator:allocator) {
+	LinkedList<T>:list;
+	list.first = 0;
+	list.last = 0;
+	list.len = 0;
+	list.allocator = allocator;
+	return(list);
+}
+
+Status:LinkedListDestroy<T>(ptr<LinkedList<T>>:list) {
+	while (list.len > 0) {
+		Result<T>:ignored = std::LinkedListPopBack<T>(list);
+		if (ignored.status != Status::Ok) {
+			return(ignored.status);
+		}
+	}
+	return(Status::Ok);
+}
+
+Status:LinkedListPushBack<T>(ptr<LinkedList<T>>:list, T:value) {
+	ptr<ListNode<T>>:node = std::Alloc<ListNode<T>>(list.allocator, 1);
+	if (node == 0) {
+		return(Status::NoMemory);
+	}
+	node.value = value;
+	node.next = 0;
+	node.prev = list.last;
+
+	if (list.last != 0) {
+		ptr<ListNode<T>>:last = list.last;
+		last.next = node;
+	} else {
+		list.first = node;
+	}
+	list.last = node;
+	list.len += 1;
+	return(Status::Ok);
+}
+
+Status:LinkedListPushFront<T>(ptr<LinkedList<T>>:list, T:value) {
+	ptr<ListNode<T>>:node = std::Alloc<ListNode<T>>(list.allocator, 1);
+	if (node == 0) {
+		return(Status::NoMemory);
+	}
+	node.value = value;
+	node.prev = 0;
+	node.next = list.first;
+
+	if (list.first != 0) {
+		ptr<ListNode<T>>:first = list.first;
+		first.prev = node;
+	} else {
+		list.last = node;
+	}
+	list.first = node;
+	list.len += 1;
+	return(Status::Ok);
+}
+
+Result<T>:LinkedListPopBack<T>(ptr<LinkedList<T>>:list) {
+	Result<T>:result;
+	if (list.last == 0) {
+		result.status = Status::End;
+		return(result);
+	}
+
+	ptr<ListNode<T>>:node = list.last;
+	result.value = node.value;
+	list.last = node.prev;
+	if (list.last != 0) {
+		ptr<ListNode<T>>:last = list.last;
+		last.next = 0;
+	} else {
+		list.first = 0;
+	}
+	list.len -= 1;
+	std::Free<ListNode<T>>(list.allocator, node, 1);
+	result.status = Status::Ok;
+	return(result);
+}
+
+Result<T>:LinkedListPopFront<T>(ptr<LinkedList<T>>:list) {
+	Result<T>:result;
+	if (list.first == 0) {
+		result.status = Status::End;
+		return(result);
+	}
+
+	ptr<ListNode<T>>:node = list.first;
+	result.value = node.value;
+	list.first = node.next;
+	if (list.first != 0) {
+		ptr<ListNode<T>>:first = list.first;
+		first.prev = 0;
+	} else {
+		list.last = 0;
+	}
+	list.len -= 1;
+	std::Free<ListNode<T>>(list.allocator, node, 1);
+	result.status = Status::Ok;
+	return(result);
+}

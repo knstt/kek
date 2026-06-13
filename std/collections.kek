@@ -1,0 +1,3 @@
+// Re-export placeholder for the bootstrap package layout.
+// Importing std/ loads all std modules today; this file marks the intended
+// collections aggregation point for Array and future map/set containers.

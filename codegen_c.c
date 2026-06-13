@@ -39,6 +39,7 @@ struct CWriter {
     size_t genericFunctionCount;
     char localNames[128][64];
     char localTypes[128][64];
+    int localIsPointer[128];
     size_t localCount;
     int thisIsPointer;
     struct AstNode* genericParams;
@@ -309,10 +310,11 @@ static void RegisterExternCStructs(struct CWriter* writer, struct KekDecl* decl)
     }
 }
 
-static void AddLocalType(struct CWriter* writer, const char* name, const char* type) {
+static void AddLocalTypeEx(struct CWriter* writer, const char* name, const char* type, int isPointer) {
     for (size_t i = 0; i < writer->localCount; i++) {
         if (strcmp(writer->localNames[i], name) == 0) {
             snprintf(writer->localTypes[i], sizeof(writer->localTypes[i]), "%s", type);
+            writer->localIsPointer[i] = isPointer;
             return;
         }
     }
@@ -323,7 +325,12 @@ static void AddLocalType(struct CWriter* writer, const char* name, const char* t
 
     snprintf(writer->localNames[writer->localCount], sizeof(writer->localNames[0]), "%s", name);
     snprintf(writer->localTypes[writer->localCount], sizeof(writer->localTypes[0]), "%s", type);
+    writer->localIsPointer[writer->localCount] = isPointer;
     writer->localCount++;
+}
+
+static void AddLocalType(struct CWriter* writer, const char* name, const char* type) {
+    AddLocalTypeEx(writer, name, type, 0);
 }
 
 static const char* FindLocalType(struct CWriter* writer, const char* name) {
@@ -333,6 +340,15 @@ static const char* FindLocalType(struct CWriter* writer, const char* name) {
         }
     }
     return NULL;
+}
+
+static int FindLocalIsPointer(struct CWriter* writer, const char* name) {
+    for (size_t i = writer->localCount; i > 0; i--) {
+        if (strcmp(writer->localNames[i - 1], name) == 0) {
+            return writer->localIsPointer[i - 1];
+        }
+    }
+    return 0;
 }
 
 static int IsMainReturnType(struct AstNode* node, struct SourceFile* file) {
@@ -1691,6 +1707,30 @@ static void GenericArgText(struct CWriter* writer, struct AstNode* arg, char* bu
     GenericArgTextFromFile(writer->genericArgFile ? writer->genericArgFile : writer->file, arg, buffer, bufferSize);
 }
 
+static void GenericArgMangleText(struct CWriter* writer, struct SourceFile* argsFile, struct AstNode* arg, char* buffer, size_t bufferSize) {
+    struct AstNode* substitution = arg && IsTokenNode(arg)
+        ? FindGenericSubstitution(writer, writer->genericParams, writer->genericArgs, arg)
+        : NULL;
+    if (substitution) {
+        GenericArgText(writer, substitution, buffer, bufferSize);
+        return;
+    }
+    if (arg && IsTokenNode(arg) && IsGenericNode(arg->nextSibling)) {
+        char part[128];
+        struct SourceFile* previousFile = writer->file;
+        writer->file = argsFile ? argsFile : writer->file;
+        CopyTypedNodeText(writer, arg, buffer, bufferSize);
+        writer->file = previousFile;
+        for (struct AstNode* child = arg->nextSibling->firstChild; child; child = child->nextSibling) {
+            AppendSanitized(buffer, bufferSize, "__");
+            GenericArgMangleText(writer, argsFile, child->firstChild, part, sizeof(part));
+            AppendSanitized(buffer, bufferSize, part);
+        }
+        return;
+    }
+    GenericArgTextFromFile(argsFile ? argsFile : writer->file, arg, buffer, bufferSize);
+}
+
 static void MangleGenericNameWithFiles(struct CWriter* writer, struct SourceFile* baseFile, struct AstNode* baseName, struct SourceFile* argsFile, struct AstNode* args, char* buffer, size_t bufferSize) {
     char part[128];
     struct SourceFile* previousFile = writer->file;
@@ -1701,16 +1741,16 @@ static void MangleGenericNameWithFiles(struct CWriter* writer, struct SourceFile
     AppendSanitized(buffer, bufferSize, part);
     for (struct AstNode* arg = IsGenericNode(args) ? args->firstChild : NULL; arg; arg = arg->nextSibling) {
         AppendSanitized(buffer, bufferSize, "__");
-        GenericArgTextFromFile(argsFile ? argsFile : previousFile, arg->firstChild, part, sizeof(part));
+        GenericArgMangleText(writer, argsFile ? argsFile : previousFile, arg->firstChild, part, sizeof(part));
         AppendSanitized(buffer, bufferSize, part);
     }
 }
 
-static void AppendGenericArgsToName(struct SourceFile* argsFile, struct AstNode* args, char* buffer, size_t bufferSize) {
+static void AppendGenericArgsToNameWithWriter(struct CWriter* writer, struct SourceFile* argsFile, struct AstNode* args, char* buffer, size_t bufferSize) {
     char part[128];
     for (struct AstNode* arg = IsGenericNode(args) ? args->firstChild : NULL; arg; arg = arg->nextSibling) {
         AppendSanitized(buffer, bufferSize, "__");
-        GenericArgTextFromFile(argsFile, arg->firstChild, part, sizeof(part));
+        GenericArgMangleText(writer, argsFile, arg->firstChild, part, sizeof(part));
         AppendSanitized(buffer, bufferSize, part);
     }
 }
@@ -1744,6 +1784,28 @@ static void CopyExprSource(struct CWriter* writer, struct KekExpr* expr, char* b
     }
     memcpy(buffer, writer->file->content + expr->source->location.offset, length);
     buffer[length] = '\0';
+}
+
+static void CopyTypedFieldDefault(struct CWriter* writer, struct KekField* field, char* buffer, size_t bufferSize) {
+    if (field && field->defaultValue) {
+        CopyExprSource(writer, field->defaultValue, buffer, bufferSize);
+        return;
+    }
+
+    struct KekType* base = field ? field->type : NULL;
+    while (base && base->kind == KEK_TYPE_ARRAY) {
+        base = base->element;
+    }
+    char typeName[128];
+    if (base && base->name) {
+        CopyTypedNodeText(writer, base->name, typeName, sizeof(typeName));
+        if (IsKnownStruct(writer, typeName)) {
+            snprintf(buffer, bufferSize, "{0}");
+            return;
+        }
+    }
+
+    snprintf(buffer, bufferSize, "0");
 }
 
 static void WriteTypedExpr(struct CWriter* writer, struct KekExpr* expr);
@@ -1815,11 +1877,7 @@ static void AddGenericStructInstance(struct CWriter* writer, struct KekDecl* dec
         writer->file = declFile ? declFile : previousFile;
         for (struct KekField* field = decl->firstField; field && info->fieldCount < 64; field = field->next) {
             CopyTypedNodeText(writer, field->name, info->fieldNames[info->fieldCount], sizeof(info->fieldNames[info->fieldCount]));
-            if (field->defaultValue) {
-                CopyExprSource(writer, field->defaultValue, info->defaults[info->fieldCount], sizeof(info->defaults[info->fieldCount]));
-            } else {
-                snprintf(info->defaults[info->fieldCount], sizeof(info->defaults[info->fieldCount]), "0");
-            }
+            CopyTypedFieldDefault(writer, field, info->defaults[info->fieldCount], sizeof(info->defaults[info->fieldCount]));
             info->fieldCount++;
         }
         writer->file = previousFile;
@@ -1877,8 +1935,12 @@ static void WriteTypedNonArrayTypeWithGenericContext(struct CWriter* writer, str
     char buffer[128];
     struct AstNode* substitution = FindGenericSubstitution(writer, params, args, type->name);
     if (substitution) {
-        GenericArgText(writer, substitution, buffer, sizeof(buffer));
-        fputs(buffer, writer->out);
+        GenericArgMangleText(writer, writer->genericArgFile ? writer->genericArgFile : writer->file, substitution, buffer, sizeof(buffer));
+        if (IsKnownStruct(writer, buffer)) {
+            fprintf(writer->out, "struct %s", buffer);
+        } else {
+            fputs(buffer, writer->out);
+        }
         return;
     }
     if (GenericStructInstanceName(writer, type, buffer, sizeof(buffer))) {
@@ -1942,19 +2004,27 @@ static void WriteTypedExprList(struct CWriter* writer, struct KekExpr* firstArg)
     }
 }
 
+static int ExprCalleeNameEquals(struct CWriter* writer, struct KekExpr* expr, const char* name) {
+    return expr && expr->kind == KEK_EXPR_NAME && expr->token && TypedTokenTextEquals(writer, expr->token, name);
+}
+
 static int TypedCalleeName(struct CWriter* writer, struct KekExpr* expr, char* buffer, size_t bufferSize) {
     if (!expr || bufferSize == 0) {
         return 0;
     }
     buffer[0] = '\0';
     if (expr->kind == KEK_EXPR_NAME && expr->token) {
-        CopyTypedNodeText(writer, expr->token, buffer, bufferSize);
+        char name[128];
+        CopyTypedNodeText(writer, expr->token, name, sizeof(name));
+        snprintf(buffer, bufferSize, "%s%s", writer->namespacePrefix, name);
         return 1;
     }
     if (expr->kind == KEK_EXPR_SCOPE) {
         char left[128] = {0};
         char right[128] = {0};
-        if (expr->left) {
+        if (expr->left && expr->left->kind == KEK_EXPR_NAME && expr->left->token) {
+            CopyTypedNodeText(writer, expr->left->token, left, sizeof(left));
+        } else if (expr->left) {
             (void)TypedCalleeName(writer, expr->left, left, sizeof(left));
         }
         if (expr->right && expr->right->token) {
@@ -2034,6 +2104,37 @@ static void WriteTypedKnownCallArgs(struct CWriter* writer, struct KekExpr* call
 }
 
 static void WriteTypedCall(struct CWriter* writer, struct KekExpr* expr) {
+    if (ExprCalleeNameEquals(writer, expr->callee, "sizeof") && expr->firstArg) {
+        fputs("sizeof(", writer->out);
+        if (expr->firstArg->kind == KEK_EXPR_NAME && expr->firstArg->token) {
+            struct AstNode* substitution = FindGenericSubstitution(writer, writer->genericParams, writer->genericArgs, expr->firstArg->token);
+            char typeName[128];
+            if (substitution) {
+                GenericArgMangleText(writer, writer->genericArgFile ? writer->genericArgFile : writer->file, substitution, typeName, sizeof(typeName));
+            } else {
+                CopyTypedNodeText(writer, expr->firstArg->token, typeName, sizeof(typeName));
+            }
+            if (IsKnownStruct(writer, typeName)) {
+                fprintf(writer->out, "struct %s", typeName);
+            } else {
+                fputs(typeName, writer->out);
+            }
+        } else {
+            WriteTypedExpr(writer, expr->firstArg);
+        }
+        fputc(')', writer->out);
+        return;
+    }
+
+    if (ExprCalleeNameEquals(writer, expr->callee, "len") && expr->firstArg) {
+        fputs("(sizeof(", writer->out);
+        WriteTypedExpr(writer, expr->firstArg);
+        fputs(")/sizeof((", writer->out);
+        WriteTypedExpr(writer, expr->firstArg);
+        fputs(")[0]))", writer->out);
+        return;
+    }
+
     if (expr->callee && expr->callee->kind == KEK_EXPR_FIELD && expr->callee->right && expr->callee->right->token) {
         char objectName[64] = {0};
         char methodName[64] = {0};
@@ -2067,9 +2168,11 @@ static void WriteTypedCall(struct CWriter* writer, struct KekExpr* expr) {
     struct CFunctionInfo* function = NULL;
     if (expr->callee && expr->callee->genericArgs && (expr->callee->kind == KEK_EXPR_NAME || expr->callee->kind == KEK_EXPR_SCOPE)) {
         if (expr->callee->kind == KEK_EXPR_NAME) {
-            MangleGenericName(writer, expr->callee->token, expr->callee->genericArgs, calleeName, sizeof(calleeName));
+            char baseName[128];
+            MangleGenericName(writer, expr->callee->token, expr->callee->genericArgs, baseName, sizeof(baseName));
+            snprintf(calleeName, sizeof(calleeName), "%s%s", writer->namespacePrefix, baseName);
         } else if (TypedCalleeName(writer, expr->callee, calleeName, sizeof(calleeName))) {
-            AppendGenericArgsToName(writer->file, expr->callee->genericArgs, calleeName, sizeof(calleeName));
+            AppendGenericArgsToNameWithWriter(writer, writer->file, expr->callee->genericArgs, calleeName, sizeof(calleeName));
         }
         function = FindFunctionInfo(writer, calleeName);
         fputs(calleeName, writer->out);
@@ -2229,7 +2332,14 @@ static void WriteTypedExpr(struct CWriter* writer, struct KekExpr* expr) {
             break;
         case KEK_EXPR_FIELD:
             WriteTypedExpr(writer, expr->left);
-            fputs(writer->thisIsPointer && expr->left && expr->left->kind == KEK_EXPR_NAME && expr->left->token && TokenTextEquals(&expr->left->token->token, writer->file, "this") ? "->" : ".", writer->out);
+            if (expr->left && expr->left->kind == KEK_EXPR_NAME && expr->left->token) {
+                char localName[64];
+                CopyTypedNodeText(writer, expr->left->token, localName, sizeof(localName));
+                fputs((writer->thisIsPointer && TokenTextEquals(&expr->left->token->token, writer->file, "this"))
+                    || FindLocalIsPointer(writer, localName) ? "->" : ".", writer->out);
+            } else {
+                fputc('.', writer->out);
+            }
             WriteTypedExpr(writer, expr->right);
             break;
         case KEK_EXPR_SCOPE:
@@ -2367,7 +2477,7 @@ static void WriteTypedDeclStatement(struct CWriter* writer, struct KekStmt* stmt
     if (base && base->name) {
         char typeBuffer[128];
         CopyTypedNodeText(writer, base->name, typeBuffer, sizeof(typeBuffer));
-        AddLocalType(writer, nameBuffer, typeBuffer);
+        AddLocalTypeEx(writer, nameBuffer, typeBuffer, stmt->declType && stmt->declType->kind == KEK_TYPE_POINTER);
         if (!stmt->expr && IsKnownStruct(writer, typeBuffer)) {
             struct CStructInfo* info = FindStructInfo(writer, typeBuffer);
             if (info && info->fieldCount > 0) {
@@ -2505,11 +2615,7 @@ static void RegisterTypedStruct(struct CWriter* writer, struct KekDecl* decl) {
     }
     for (struct KekField* field = decl->firstField; field && info->fieldCount < 64; field = field->next) {
         CopyTypedNodeText(writer, field->name, info->fieldNames[info->fieldCount], sizeof(info->fieldNames[info->fieldCount]));
-        if (field->defaultValue) {
-            CopyExprSource(writer, field->defaultValue, info->defaults[info->fieldCount], sizeof(info->defaults[info->fieldCount]));
-        } else {
-            snprintf(info->defaults[info->fieldCount], sizeof(info->defaults[info->fieldCount]), "0");
-        }
+        CopyTypedFieldDefault(writer, field, info->defaults[info->fieldCount], sizeof(info->defaults[info->fieldCount]));
         info->fieldCount++;
     }
 }
@@ -2636,6 +2742,9 @@ static void WriteTypedGenericFunctionInstance(struct CWriter* writer, struct CGe
     struct AstNode* previousArgs = writer->genericArgs;
     struct SourceFile* previousArgFile = writer->genericArgFile;
     writer->file = instance->declFile ? instance->declFile : writer->file;
+    if (writer->file) {
+        PackagePrefixFromPath(writer->file->path, writer->namespacePrefix, sizeof(writer->namespacePrefix));
+    }
     writer->genericParams = decl->genericParams;
     writer->genericArgs = instance->args;
     writer->genericArgFile = instance->argsFile ? instance->argsFile : writer->file;
@@ -2644,7 +2753,20 @@ static void WriteTypedGenericFunctionInstance(struct CWriter* writer, struct CGe
     fprintf(writer->out, " %s(", instance->name);
     WriteTypedParams(writer, decl);
     fputs(") ", writer->out);
+    size_t previousLocalCount = writer->localCount;
+    for (struct KekParam* param = decl->firstParam; param; param = param->next) {
+        char paramName[64];
+        char typeName[64];
+        struct KekType* base = param->type;
+        while (base && (base->kind == KEK_TYPE_ARRAY || base->kind == KEK_TYPE_POINTER)) {
+            base = base->element;
+        }
+        CopyTypedNodeText(writer, param->name, paramName, sizeof(paramName));
+        CopyTypedNodeText(writer, base ? base->name : NULL, typeName, sizeof(typeName));
+        AddLocalTypeEx(writer, paramName, typeName, param->type && param->type->kind == KEK_TYPE_POINTER);
+    }
     WriteTypedBlock(writer, decl->firstStmt);
+    writer->localCount = previousLocalCount;
 
     writer->file = previousFile;
     writer->genericParams = previousParams;
@@ -2756,9 +2878,22 @@ static void WriteTypedDecl(struct CWriter* writer, struct KekDecl* decl) {
             }
             fputs(") ", writer->out);
             int previousThisIsPointer = writer->thisIsPointer;
+            size_t previousLocalCount = writer->localCount;
+            for (struct KekParam* param = decl->firstParam; param; param = param->next) {
+                char paramName[64];
+                char typeName[64];
+                struct KekType* base = param->type;
+                while (base && (base->kind == KEK_TYPE_ARRAY || base->kind == KEK_TYPE_POINTER)) {
+                    base = base->element;
+                }
+                CopyTypedNodeText(writer, param->name, paramName, sizeof(paramName));
+                CopyTypedNodeText(writer, base ? base->name : NULL, typeName, sizeof(typeName));
+                AddLocalTypeEx(writer, paramName, typeName, param->type && param->type->kind == KEK_TYPE_POINTER);
+            }
             writer->thisIsPointer = TypedDeclIsMethod(decl);
             WriteTypedBlock(writer, decl->firstStmt);
             writer->thisIsPointer = previousThisIsPointer;
+            writer->localCount = previousLocalCount;
             break;
         }
         case KEK_DECL_VARIABLE:
@@ -2829,6 +2964,9 @@ static void CollectGenericStmtUses(struct CWriter* writer, struct KekModule* mod
 }
 
 static void CollectGenericDeclUses(struct CWriter* writer, struct KekModule* modules, size_t count, struct KekDecl* decl) {
+    if (decl->genericParams) {
+        return;
+    }
     CollectGenericTypeUse(writer, modules, count, decl->parsedType);
     for (struct KekParam* param = decl->firstParam; param; param = param->next) {
         CollectGenericTypeUse(writer, modules, count, param->type);
@@ -2839,6 +2977,15 @@ static void CollectGenericDeclUses(struct CWriter* writer, struct KekModule* mod
         CollectGenericExprUses(writer, modules, count, field->defaultValue);
     }
     CollectGenericStmtUses(writer, modules, count, decl->firstStmt);
+}
+
+static int IsTypedTypeDecl(struct KekDecl* decl) {
+    return decl
+        && (decl->kind == KEK_DECL_ALIAS
+            || decl->kind == KEK_DECL_ENUM
+            || decl->kind == KEK_DECL_STRUCT
+            || decl->kind == KEK_DECL_UNION
+            || decl->kind == KEK_DECL_EXTERN_C);
 }
 
 int WriteTypedCFileForModules(const char* path, struct KekModule* modules, size_t count) {
@@ -2868,6 +3015,23 @@ int WriteTypedCFileForModules(const char* path, struct KekModule* modules, size_
         }
     }
 
+    for (size_t i = 0; i < count; i++) {
+        writer.file = modules[i].file;
+        if (modules[i].file && i + 1 < count) {
+            PackagePrefixFromPath(modules[i].file->path, writer.namespacePrefix, sizeof(writer.namespacePrefix));
+        } else {
+            writer.namespacePrefix[0] = '\0';
+        }
+
+        for (struct KekDecl* decl = modules[i].firstDecl; decl; decl = decl->next) {
+            if (IsTypedTypeDecl(decl)) {
+                WriteTypedDecl(&writer, decl);
+                fputc('\n', writer.out);
+                ResetStatementState(&writer);
+            }
+        }
+    }
+
     for (size_t i = 0; i < writer.genericFunctionCount; i++) {
         writer.file = writer.genericFunctions[i].declFile ? writer.genericFunctions[i].declFile : writer.file;
         RegisterTypedFunctionWithName(&writer, writer.genericFunctions[i].name, writer.genericFunctions[i].decl, 0);
@@ -2894,8 +3058,8 @@ int WriteTypedCFileForModules(const char* path, struct KekModule* modules, size_
         }
 
         for (struct KekDecl* decl = modules[i].firstDecl; decl; decl = decl->next) {
-            WriteTypedDecl(&writer, decl);
-            if (decl->kind != KEK_DECL_IMPORT && decl->kind != KEK_DECL_USING) {
+            if (decl->kind == KEK_DECL_FUNCTION) {
+                WriteTypedDecl(&writer, decl);
                 fputc('\n', writer.out);
                 ResetStatementState(&writer);
             }

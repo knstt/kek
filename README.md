@@ -43,6 +43,7 @@ bootstrap parser substrate.
 Examples:
 
 - `example/main.kek` current language sketch
+- `example/std.kek` standard library smoke fixture
 - `example/future.kek` ideas for later
 - `example/docs.kek` documentation comment style
 - `docs/stdlib-design.md` standard library design sketch

@@ -9,7 +9,7 @@
 #define VERSION "0.2.0"
 
 #define MAX_PATH_LENGTH 256
-#define MAX_FILES 10
+#define MAX_FILES 32
 
 struct SourceFile {
     char path[MAX_PATH_LENGTH];

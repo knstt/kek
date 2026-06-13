@@ -373,6 +373,13 @@ static void BuildFunctionSymbols(struct KekProgram* program, struct KekScope* mo
     }
     functionScope->decl = decl;
 
+    for (struct AstNode* param = decl->genericParams ? decl->genericParams->firstChild : NULL; param; param = param->nextSibling) {
+        struct AstNode* name = param->firstChild;
+        if (name) {
+            (void)AddSymbol(program, functionScope, KEK_SYMBOL_TYPE, name, decl, NULL, NULL);
+        }
+    }
+
     for (struct KekParam* param = decl->firstParam; param; param = param->next) {
         (void)AddSymbol(program, functionScope, KEK_SYMBOL_PARAM, param->name, NULL, param, NULL);
     }

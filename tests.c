@@ -178,6 +178,36 @@ static int TestDeferExternStructAndAddressOf(void) {
     return 0;
 }
 
+static int TestStdlibExample(void) {
+    struct KekDiagnostic diagnostics[256];
+    struct KekCompilation compilation;
+    InitKekCompilation(&compilation, diagnostics, sizeof(diagnostics) / sizeof(diagnostics[0]));
+    int result = CompileKekSmoke("example/std.kek", "out/std_example.c", "out/std_example.json", "out/std_example.txt", &compilation);
+    if (result != 0) {
+        PrintKekDiagnostics(stderr, &compilation.diagnostics, &compilation.fileTable);
+        FreeKekCompilation(&compilation);
+        return Fail("stdlib example did not compile");
+    }
+    FreeKekCompilation(&compilation);
+
+    if (!FileContains("out/std_example.c", "struct Slice__byte")
+        || !FileContains("out/std_example.c", "std_StringBuilderWrite")
+        || !FileContains("out/std_example.c", "std_ArrayPush__byte")
+        || !FileContains("out/std_example.c", "std_LinkedListPushBack__byte")
+        || !FileContains("out/std_example.c", "std_FormatI64ToBuilder")
+        || !FileContains("out/std_example.c", "std_FileOpenCString")) {
+        return Fail("stdlib example did not emit expected stdlib symbols");
+    }
+
+    if (system("cc -std=c11 -Wall -Wextra -o out/std_example out/std_example.c") != 0) {
+        return Fail("stdlib generated C did not compile");
+    }
+    if (system("./out/std_example") != 0) {
+        return Fail("stdlib generated binary failed");
+    }
+    return 0;
+}
+
 static int ParseChildCount(struct SourceFile* file, struct TokenArray* tokens) {
     size_t astCapacity = tokens->count * 4 + 1;
     struct AstNode* nodes = malloc(sizeof(*nodes) * astCapacity);
@@ -336,6 +366,9 @@ int main(void) {
         return 1;
     }
     if (TestDeferExternStructAndAddressOf() != 0) {
+        return 1;
+    }
+    if (TestStdlibExample() != 0) {
         return 1;
     }
     if (TestDiagnostics() != 0) {

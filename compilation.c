@@ -19,6 +19,38 @@ static int FileAlreadyLoaded(struct FileTable* table, const char* path) {
     return 0;
 }
 
+static int StdlibImportRank(const char* name) {
+    static const char* ordered[] = {
+        "core.kek",
+        "mem.kek",
+        "file.kek",
+        "io.kek",
+        "string.kek",
+        "array.kek",
+        "list.kek",
+        "hash.kek",
+        "collections.kek",
+        "format.kek",
+    };
+    for (size_t i = 0; i < sizeof(ordered) / sizeof(ordered[0]); i++) {
+        if (strcmp(name, ordered[i]) == 0) {
+            return (int)i;
+        }
+    }
+    return 1000;
+}
+
+static int CompareImportNames(const void* left, const void* right) {
+    const char* const* leftString = left;
+    const char* const* rightString = right;
+    int leftRank = StdlibImportRank(*leftString);
+    int rightRank = StdlibImportRank(*rightString);
+    if (leftRank != rightRank) {
+        return leftRank - rightRank;
+    }
+    return strcmp(*leftString, *rightString);
+}
+
 void FreeKekCompilationUnit(struct KekCompilationUnit* unit) {
     free(unit->tokens);
     free(unit->astNodes);
@@ -77,17 +109,47 @@ static int LoadImportDirectory(struct KekCompilation* compilation, const char* p
     }
 
     int result = 0;
+    char names[256][MAX_PATH_LENGTH];
+    const char* sortedNames[256];
+    size_t nameCount = 0;
     struct dirent* entry = NULL;
     while ((entry = readdir(dir)) != NULL) {
         if (entry->d_name[0] == '.' || !EndsWith(entry->d_name, ".kek")) {
             continue;
         }
 
+        if (nameCount >= sizeof(names) / sizeof(names[0])) {
+            KekAddDiagnosticFormat(&compilation->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SOURCE,
+                -1, (struct SourceLocation){0}, "too many import files in %s", path);
+            result = -1;
+            break;
+        }
+
+        int nameWritten = snprintf(names[nameCount], sizeof(names[nameCount]), "%s", entry->d_name);
+        if (nameWritten < 0 || (size_t)nameWritten >= sizeof(names[nameCount])) {
+            KekAddDiagnosticFormat(&compilation->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SOURCE,
+                -1, (struct SourceLocation){0}, "import file name is too long: %s", entry->d_name);
+            result = -1;
+            break;
+        }
+        sortedNames[nameCount] = names[nameCount];
+        nameCount++;
+    }
+    closedir(dir);
+    if (result != 0) {
+        return result;
+    }
+
+    qsort(sortedNames, nameCount, sizeof(sortedNames[0]), CompareImportNames);
+
+    for (size_t i = 0; i < nameCount; i++) {
+        const char* name = sortedNames[i];
+
         char filePath[MAX_PATH_LENGTH];
-        int written = snprintf(filePath, sizeof(filePath), "%s/%s", path, entry->d_name);
+        int written = snprintf(filePath, sizeof(filePath), "%s/%s", path, name);
         if (written < 0 || (size_t)written >= sizeof(filePath)) {
             KekAddDiagnosticFormat(&compilation->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SOURCE,
-                -1, (struct SourceLocation){0}, "import path is too long: %s/%s", path, entry->d_name);
+                -1, (struct SourceLocation){0}, "import path is too long: %s/%s", path, name);
             result = -1;
             break;
         }
@@ -98,8 +160,6 @@ static int LoadImportDirectory(struct KekCompilation* compilation, const char* p
             break;
         }
     }
-
-    closedir(dir);
     return result;
 }
 

@@ -1,0 +1,103 @@
+struct:Array<T> {
+	ptr<T>:data;
+	usize:len;
+	usize:cap;
+	Allocator:allocator;
+};
+
+Array<T>:ArrayNew<T>(Allocator:allocator) {
+	Array<T>:array;
+	array.data = 0;
+	array.len = 0;
+	array.cap = 0;
+	array.allocator = allocator;
+	return(array);
+}
+
+Status:ArrayDestroy<T>(ptr<Array<T>>:array) {
+	if (array.data != 0) {
+		Free<T>(array.allocator, array.data, array.cap);
+	}
+	array.data = 0;
+	array.len = 0;
+	array.cap = 0;
+	return(Status::Ok);
+}
+
+Status:ArrayReserve<T>(ptr<Array<T>>:array, usize:additional) {
+	usize:needed = array.len + additional;
+	if (needed <= array.cap) {
+		return(Status::Ok);
+	}
+
+	usize:newCap = array.cap;
+	if (newCap == 0) {
+		newCap = 8;
+	}
+	while (newCap < needed) {
+		newCap = newCap * 2;
+	}
+
+	ptr<T>:newData = std::Resize<T>(array.allocator, array.data, array.cap, newCap);
+	if (newData == 0) {
+		return(Status::NoMemory);
+	}
+	array.data = newData;
+	array.cap = newCap;
+	return(Status::Ok);
+}
+
+Status:ArrayPush<T>(ptr<Array<T>>:array, T:value) {
+	Status:status = std::ArrayReserve<T>(array, 1);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	array.data[array.len] = value;
+	array.len += 1;
+	return(Status::Ok);
+}
+
+Result<T>:ArrayPop<T>(ptr<Array<T>>:array) {
+	Result<T>:result;
+	if (array.len == 0) {
+		result.status = Status::End;
+		return(result);
+	}
+	array.len -= 1;
+	result.status = Status::Ok;
+	result.value = array.data[array.len];
+	return(result);
+}
+
+Result<T>:ArrayGet<T>(ptr<Array<T>>:array, usize:index) {
+	Result<T>:result;
+	if (index >= array.len) {
+		result.status = Status::Invalid;
+		return(result);
+	}
+	result.status = Status::Ok;
+	result.value = array.data[index];
+	return(result);
+}
+
+Status:ArraySet<T>(ptr<Array<T>>:array, usize:index, T:value) {
+	if (index >= array.len) {
+		return(Status::Invalid);
+	}
+	array.data[index] = value;
+	return(Status::Ok);
+}
+
+Span<T>:ArraySpan<T>(ptr<Array<T>>:array) {
+	Span<T>:out;
+	out.data = array.data;
+	out.len = array.len;
+	return(out);
+}
+
+Slice<T>:ArraySlice<T>(ptr<Array<T>>:array) {
+	Slice<T>:out;
+	out.data = array.data;
+	out.len = array.len;
+	return(out);
+}

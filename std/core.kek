@@ -1,0 +1,58 @@
+alias:byte = u8;
+alias:usize = u64;
+alias:isize = i64;
+alias:RawHandle = ptr;
+
+enum:u8:Status {
+	Ok,
+	End,
+	Invalid,
+	NoMemory,
+	NotFound,
+	PermissionDenied,
+	Interrupted,
+	Unsupported,
+	IoError,
+};
+
+struct:Result<T> {
+	Status:status;
+	T:value;
+};
+
+struct:Slice<T> {
+	ptr<T>:data;
+	usize:len;
+};
+
+struct:Span<T> {
+	ptr<T>:data;
+	usize:len;
+};
+
+Slice<T>:FixedSlice<T>(ptr<T>:data, usize:len) {
+	Slice<T>:out;
+	out.data = data;
+	out.len = len;
+	return(out);
+}
+
+Span<T>:FixedSpan<T>(ptr<T>:data, usize:len) {
+	Span<T>:out;
+	out.data = data;
+	out.len = len;
+	return(out);
+}
+
+Result<T>:Ok<T>(T:value) {
+	Result<T>:out;
+	out.status = Status::Ok;
+	out.value = value;
+	return(out);
+}
+
+Result<T>:Err<T>(Status:status) {
+	Result<T>:out;
+	out.status = status;
+	return(out);
+}
