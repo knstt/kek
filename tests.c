@@ -199,7 +199,7 @@ static int TestStdlibExample(void) {
         || !FileContains("out/std_example.c", "std_FileOpen")) {
         return Fail("stdlib example did not emit expected stdlib symbols");
     }
-    if (!FileContains("out/std_example.c", "struct Result__File std_FileOpen(byte* path,FileMode mode);")) {
+    if (!FileContains("out/std_example.c", "struct Result__File std_FileOpen(ptr path,FileMode mode);")) {
         return Fail("stdlib generated C did not emit expected function prototype");
     }
 

@@ -92,7 +92,7 @@ i64:main() {
 		111, 117, 116, 47, 115, 116, 100, 108,
 		105, 98, 95, 116, 101, 115, 116, 0,
 	};
-	Result<File>:opened = std::FileOpenCString(filePath, FileMode::Write);
+	Result<File>:opened = std::FileOpen(filePath, FileMode::Write);
 	assert(opened.status == Status::Ok);
 	File:file = opened.value;
 	assert(file.Write(inputSlice).status == Status::Ok);

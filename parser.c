@@ -493,7 +493,7 @@ static struct KekExpr* ParsePrimaryExpr(struct KekFrontend* frontend, struct Kek
     }
 
     // len(array)
-    if (IsTokenNode(node) && TokenTextEquals(node, module->file, "len")) {
+    if (IsTokenNode(node) && TokenTextEquals(node, module->file, "len") && Next(node) && Next(node)->type == AST_GROUP) {
         struct KekExpr* expr = AddExpr(frontend, module, KEK_EXPR_LEN, node);
         struct AstNode* argGroup = Next(node);
         if (expr && argGroup && argGroup->type == AST_GROUP) {

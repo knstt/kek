@@ -11,6 +11,7 @@ struct CStructInfo {
     char name[64];
     char fieldNames[64][64];
     char defaults[64][64];
+    int fieldIsAggregate[64];
     size_t fieldCount;
 };
 
@@ -118,9 +119,8 @@ static const char* CTokenText(struct Token* token, struct SourceFile* file, char
 
 static int TokenTextEquals(struct Token* token, struct SourceFile* file, const char* text) {
     size_t length = strlen(text);
-    return (token->type == TOKEN_IDENTIFIER || token->type == TOKEN_NUMBER || token->type == TOKEN_STRING)
-        && token->location.length == length
-        && strncmp(file->content + token->location.offset, text, length) == 0;
+    const char* lexeme = TokenLexeme(token, file);
+    return lexeme && strlen(lexeme) == length && strcmp(lexeme, text) == 0;
 }
 
 static void CopyTokenText(struct Token* token, struct SourceFile* file, char* buffer, size_t bufferSize) {
@@ -597,8 +597,70 @@ static void CopyExprSource(struct CWriter* writer, struct KekExpr* expr, char* b
     buffer[length] = '\0';
 }
 
-static void CopyTypedFieldDefault(struct CWriter* writer, struct KekField* field, char* buffer, size_t bufferSize) {
+static int GenericParamIndex(struct CWriter* writer, struct AstNode* params, struct AstNode* name) {
+    if (!name || !IsGenericNode(params)) {
+        return -1;
+    }
+
+    int index = 0;
+    for (struct AstNode* param = params->firstChild; param; param = param->nextSibling, index++) {
+        struct AstNode* paramName = GenericParamName(params, (size_t)index);
+        char buffer[128];
+        if (paramName && TypedTokenTextEquals(writer, name, TypedNodeText(writer, paramName, buffer, sizeof(buffer)))) {
+            return index;
+        }
+    }
+
+    return -1;
+}
+
+static int TypeDefaultsToAggregate(struct CWriter* writer, struct KekType* type, struct AstNode* params, struct AstNode* args, struct SourceFile* argsFile) {
+    if (!type) {
+        return 0;
+    }
+    if (type->kind == KEK_TYPE_ARRAY) {
+        return 1;
+    }
+    if (type->kind == KEK_TYPE_POINTER) {
+        return 0;
+    }
+
+    struct KekType* base = type;
+    while (base && base->kind == KEK_TYPE_ARRAY) {
+        base = base->element;
+    }
+    if (!base || !base->name) {
+        return 0;
+    }
+
+    int paramIndex = GenericParamIndex(writer, params, base->name);
+    if (paramIndex >= 0) {
+        struct AstNode* arg = GenericArgNode(args, (size_t)paramIndex);
+        if (!arg) {
+            return 0;
+        }
+        char argName[128];
+        if (arg && IsTokenNode(arg) && IsGenericNode(arg->nextSibling)) {
+            MangleGenericNameWithFiles(writer, argsFile, arg, argsFile, arg->nextSibling, argName, sizeof(argName));
+        } else {
+            GenericArgTextFromFile(argsFile ? argsFile : writer->file, arg, argName, sizeof(argName));
+        }
+        return IsKnownStruct(writer, argName);
+    }
+
+    char typeName[128];
+    CopyTypedNodeText(writer, base->name, typeName, sizeof(typeName));
+    return IsKnownStruct(writer, typeName);
+}
+
+static void CopyTypedFieldDefaultWithContext(struct CWriter* writer, struct KekField* field, struct AstNode* params, struct AstNode* args, struct SourceFile* argsFile, char* buffer, size_t bufferSize, int* isAggregate) {
+    if (isAggregate) {
+        *isAggregate = 0;
+    }
     if (field && field->isNestedStruct) {
+        if (isAggregate) {
+            *isAggregate = 1;
+        }
         snprintf(buffer, bufferSize, "{0}");
         return;
     }
@@ -608,20 +670,15 @@ static void CopyTypedFieldDefault(struct CWriter* writer, struct KekField* field
         return;
     }
 
-    struct KekType* base = field ? field->type : NULL;
-    while (base && base->kind == KEK_TYPE_ARRAY) {
-        base = base->element;
+    int aggregate = TypeDefaultsToAggregate(writer, field ? field->type : NULL, params, args, argsFile);
+    if (isAggregate) {
+        *isAggregate = aggregate;
     }
-    char typeName[128];
-    if (base && base->name) {
-        CopyTypedNodeText(writer, base->name, typeName, sizeof(typeName));
-        if (IsKnownStruct(writer, typeName)) {
-            snprintf(buffer, bufferSize, "{0}");
-            return;
-        }
-    }
+    snprintf(buffer, bufferSize, "%s", aggregate ? "{0}" : "0");
+}
 
-    snprintf(buffer, bufferSize, "0");
+static void CopyTypedFieldDefault(struct CWriter* writer, struct KekField* field, char* buffer, size_t bufferSize, int* isAggregate) {
+    CopyTypedFieldDefaultWithContext(writer, field, NULL, NULL, NULL, buffer, bufferSize, isAggregate);
 }
 
 static void WriteTypedExpr(struct CWriter* writer, struct KekExpr* expr);
@@ -696,7 +753,14 @@ static void AddGenericStructInstance(struct CWriter* writer, struct KekDecl* dec
         writer->file = declFile ? declFile : previousFile;
         for (struct KekField* field = decl->firstField; field && info->fieldCount < 64; field = field->next) {
             CopyTypedNodeText(writer, field->name, info->fieldNames[info->fieldCount], sizeof(info->fieldNames[info->fieldCount]));
-            CopyTypedFieldDefault(writer, field, info->defaults[info->fieldCount], sizeof(info->defaults[info->fieldCount]));
+            CopyTypedFieldDefaultWithContext(writer,
+                field,
+                decl->genericParams,
+                args,
+                argsFile,
+                info->defaults[info->fieldCount],
+                sizeof(info->defaults[info->fieldCount]),
+                &info->fieldIsAggregate[info->fieldCount]);
             info->fieldCount++;
         }
         writer->file = previousFile;
@@ -1626,7 +1690,11 @@ static void RegisterTypedStruct(struct CWriter* writer, struct KekDecl* decl) {
     }
     for (struct KekField* field = decl->firstField; field && info->fieldCount < 64; field = field->next) {
         CopyTypedNodeText(writer, field->name, info->fieldNames[info->fieldCount], sizeof(info->fieldNames[info->fieldCount]));
-        CopyTypedFieldDefault(writer, field, info->defaults[info->fieldCount], sizeof(info->defaults[info->fieldCount]));
+        CopyTypedFieldDefault(writer,
+            field,
+            info->defaults[info->fieldCount],
+            sizeof(info->defaults[info->fieldCount]),
+            &info->fieldIsAggregate[info->fieldCount]);
         info->fieldCount++;
     }
 }
@@ -1932,7 +2000,14 @@ static void WriteTypedDecl(struct CWriter* writer, struct KekDecl* decl) {
                 struct SourceLocation body = decl->body->location;
                 body.offset++;
                 body.length -= 2;
+                fputs("#if defined(__GNUC__) || defined(__clang__)\n", writer->out);
+                fputs("#pragma GCC diagnostic push\n", writer->out);
+                fputs("#pragma GCC diagnostic ignored \"-Wunused-function\"\n", writer->out);
+                fputs("#endif\n", writer->out);
                 WriteSourceSlice(writer->out, writer->file, body);
+                fputs("\n#if defined(__GNUC__) || defined(__clang__)\n", writer->out);
+                fputs("#pragma GCC diagnostic pop\n", writer->out);
+                fputs("#endif\n", writer->out);
             }
             break;
         case KEK_DECL_ALIAS:

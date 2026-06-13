@@ -41,7 +41,7 @@ static enum KekSymbolKind SymbolKindForDecl(enum KekDeclKind kind) {
     return KEK_SYMBOL_UNKNOWN;
 }
 
-static int SameSymbolName(struct AstNode* left, struct AstNode* right, struct SourceFile* file) {
+static int SameSymbolNameInFile(struct AstNode* left, struct AstNode* right, struct SourceFile* file) {
     if (!left || !right || !file) {
         return 0;
     }
@@ -50,6 +50,18 @@ static int SameSymbolName(struct AstNode* left, struct AstNode* right, struct So
     }
     return strncmp(file->content + left->token.location.offset,
         file->content + right->token.location.offset,
+        left->token.location.length) == 0;
+}
+
+static int SameSymbolNameAcrossFiles(struct AstNode* left, struct SourceFile* leftFile, struct AstNode* right, struct SourceFile* rightFile) {
+    if (!left || !leftFile || !right || !rightFile) {
+        return 0;
+    }
+    if (left->token.location.length != right->token.location.length) {
+        return 0;
+    }
+    return strncmp(leftFile->content + left->token.location.offset,
+        rightFile->content + right->token.location.offset,
         left->token.location.length) == 0;
 }
 
@@ -90,13 +102,13 @@ static int SameFunctionSymbolSlot(struct KekDecl* left, struct KekDecl* right, s
     if (!left || !right || left->kind != KEK_DECL_FUNCTION || right->kind != KEK_DECL_FUNCTION) {
         return 0;
     }
-    if (!SameSymbolName(left->name, right->name, file)) {
+    if (!SameSymbolNameInFile(left->name, right->name, file)) {
         return 0;
     }
 
     struct AstNode* leftReceiver = DeclReceiverName(left);
     struct AstNode* rightReceiver = DeclReceiverName(right);
-    if ((leftReceiver || rightReceiver) && !SameSymbolName(leftReceiver, rightReceiver, file)) {
+    if ((leftReceiver || rightReceiver) && !SameSymbolNameInFile(leftReceiver, rightReceiver, file)) {
         return 0;
     }
 
@@ -135,14 +147,14 @@ static struct KekSymbol* ScopeFindDuplicate(struct KekScope* scope, struct AstNo
             return symbol;
         }
         if ((!decl || !symbol->decl || decl->kind != KEK_DECL_FUNCTION || symbol->decl->kind != KEK_DECL_FUNCTION)
-            && SameSymbolName(symbol->name, name, scope->file)) {
+            && SameSymbolNameInFile(symbol->name, name, scope->file)) {
             return symbol;
         }
     }
     return NULL;
 }
 
-static int AddSymbol(struct KekProgram* program, struct KekScope* scope, enum KekSymbolKind kind, struct AstNode* name, struct KekDecl* decl, struct KekParam* param, struct KekStmt* stmt) {
+static int AddSymbolWithFile(struct KekProgram* program, struct KekScope* scope, enum KekSymbolKind kind, struct AstNode* name, struct KekDecl* decl, struct KekParam* param, struct KekStmt* stmt, struct SourceFile* file) {
     if (!scope) {
         return -1;
     }
@@ -168,7 +180,7 @@ static int AddSymbol(struct KekProgram* program, struct KekScope* scope, enum Ke
     struct KekSymbol* symbol = &program->symbols[program->symbolCount++];
     memset(symbol, 0, sizeof(*symbol));
     symbol->kind = kind;
-    symbol->file = scope->file;
+    symbol->file = file ? file : scope->file;
     symbol->decl = decl;
     symbol->param = param;
     symbol->stmt = stmt;
@@ -188,6 +200,10 @@ static int AddSymbol(struct KekProgram* program, struct KekScope* scope, enum Ke
         program->symbolKindCounts[kind]++;
     }
     return 0;
+}
+
+static int AddSymbol(struct KekProgram* program, struct KekScope* scope, enum KekSymbolKind kind, struct AstNode* name, struct KekDecl* decl, struct KekParam* param, struct KekStmt* stmt) {
+    return AddSymbolWithFile(program, scope, kind, name, decl, param, stmt, NULL);
 }
 
 static int IsTokenText(struct AstNode* node, struct SourceFile* file, const char* text) {
@@ -226,12 +242,49 @@ static int IsBuiltinType(struct AstNode* name, struct SourceFile* file) {
 static struct KekSymbol* LookupSymbol(struct KekScope* scope, struct AstNode* name) {
     for (struct KekScope* current = scope; current; current = current->parent) {
         for (struct KekSymbol* symbol = current->firstSymbol; symbol; symbol = symbol->nextInScope) {
-            if (SameSymbolName(symbol->name, name, current->file)) {
+            if (SameSymbolNameAcrossFiles(symbol->name, symbol->file, name, scope->file)) {
                 return symbol;
             }
         }
     }
     return NULL;
+}
+
+static int ProgramScopeHasSymbol(struct KekScope* programScope, struct AstNode* name, struct SourceFile* file) {
+    for (struct KekSymbol* symbol = programScope ? programScope->firstSymbol : NULL; symbol; symbol = symbol->nextInScope) {
+        if (SameSymbolNameAcrossFiles(symbol->name, symbol->file, name, file)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int AddExternCStructSymbols(struct KekProgram* program, struct KekScope* programScope, struct KekDecl* decl, struct SourceFile* file) {
+    if (!decl || decl->kind != KEK_DECL_EXTERN_C || !decl->body || decl->body->type != AST_BLOCK) {
+        return 0;
+    }
+
+    for (struct AstNode* statement = decl->body->firstChild; statement; statement = statement->nextSibling) {
+        struct AstNode* keyword = statement->firstChild;
+        struct AstNode* name = keyword ? keyword->nextSibling : NULL;
+        if (!keyword
+            || !name
+            || keyword->type != AST_TOKEN
+            || keyword->token.type != TOKEN_KEYWORD
+            || keyword->token.value.keyword != KEYWORD_STRUCT
+            || name->type != AST_TOKEN
+            || name->token.type != TOKEN_IDENTIFIER) {
+            continue;
+        }
+        if (ProgramScopeHasSymbol(programScope, name, file)) {
+            continue;
+        }
+        if (AddSymbolWithFile(program, programScope, KEK_SYMBOL_TYPE, name, decl, NULL, NULL, file) != 0) {
+            return -1;
+        }
+    }
+
+    return 0;
 }
 
 static int IsAssignableExpr(struct KekExpr* expr) {
@@ -482,6 +535,25 @@ int BuildKekProgramSymbols(struct KekProgram* program, struct KekModule* modules
     struct KekScope* programScope = AddScope(program, KEK_SCOPE_PROGRAM, NULL, NULL);
     if (!programScope) {
         return -1;
+    }
+
+    for (size_t moduleIndex = 0; moduleIndex < moduleCount; moduleIndex++) {
+        struct KekModule* module = &modules[moduleIndex];
+        for (struct KekDecl* decl = module->firstDecl; decl; decl = decl->next) {
+            enum KekSymbolKind kind = SymbolKindForDecl(decl->kind);
+            if (kind == KEK_SYMBOL_UNKNOWN || kind == KEK_SYMBOL_IMPORT || !decl->name) {
+                if (decl->kind == KEK_DECL_EXTERN_C && AddExternCStructSymbols(program, programScope, decl, module->file) != 0) {
+                    return -1;
+                }
+                continue;
+            }
+            if (ProgramScopeHasSymbol(programScope, decl->name, module->file)) {
+                continue;
+            }
+            if (AddSymbolWithFile(program, programScope, kind, decl->name, decl, NULL, NULL, module->file) != 0) {
+                return -1;
+            }
+        }
     }
 
     for (size_t moduleIndex = 0; moduleIndex < moduleCount; moduleIndex++) {

@@ -348,9 +348,10 @@ int BuildKekCompilation(struct KekCompilation* compilation) {
     size_t symbolCapacity = 1;
     size_t scopeCapacity = 1 + compilation->unitCount;
     for (size_t i = 0; i < compilation->unitCount; i++) {
-        symbolCapacity += compilation->modules[i].declCount
+        symbolCapacity += compilation->modules[i].declCount * 2
             + compilation->modules[i].paramCount
-            + compilation->modules[i].typedStmtCount;
+            + compilation->modules[i].typedStmtCount
+            + 64;
         scopeCapacity += compilation->modules[i].declKindCounts[KEK_DECL_FUNCTION]
             + compilation->modules[i].stmtKindCounts[KEK_STMT_BLOCK]
             + compilation->modules[i].stmtKindCounts[KEK_STMT_FOR]
