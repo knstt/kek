@@ -266,6 +266,33 @@ static struct KekDecl* AddDecl(struct KekFrontend* frontend, struct KekModule* m
 static struct KekExpr* ParseExprUntil(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* first, struct AstNode* stop);
 static struct KekType* ParseType(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* typeNode, struct AstNode* afterName);
 
+static void AddTypedParseDiagnostic(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* source, const char* message) {
+    KekAddDiagnostic(frontend->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_TYPED_PARSE,
+        module->file ? module->file->fileIndex : -1,
+        source ? source->location : (struct SourceLocation){0},
+        message);
+    frontend->errorCount++;
+    module->errorCount++;
+}
+
+static struct KekType* ParsePointerElementType(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* genericArgs) {
+    if (!genericArgs) {
+        return NULL;
+    }
+    if (!genericArgs->firstChild || genericArgs->childCount != 1) {
+        AddTypedParseDiagnostic(frontend, module, genericArgs, "ptr<T> requires exactly one type argument");
+        return AddType(frontend, module, KEK_TYPE_UNKNOWN, genericArgs);
+    }
+
+    struct AstNode* arg = genericArgs->firstChild;
+    if (!arg || arg->type != AST_STATEMENT || !arg->firstChild) {
+        AddTypedParseDiagnostic(frontend, module, genericArgs, "ptr<T> requires a type argument");
+        return AddType(frontend, module, KEK_TYPE_UNKNOWN, genericArgs);
+    }
+
+    return ParseType(frontend, module, arg->firstChild, NULL);
+}
+
 static void AddExprArg(struct KekExpr* call, struct KekExpr* arg) {
     if (!call || !arg) {
         return;
@@ -600,7 +627,9 @@ static struct KekType* ParseType(struct KekFrontend* frontend, struct KekModule*
         return NULL;
     }
     base->name = typeNode;
-    if (IsGenericNode(Next(typeNode))) {
+    if (baseKind == KEK_TYPE_POINTER && IsGenericNode(Next(typeNode))) {
+        base->element = ParsePointerElementType(frontend, module, Next(typeNode));
+    } else if (IsGenericNode(Next(typeNode))) {
         base->genericArgs = Next(typeNode);
     }
 
@@ -940,8 +969,12 @@ static enum KekDeclKind ClassifyDecl(struct KekDecl* decl, struct SourceFile* fi
         return ClassifyKeywordDecl(first, file, decl);
     }
 
-    if (IsTokenNode(first) && Next(first) && IsPunctuationNode(Next(first), PUNCTUATION_COLON)) {
-        struct AstNode* name = Next(Next(first));
+    struct AstNode* colon = IsTokenNode(first) ? Next(first) : NULL;
+    if (IsGenericNode(colon)) {
+        colon = Next(colon);
+    }
+    if (IsTokenNode(first) && colon && IsPunctuationNode(colon, PUNCTUATION_COLON)) {
+        struct AstNode* name = Next(colon);
         struct AstNode* afterName = Next(name);
         if (IsGenericNode(afterName)) {
             afterName = Next(afterName);

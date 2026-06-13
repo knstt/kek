@@ -117,10 +117,23 @@ static int TestDeferExternStructAndAddressOf(void) {
         "struct CPoint { int x; int y; };\n"
         "void touch(struct CPoint* point) { point->x += 1; }\n"
         "}\n"
+        "struct:GenericBox<T> { T:value; };\n"
+        "struct:ByteBuffer { ptr<u8>:data; };\n"
+        "ptr<CPoint>:IdentityPoint(ptr<CPoint>:point) { return(point); }\n"
         "i64:main(){\n"
         "CPoint:point = { x = 1, y = 2 };\n"
         "ptr:pointer = &point;\n"
+        "ptr<CPoint>:typedPointer = &point;\n"
+        "ptr<CPoint>:returnedPointer = IdentityPoint(typedPointer);\n"
+        "u8:bytes[4] = {0};\n"
+        "ByteBuffer:buffer = { data = &bytes };\n"
+        "GenericBox<u8>:box = { value = 9 };\n"
+        "ptr<GenericBox<u8>>:boxPointer = &box;\n"
         "assert(pointer != 0);\n"
+        "assert(typedPointer != 0);\n"
+        "assert(returnedPointer != 0);\n"
+        "assert(buffer.data != 0);\n"
+        "assert(boxPointer != 0);\n"
         "::touch(&point);\n"
         "int:value = 0;\n"
         "if (true) { defer value += 1; defer { value += 2; } assert(value == 0); }\n"
@@ -149,6 +162,15 @@ static int TestDeferExternStructAndAddressOf(void) {
     }
     if (!FileContains("out/features.c", "ptr pointer=&point;")) {
         return Fail("address-of instance did not emit native pointer expression");
+    }
+    if (!FileContains("out/features.c", "struct CPoint* typedPointer=&point;")) {
+        return Fail("typed pointer to extern struct was not emitted as a C pointer");
+    }
+    if (!FileContains("out/features.c", "u8* data;")) {
+        return Fail("typed pointer field was not emitted as a C pointer");
+    }
+    if (!FileContains("out/features.c", "struct GenericBox__u8* boxPointer=&box;")) {
+        return Fail("typed pointer to generic struct was not emitted as a C pointer");
     }
     if (!FileContains("out/features.c", "value+=2;") || !FileContains("out/features.c", "value+=1;")) {
         return Fail("defer statements were not emitted");
@@ -241,6 +263,12 @@ static int TestDiagnostics(void) {
     if (WriteTextFile("out/diagnostic_duplicate.kek", "i32:A;\ni32:A;\n") != 0) {
         return Fail("could not write semantic diagnostic fixture");
     }
+    if (WriteTextFile("out/diagnostic_ptr_empty.kek", "ptr<>:Bad;\n") != 0) {
+        return Fail("could not write empty ptr diagnostic fixture");
+    }
+    if (WriteTextFile("out/diagnostic_ptr_many.kek", "ptr<u8, u16>:Bad;\n") != 0) {
+        return Fail("could not write multi ptr diagnostic fixture");
+    }
 
     struct KekDiagnostic parseDiagnostics[64];
     struct KekCompilation parseCompilation;
@@ -262,6 +290,26 @@ static int TestDiagnostics(void) {
     FreeKekCompilation(&semanticCompilation);
     if (semanticResult == 0 || !hasSemanticDiagnostic) {
         return Fail("semantic diagnostic was not recorded");
+    }
+
+    struct KekDiagnostic ptrEmptyDiagnostics[64];
+    struct KekCompilation ptrEmptyCompilation;
+    InitKekCompilation(&ptrEmptyCompilation, ptrEmptyDiagnostics, sizeof(ptrEmptyDiagnostics) / sizeof(ptrEmptyDiagnostics[0]));
+    int ptrEmptyResult = CompileKekSmoke("out/diagnostic_ptr_empty.kek", "out/diagnostic_ptr_empty.c", "out/diagnostic_ptr_empty.json", "out/diagnostic_ptr_empty.txt", &ptrEmptyCompilation);
+    int hasPtrEmptyDiagnostic = HasDiagnostic(&ptrEmptyCompilation.diagnostics, KEK_PHASE_TYPED_PARSE, "ptr<T> requires exactly one type argument");
+    FreeKekCompilation(&ptrEmptyCompilation);
+    if (ptrEmptyResult == 0 || !hasPtrEmptyDiagnostic) {
+        return Fail("empty ptr generic diagnostic was not recorded");
+    }
+
+    struct KekDiagnostic ptrManyDiagnostics[64];
+    struct KekCompilation ptrManyCompilation;
+    InitKekCompilation(&ptrManyCompilation, ptrManyDiagnostics, sizeof(ptrManyDiagnostics) / sizeof(ptrManyDiagnostics[0]));
+    int ptrManyResult = CompileKekSmoke("out/diagnostic_ptr_many.kek", "out/diagnostic_ptr_many.c", "out/diagnostic_ptr_many.json", "out/diagnostic_ptr_many.txt", &ptrManyCompilation);
+    int hasPtrManyDiagnostic = HasDiagnostic(&ptrManyCompilation.diagnostics, KEK_PHASE_TYPED_PARSE, "ptr<T> requires exactly one type argument");
+    FreeKekCompilation(&ptrManyCompilation);
+    if (ptrManyResult == 0 || !hasPtrManyDiagnostic) {
+        return Fail("multi ptr generic diagnostic was not recorded");
     }
 
     struct KekDiagnostic codegenDiagnostics[64];

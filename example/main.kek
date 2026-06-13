@@ -59,7 +59,7 @@ struct:MyStruct {
 	i64:MyI64;
 	f32:MyF32;
 	f64:MyF64;
-	ptr:MyPointer;
+	ptr<byte>:MyPointer;
 
 	struct:MyInternalStruct {
 		u8:Value;

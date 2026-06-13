@@ -45,6 +45,7 @@ Examples:
 - `example/main.kek` current language sketch
 - `example/future.kek` ideas for later
 - `example/docs.kek` documentation comment style
+- `docs/stdlib-design.md` standard library design sketch
 
 ## Self-Hosting Checklist
 

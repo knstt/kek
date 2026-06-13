@@ -1781,18 +1781,34 @@ static struct CGenericInstance* FindGenericInstance(struct CGenericInstance* ins
     return NULL;
 }
 
+static struct CGenericInstance* FindGenericInstanceByName(struct CGenericInstance* instances, size_t count, const char* name) {
+    for (size_t i = 0; i < count; i++) {
+        if (strcmp(instances[i].name, name) == 0) {
+            return &instances[i];
+        }
+    }
+    return NULL;
+}
+
 static void AddGenericStructInstance(struct CWriter* writer, struct KekDecl* decl, struct SourceFile* declFile, struct AstNode* args, struct SourceFile* argsFile) {
     if (!decl || !args || FindGenericInstance(writer->genericStructs, writer->genericStructCount, decl, args)
         || writer->genericStructCount >= sizeof(writer->genericStructs) / sizeof(writer->genericStructs[0])) {
         return;
     }
+
+    char instanceName[128];
+    MangleGenericNameWithFiles(writer, declFile, decl->name, argsFile, args, instanceName, sizeof(instanceName));
+    if (FindGenericInstanceByName(writer->genericStructs, writer->genericStructCount, instanceName)) {
+        return;
+    }
+
     struct CGenericInstance* instance = &writer->genericStructs[writer->genericStructCount++];
     memset(instance, 0, sizeof(*instance));
     instance->decl = decl;
     instance->args = args;
     instance->declFile = declFile;
     instance->argsFile = argsFile;
-    MangleGenericNameWithFiles(writer, declFile, decl->name, argsFile, args, instance->name, sizeof(instance->name));
+    snprintf(instance->name, sizeof(instance->name), "%s", instanceName);
     struct CStructInfo* info = AddStructInfo(writer, instance->name);
     if (info) {
         struct SourceFile* previousFile = writer->file;
@@ -1815,20 +1831,27 @@ static void AddGenericFunctionInstance(struct CWriter* writer, struct KekDecl* d
         || writer->genericFunctionCount >= sizeof(writer->genericFunctions) / sizeof(writer->genericFunctions[0])) {
         return;
     }
+
+    char prefix[64] = {0};
+    if (declFile) {
+        PackagePrefixFromPath(declFile->path, prefix, sizeof(prefix));
+    }
+    char base[128];
+    MangleGenericNameWithFiles(writer, declFile, decl->name, argsFile, args, base, sizeof(base));
+    char instanceName[128];
+    snprintf(instanceName, sizeof(instanceName), "%s", prefix);
+    AppendSanitized(instanceName, sizeof(instanceName), base);
+    if (FindGenericInstanceByName(writer->genericFunctions, writer->genericFunctionCount, instanceName)) {
+        return;
+    }
+
     struct CGenericInstance* instance = &writer->genericFunctions[writer->genericFunctionCount++];
     memset(instance, 0, sizeof(*instance));
     instance->decl = decl;
     instance->args = args;
     instance->declFile = declFile;
     instance->argsFile = argsFile;
-    char prefix[64] = {0};
-    if (declFile) {
-        PackagePrefixFromPath(declFile->path, prefix, sizeof(prefix));
-    }
-    snprintf(instance->name, sizeof(instance->name), "%s", prefix);
-    char base[128];
-    MangleGenericNameWithFiles(writer, declFile, decl->name, argsFile, args, base, sizeof(base));
-    AppendSanitized(instance->name, sizeof(instance->name), base);
+    snprintf(instance->name, sizeof(instance->name), "%s", instanceName);
 }
 
 static const char* GenericStructInstanceName(struct CWriter* writer, struct KekType* type, char* buffer, size_t bufferSize) {
@@ -1839,12 +1862,15 @@ static const char* GenericStructInstanceName(struct CWriter* writer, struct KekT
     return buffer;
 }
 
-static void WriteTypedBaseTypeWithGenericContext(struct CWriter* writer, struct KekType* type, struct AstNode* params, struct AstNode* args) {
-    while (type && type->kind == KEK_TYPE_ARRAY) {
-        type = type->element;
-    }
+static void WriteTypedNonArrayTypeWithGenericContext(struct CWriter* writer, struct KekType* type, struct AstNode* params, struct AstNode* args) {
     if (!type || !type->name) {
         fputs("void", writer->out);
+        return;
+    }
+
+    if (type->kind == KEK_TYPE_POINTER && type->element) {
+        WriteTypedNonArrayTypeWithGenericContext(writer, type->element, params, args);
+        fputc('*', writer->out);
         return;
     }
 
@@ -1867,6 +1893,13 @@ static void WriteTypedBaseTypeWithGenericContext(struct CWriter* writer, struct 
     }
 }
 
+static void WriteTypedBaseTypeWithGenericContext(struct CWriter* writer, struct KekType* type, struct AstNode* params, struct AstNode* args) {
+    while (type && type->kind == KEK_TYPE_ARRAY) {
+        type = type->element;
+    }
+    WriteTypedNonArrayTypeWithGenericContext(writer, type, params, args);
+}
+
 static void WriteTypedBaseType(struct CWriter* writer, struct KekType* type) {
     WriteTypedBaseTypeWithGenericContext(writer, type, writer->genericParams, writer->genericArgs);
 }
@@ -1882,28 +1915,13 @@ static void WriteTypedArraySuffix(struct CWriter* writer, struct KekType* type) 
 }
 
 static void WriteTypedTypeAndNameWithGenericContext(struct CWriter* writer, struct KekType* type, struct AstNode* name, struct AstNode* params, struct AstNode* args) {
-    char typeBuffer[128];
     char nameBuffer[128];
     struct KekType* base = type;
     while (base && base->kind == KEK_TYPE_ARRAY) {
         base = base->element;
     }
 
-    struct AstNode* substitution = base ? FindGenericSubstitution(writer, params, args, base->name) : NULL;
-    const char* typeName = "void";
-    if (substitution) {
-        GenericArgText(writer, substitution, typeBuffer, sizeof(typeBuffer));
-        typeName = typeBuffer;
-    } else if (base && GenericStructInstanceName(writer, base, typeBuffer, sizeof(typeBuffer))) {
-        typeName = typeBuffer;
-    } else if (base && base->name) {
-        typeName = TypedNodeText(writer, base->name, typeBuffer, sizeof(typeBuffer));
-    }
-    if (IsKnownStruct(writer, typeName)) {
-        fprintf(writer->out, "struct %s", typeName);
-    } else {
-        fputs(typeName, writer->out);
-    }
+    WriteTypedNonArrayTypeWithGenericContext(writer, base, params, args);
     fputc(' ', writer->out);
     fputs(TypedNodeText(writer, name, nameBuffer, sizeof(nameBuffer)), writer->out);
     WriteTypedArraySuffix(writer, type);
@@ -2762,7 +2780,7 @@ static void CollectGenericTypeUse(struct CWriter* writer, struct KekModule* modu
                 AddGenericStructInstance(writer, structDecl, declFile, current->genericArgs, writer->file);
             }
         }
-        if (current->kind != KEK_TYPE_ARRAY) {
+        if (current->kind != KEK_TYPE_ARRAY && current->kind != KEK_TYPE_POINTER) {
             break;
         }
     }

@@ -119,7 +119,9 @@ i64: main() {
 
     Vec2:vecA = { x = 2, y = 3 };
     ptr:vecPtr = &vecA;
+    ptr<Vec2>:typedVecPtr = &vecA;
     assert(vecPtr != 0);
+    assert(typedVecPtr != 0);
     Vec2:vecB = { y = 7, x = 5 }; // Test that field order doesn't matter
     Vec2:vecExpected;
     vecExpected.x = 7;
