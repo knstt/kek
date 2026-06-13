@@ -191,9 +191,10 @@ static int TestStdlibExample(void) {
     FreeKekCompilation(&compilation);
 
     if (!FileContains("out/std_example.c", "struct Slice__byte")
-        || !FileContains("out/std_example.c", "std_StringBuilderWrite")
-        || !FileContains("out/std_example.c", "std_ArrayPush__byte")
-        || !FileContains("out/std_example.c", "std_LinkedListPushBack__byte")
+        || !FileContains("out/std_example.c", "StringBuilder_Write")
+        || !FileContains("out/std_example.c", "Array__byte_Push")
+        || !FileContains("out/std_example.c", "LinkedList__byte_PushBack")
+        || !FileContains("out/std_example.c", "File_Write")
         || !FileContains("out/std_example.c", "std_FormatI64ToBuilder")
         || !FileContains("out/std_example.c", "std_FileOpenCString")) {
         return Fail("stdlib example did not emit expected stdlib symbols");

@@ -1,22 +1,22 @@
 Status:WriteByteToBuilder(ptr<StringBuilder>:writer, byte:value) {
 	byte:buffer[1] = { value };
-	Result<usize>:result = std::StringBuilderWrite(writer, std::FixedSlice<byte>(buffer, 1));
+	Result<usize>:result = writer.Write(std::FixedSlice<byte>(buffer, 1));
 	return(result.status);
 }
 
 Status:WriteByteToFile(ptr<File>:writer, byte:value) {
 	byte:buffer[1] = { value };
-	Result<usize>:result = std::FileWrite(writer, std::FixedSlice<byte>(buffer, 1));
+	Result<usize>:result = writer.Write(std::FixedSlice<byte>(buffer, 1));
 	return(result.status);
 }
 
 Status:WriteStringToMemory(ptr<MemoryWriter>:writer, String:text) {
-	Result<usize>:result = std::MemoryWrite(writer, std::StringBytes(text));
+	Result<usize>:result = writer.Write(text.Bytes());
 	return(result.status);
 }
 
 Status:WriteStringToFile(ptr<File>:writer, String:text) {
-	Result<usize>:result = std::FileWrite(writer, std::StringBytes(text));
+	Result<usize>:result = writer.Write(text.Bytes());
 	return(result.status);
 }
 

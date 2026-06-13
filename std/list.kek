@@ -20,9 +20,71 @@ LinkedList<T>:LinkedListNew<T>(Allocator:allocator) {
 	return(list);
 }
 
-Status:LinkedListDestroy<T>(ptr<LinkedList<T>>:list) {
-	while (list.len > 0) {
-		Result<T>:ignored = std::LinkedListPopBack<T>(list);
+Status:LinkedList<T>::PushBack(T:value) {
+	ptr<ListNode<T>>:node = std::Alloc<ListNode<T>>(this.allocator, 1);
+	if (node == 0) {
+		return(Status::NoMemory);
+	}
+	node.value = value;
+	node.next = 0;
+	node.prev = this.last;
+
+	if (this.last != 0) {
+		ptr<ListNode<T>>:last = this.last;
+		last.next = node;
+	} else {
+		this.first = node;
+	}
+	this.last = node;
+	this.len += 1;
+	return(Status::Ok);
+}
+
+Status:LinkedList<T>::PushFront(T:value) {
+	ptr<ListNode<T>>:node = std::Alloc<ListNode<T>>(this.allocator, 1);
+	if (node == 0) {
+		return(Status::NoMemory);
+	}
+	node.value = value;
+	node.prev = 0;
+	node.next = this.first;
+
+	if (this.first != 0) {
+		ptr<ListNode<T>>:first = this.first;
+		first.prev = node;
+	} else {
+		this.last = node;
+	}
+	this.first = node;
+	this.len += 1;
+	return(Status::Ok);
+}
+
+Result<T>:LinkedList<T>::PopBack() {
+	Result<T>:result;
+	if (this.last == 0) {
+		result.status = Status::End;
+		return(result);
+	}
+
+	ptr<ListNode<T>>:node = this.last;
+	result.value = node.value;
+	this.last = node.prev;
+	if (this.last != 0) {
+		ptr<ListNode<T>>:last = this.last;
+		last.next = 0;
+	} else {
+		this.first = 0;
+	}
+	this.len -= 1;
+	std::Free<ListNode<T>>(this.allocator, node, 1);
+	result.status = Status::Ok;
+	return(result);
+}
+
+Status:LinkedList<T>::Destroy() {
+	while (this.len > 0) {
+		Result<T>:ignored = this.PopBack();
 		if (ignored.status != Status::Ok) {
 			return(ignored.status);
 		}
@@ -30,86 +92,24 @@ Status:LinkedListDestroy<T>(ptr<LinkedList<T>>:list) {
 	return(Status::Ok);
 }
 
-Status:LinkedListPushBack<T>(ptr<LinkedList<T>>:list, T:value) {
-	ptr<ListNode<T>>:node = std::Alloc<ListNode<T>>(list.allocator, 1);
-	if (node == 0) {
-		return(Status::NoMemory);
-	}
-	node.value = value;
-	node.next = 0;
-	node.prev = list.last;
-
-	if (list.last != 0) {
-		ptr<ListNode<T>>:last = list.last;
-		last.next = node;
-	} else {
-		list.first = node;
-	}
-	list.last = node;
-	list.len += 1;
-	return(Status::Ok);
-}
-
-Status:LinkedListPushFront<T>(ptr<LinkedList<T>>:list, T:value) {
-	ptr<ListNode<T>>:node = std::Alloc<ListNode<T>>(list.allocator, 1);
-	if (node == 0) {
-		return(Status::NoMemory);
-	}
-	node.value = value;
-	node.prev = 0;
-	node.next = list.first;
-
-	if (list.first != 0) {
-		ptr<ListNode<T>>:first = list.first;
-		first.prev = node;
-	} else {
-		list.last = node;
-	}
-	list.first = node;
-	list.len += 1;
-	return(Status::Ok);
-}
-
-Result<T>:LinkedListPopBack<T>(ptr<LinkedList<T>>:list) {
+Result<T>:LinkedList<T>::PopFront() {
 	Result<T>:result;
-	if (list.last == 0) {
+	if (this.first == 0) {
 		result.status = Status::End;
 		return(result);
 	}
 
-	ptr<ListNode<T>>:node = list.last;
+	ptr<ListNode<T>>:node = this.first;
 	result.value = node.value;
-	list.last = node.prev;
-	if (list.last != 0) {
-		ptr<ListNode<T>>:last = list.last;
-		last.next = 0;
-	} else {
-		list.first = 0;
-	}
-	list.len -= 1;
-	std::Free<ListNode<T>>(list.allocator, node, 1);
-	result.status = Status::Ok;
-	return(result);
-}
-
-Result<T>:LinkedListPopFront<T>(ptr<LinkedList<T>>:list) {
-	Result<T>:result;
-	if (list.first == 0) {
-		result.status = Status::End;
-		return(result);
-	}
-
-	ptr<ListNode<T>>:node = list.first;
-	result.value = node.value;
-	list.first = node.next;
-	if (list.first != 0) {
-		ptr<ListNode<T>>:first = list.first;
+	this.first = node.next;
+	if (this.first != 0) {
+		ptr<ListNode<T>>:first = this.first;
 		first.prev = 0;
 	} else {
-		list.last = 0;
+		this.last = 0;
 	}
-	list.len -= 1;
-	std::Free<ListNode<T>>(list.allocator, node, 1);
+	this.len -= 1;
+	std::Free<ListNode<T>>(this.allocator, node, 1);
 	result.status = Status::Ok;
 	return(result);
 }

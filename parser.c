@@ -988,8 +988,12 @@ static enum KekDeclKind ClassifyDecl(struct KekDecl* decl, struct SourceFile* fi
                 && TokenTextEquals(decl->name, file, "operator")) {
                 decl->name = Next(decl->name);
             }
-            decl->genericParams = IsGenericNode(Next(decl->name)) ? Next(decl->name) : NULL;
+            struct AstNode* receiverGenericParams = IsGenericNode(Next(name)) ? Next(name) : NULL;
+            decl->genericParams = IsGenericNode(Next(decl->name)) ? Next(decl->name) : receiverGenericParams;
             struct AstNode* params = Next(decl->genericParams ? decl->genericParams : decl->name);
+            if (receiverGenericParams && decl->genericParams == receiverGenericParams) {
+                params = Next(decl->name);
+            }
             decl->body = params ? Next(params) : NULL;
             return KEK_DECL_FUNCTION;
         }

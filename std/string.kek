@@ -24,20 +24,20 @@ String:StringFromBytes(Slice<byte>:bytes) {
 	return(out);
 }
 
-Slice<byte>:StringBytes(String:text) {
+Slice<byte>:String::Bytes() {
 	Slice<byte>:out;
-	out.data = text.data;
-	out.len = text.len;
+	out.data = this.data;
+	out.len = this.len;
 	return(out);
 }
 
-bool:StringEquals(String:left, String:right) {
-	if (left.len != right.len) {
+bool:String::Equals(String:other) {
+	if (this.len != other.len) {
 		return(false);
 	}
 
-	for (usize:i = 0; i < left.len; i++) {
-		if (left.data[i] != right.data[i]) {
+	for (usize:i = 0; i < this.len; i++) {
+		if (this.data[i] != other.data[i]) {
 			return(false);
 		}
 	}
@@ -45,13 +45,13 @@ bool:StringEquals(String:left, String:right) {
 	return(true);
 }
 
-bool:StringStartsWith(String:text, String:prefix) {
-	if (prefix.len > text.len) {
+bool:String::StartsWith(String:prefix) {
+	if (prefix.len > this.len) {
 		return(false);
 	}
 
 	for (usize:i = 0; i < prefix.len; i++) {
-		if (text.data[i] != prefix.data[i]) {
+		if (this.data[i] != prefix.data[i]) {
 			return(false);
 		}
 	}
@@ -59,14 +59,14 @@ bool:StringStartsWith(String:text, String:prefix) {
 	return(true);
 }
 
-bool:StringEndsWith(String:text, String:suffix) {
-	if (suffix.len > text.len) {
+bool:String::EndsWith(String:suffix) {
+	if (suffix.len > this.len) {
 		return(false);
 	}
 
-	usize:offset = text.len - suffix.len;
+	usize:offset = this.len - suffix.len;
 	for (usize:i = 0; i < suffix.len; i++) {
-		if (text.data[offset + i] != suffix.data[i]) {
+		if (this.data[offset + i] != suffix.data[i]) {
 			return(false);
 		}
 	}
@@ -74,20 +74,20 @@ bool:StringEndsWith(String:text, String:suffix) {
 	return(true);
 }
 
-String:OwnedStringView(ptr<OwnedString>:text) {
+String:OwnedString::View() {
 	String:out;
-	out.data = text.data;
-	out.len = text.len;
+	out.data = this.data;
+	out.len = this.len;
 	return(out);
 }
 
-Status:OwnedStringDestroy(ptr<OwnedString>:text) {
-	if (text.data != 0) {
-		Free<byte>(text.allocator, text.data, text.cap);
+Status:OwnedString::Destroy() {
+	if (this.data != 0) {
+		Free<byte>(this.allocator, this.data, this.cap);
 	}
-	text.data = 0;
-	text.len = 0;
-	text.cap = 0;
+	this.data = 0;
+	this.len = 0;
+	this.cap = 0;
 	return(Status::Ok);
 }
 
@@ -100,28 +100,28 @@ StringBuilder:StringBuilderNew(Allocator:allocator) {
 	return(builder);
 }
 
-Status:StringBuilderDestroy(ptr<StringBuilder>:builder) {
-	if (builder.data != 0) {
-		Free<byte>(builder.allocator, builder.data, builder.cap);
+Status:StringBuilder::Destroy() {
+	if (this.data != 0) {
+		Free<byte>(this.allocator, this.data, this.cap);
 	}
-	builder.data = 0;
-	builder.len = 0;
-	builder.cap = 0;
+	this.data = 0;
+	this.len = 0;
+	this.cap = 0;
 	return(Status::Ok);
 }
 
-Status:StringBuilderClear(ptr<StringBuilder>:builder) {
-	builder.len = 0;
+Status:StringBuilder::Clear() {
+	this.len = 0;
 	return(Status::Ok);
 }
 
-Status:StringBuilderReserve(ptr<StringBuilder>:builder, usize:additional) {
-	usize:needed = builder.len + additional;
-	if (needed <= builder.cap) {
+Status:StringBuilder::Reserve(usize:additional) {
+	usize:needed = this.len + additional;
+	if (needed <= this.cap) {
 		return(Status::Ok);
 	}
 
-	usize:newCap = builder.cap;
+	usize:newCap = this.cap;
 	if (newCap == 0) {
 		newCap = 16;
 	}
@@ -129,49 +129,49 @@ Status:StringBuilderReserve(ptr<StringBuilder>:builder, usize:additional) {
 		newCap = newCap * 2;
 	}
 
-	ptr<byte>:newData = std::Resize<byte>(builder.allocator, builder.data, builder.cap, newCap);
+	ptr<byte>:newData = std::Resize<byte>(this.allocator, this.data, this.cap, newCap);
 	if (newData == 0) {
 		return(Status::NoMemory);
 	}
-	builder.data = newData;
-	builder.cap = newCap;
+	this.data = newData;
+	this.cap = newCap;
 	return(Status::Ok);
 }
 
-Result<usize>:StringBuilderWrite(ptr<StringBuilder>:builder, Slice<byte>:data) {
+Result<usize>:StringBuilder::Write(Slice<byte>:data) {
 	Result<usize>:result;
-	Status:status = StringBuilderReserve(builder, data.len);
+	Status:status = this.Reserve(data.len);
 	if (status != Status::Ok) {
 		result.status = status;
 		return(result);
 	}
 
 	for (usize:i = 0; i < data.len; i++) {
-		builder.data[builder.len + i] = data.data[i];
+		this.data[this.len + i] = data.data[i];
 	}
 
-	builder.len += data.len;
+	this.len += data.len;
 	result.status = Status::Ok;
 	result.value = data.len;
 	return(result);
 }
 
-String:StringBuilderView(ptr<StringBuilder>:builder) {
+String:StringBuilder::View() {
 	String:out;
-	out.data = builder.data;
-	out.len = builder.len;
+	out.data = this.data;
+	out.len = this.len;
 	return(out);
 }
 
-Result<OwnedString>:StringBuilderToOwnedString(ptr<StringBuilder>:builder) {
+Result<OwnedString>:StringBuilder::ToOwnedString() {
 	OwnedString:out;
-	out.data = builder.data;
-	out.len = builder.len;
-	out.cap = builder.cap;
-	out.allocator = builder.allocator;
-	builder.data = 0;
-	builder.len = 0;
-	builder.cap = 0;
+	out.data = this.data;
+	out.len = this.len;
+	out.cap = this.cap;
+	out.allocator = this.allocator;
+	this.data = 0;
+	this.len = 0;
+	this.cap = 0;
 	Result<OwnedString>:result;
 	result.status = Status::Ok;
 	result.value = out;
@@ -179,6 +179,6 @@ Result<OwnedString>:StringBuilderToOwnedString(ptr<StringBuilder>:builder) {
 }
 
 Status:WriteStringToBuilder(ptr<StringBuilder>:builder, String:text) {
-	Result<usize>:result = std::StringBuilderWrite(builder, std::StringBytes(text));
+	Result<usize>:result = builder.Write(text.Bytes());
 	return(result.status);
 }

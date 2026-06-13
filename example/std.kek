@@ -7,27 +7,27 @@ i64:main() {
 	Slice<byte>:inputSlice = std::FixedSlice<byte>(input, len(input));
 	String:text = std::StringFromBytes(inputSlice);
 	assert(text.len == 5);
-	assert(std::StringEquals(text, std::StringFromBytes(inputSlice)));
+	assert(text.Equals(std::StringFromBytes(inputSlice)));
 
 	byte:prefixBytes[2] = { 104, 101 };
 	String:prefix = std::StringFromBytes(std::FixedSlice<byte>(prefixBytes, len(prefixBytes)));
-	assert(std::StringStartsWith(text, prefix));
+	assert(text.StartsWith(prefix));
 
 	byte:suffixBytes[2] = { 108, 111 };
 	String:suffix = std::StringFromBytes(std::FixedSlice<byte>(suffixBytes, len(suffixBytes)));
-	assert(std::StringEndsWith(text, suffix));
+	assert(text.EndsWith(suffix));
 
 	byte:out[8] = {0};
 	MemoryWriter:writer = std::MemoryWriterNew(std::FixedSpan<byte>(out, len(out)));
-	Result<usize>:writeResult = std::MemoryWrite(&writer, inputSlice);
+	Result<usize>:writeResult = writer.Write(inputSlice);
 	assert(writeResult.status == Status::Ok);
 	assert(writeResult.value == 5);
-	assert(std::MemoryWritten(&writer) == 5);
+	assert(writer.Written() == 5);
 	assert(out[1] == 101);
 
 	MemoryReader:reader = std::MemoryReaderNew(inputSlice);
 	byte:readOut[3] = {0};
-	Result<usize>:readResult = std::MemoryRead(&reader, std::FixedSpan<byte>(readOut, len(readOut)));
+	Result<usize>:readResult = reader.Read(std::FixedSpan<byte>(readOut, len(readOut)));
 	assert(readResult.status == Status::Ok);
 	assert(readResult.value == 3);
 	assert(readOut[2] == 108);
@@ -40,8 +40,8 @@ i64:main() {
 
 	StringBuilder:builder = std::StringBuilderNew(allocator);
 	assert(std::WriteStringToBuilder(&builder, text) == Status::Ok);
-	String:built = std::StringBuilderView(&builder);
-	assert(std::StringEquals(built, text));
+	String:built = builder.View();
+	assert(built.Equals(text));
 	assert(std::FormatI64ToBuilder(&builder, -42) == Status::Ok);
 	assert(std::FormatU64ToBuilder(&builder, 31, 16) == Status::Ok);
 	assert(std::FormatBoolToBuilder(&builder, true) == Status::Ok);
@@ -50,42 +50,43 @@ i64:main() {
 		49, 70, 116, 114, 117, 101,
 	};
 	String:formatted = std::StringFromBytes(std::FixedSlice<byte>(formattedBytes, len(formattedBytes)));
-	assert(std::StringEquals(std::StringBuilderView(&builder), formatted));
-	Result<OwnedString>:ownedResult = std::StringBuilderToOwnedString(&builder);
+	String:formattedView = builder.View();
+	assert(formattedView.Equals(formatted));
+	Result<OwnedString>:ownedResult = builder.ToOwnedString();
 	assert(ownedResult.status == Status::Ok);
 	assert(ownedResult.value.len == 14);
 	OwnedString:owned = ownedResult.value;
-	assert(std::OwnedStringDestroy(&owned) == Status::Ok);
-	assert(std::StringBuilderDestroy(&builder) == Status::Ok);
+	assert(owned.Destroy() == Status::Ok);
+	assert(builder.Destroy() == Status::Ok);
 
 	Array<byte>:array = std::ArrayNew<byte>(allocator);
-	assert(std::ArrayReserve<byte>(&array, 2) == Status::Ok);
-	assert(std::ArrayPush<byte>(&array, 7) == Status::Ok);
-	assert(std::ArrayPush<byte>(&array, 9) == Status::Ok);
-	Result<byte>:item = std::ArrayGet<byte>(&array, 1);
+	assert(array.Reserve(2) == Status::Ok);
+	assert(array.Push(7) == Status::Ok);
+	assert(array.Push(9) == Status::Ok);
+	Result<byte>:item = array.Get(1);
 	assert(item.status == Status::Ok);
 	assert(item.value == 9);
-	assert(std::ArraySet<byte>(&array, 1, 11) == Status::Ok);
-	Result<byte>:popped = std::ArrayPop<byte>(&array);
+	assert(array.Set(1, 11) == Status::Ok);
+	Result<byte>:popped = array.Pop();
 	assert(popped.status == Status::Ok);
 	assert(popped.value == 11);
-	assert(std::ArrayDestroy<byte>(&array) == Status::Ok);
+	assert(array.Destroy() == Status::Ok);
 
 	ptr<ListNode<byte>>:nodeForSpecialization = std::Alloc<ListNode<byte>>(allocator, 1);
 	assert(nodeForSpecialization != 0);
 	std::Free<ListNode<byte>>(allocator, nodeForSpecialization, 1);
 
 	LinkedList<byte>:list = std::LinkedListNew<byte>(allocator);
-	assert(std::LinkedListPushBack<byte>(&list, 3) == Status::Ok);
-	assert(std::LinkedListPushFront<byte>(&list, 2) == Status::Ok);
+	assert(list.PushBack(3) == Status::Ok);
+	assert(list.PushFront(2) == Status::Ok);
 	assert(list.len == 2);
-	Result<byte>:front = std::LinkedListPopFront<byte>(&list);
+	Result<byte>:front = list.PopFront();
 	assert(front.status == Status::Ok);
 	assert(front.value == 2);
-	Result<byte>:back = std::LinkedListPopBack<byte>(&list);
+	Result<byte>:back = list.PopBack();
 	assert(back.status == Status::Ok);
 	assert(back.value == 3);
-	assert(std::LinkedListDestroy<byte>(&list) == Status::Ok);
+	assert(list.Destroy() == Status::Ok);
 
 	byte:filePath[17] = {
 		111, 117, 116, 47, 115, 116, 100, 108,
@@ -94,8 +95,8 @@ i64:main() {
 	Result<File>:opened = std::FileOpenCString(filePath, FileMode::Write);
 	assert(opened.status == Status::Ok);
 	File:file = opened.value;
-	assert(std::FileWrite(&file, inputSlice).status == Status::Ok);
-	assert(std::FileClose(&file) == Status::Ok);
+	assert(file.Write(inputSlice).status == Status::Ok);
+	assert(file.Close() == Status::Ok);
 
 	return(0);
 }

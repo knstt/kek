@@ -1834,6 +1834,9 @@ static struct KekDecl* FindGenericDecl(struct KekModule* modules, size_t count, 
     return NULL;
 }
 
+static int TypedDeclIsMethod(struct KekDecl* decl);
+static struct AstNode* TypedDeclReceiverName(struct KekDecl* decl);
+
 static struct CGenericInstance* FindGenericInstance(struct CGenericInstance* instances, size_t count, struct KekDecl* decl, struct AstNode* args) {
     for (size_t i = 0; i < count; i++) {
         if (instances[i].decl == decl && instances[i].args == args) {
@@ -1890,15 +1893,26 @@ static void AddGenericFunctionInstance(struct CWriter* writer, struct KekDecl* d
         return;
     }
 
-    char prefix[64] = {0};
-    if (declFile) {
-        PackagePrefixFromPath(declFile->path, prefix, sizeof(prefix));
-    }
-    char base[128];
-    MangleGenericNameWithFiles(writer, declFile, decl->name, argsFile, args, base, sizeof(base));
     char instanceName[128];
-    snprintf(instanceName, sizeof(instanceName), "%s", prefix);
-    AppendSanitized(instanceName, sizeof(instanceName), base);
+    if (TypedDeclIsMethod(decl)) {
+        char receiver[128];
+        MangleGenericNameWithFiles(writer, declFile, TypedDeclReceiverName(decl), argsFile, args, receiver, sizeof(receiver));
+        char method[64];
+        struct SourceFile* previousFile = writer->file;
+        writer->file = declFile ? declFile : previousFile;
+        CopyTypedNodeText(writer, decl->name, method, sizeof(method));
+        writer->file = previousFile;
+        snprintf(instanceName, sizeof(instanceName), "%s_%s", receiver, method);
+    } else {
+        char prefix[64] = {0};
+        if (declFile) {
+            PackagePrefixFromPath(declFile->path, prefix, sizeof(prefix));
+        }
+        char base[128];
+        MangleGenericNameWithFiles(writer, declFile, decl->name, argsFile, args, base, sizeof(base));
+        snprintf(instanceName, sizeof(instanceName), "%s", prefix);
+        AppendSanitized(instanceName, sizeof(instanceName), base);
+    }
     if (FindGenericInstanceByName(writer->genericFunctions, writer->genericFunctionCount, instanceName)) {
         return;
     }
@@ -1918,6 +1932,37 @@ static const char* GenericStructInstanceName(struct CWriter* writer, struct KekT
     }
     MangleGenericName(writer, type->name, type->genericArgs, buffer, bufferSize);
     return buffer;
+}
+
+static void AddGenericMethodInstancesForStructs(struct CWriter* writer, struct KekModule* modules, size_t count) {
+    for (size_t i = 0; i < writer->genericStructCount; i++) {
+        struct CGenericInstance* structInstance = &writer->genericStructs[i];
+        if (!structInstance->decl || !structInstance->decl->name) {
+            continue;
+        }
+        char structName[64];
+        struct SourceFile* previousFile = writer->file;
+        writer->file = structInstance->declFile ? structInstance->declFile : previousFile;
+        CopyTypedNodeText(writer, structInstance->decl->name, structName, sizeof(structName));
+        writer->file = previousFile;
+
+        for (size_t moduleIndex = 0; moduleIndex < count; moduleIndex++) {
+            for (struct KekDecl* decl = modules[moduleIndex].firstDecl; decl; decl = decl->next) {
+                if (!decl->genericParams || !TypedDeclIsMethod(decl)) {
+                    continue;
+                }
+                struct SourceFile* declFile = modules[moduleIndex].file;
+                previousFile = writer->file;
+                writer->file = declFile ? declFile : previousFile;
+                char receiver[64];
+                CopyTypedNodeText(writer, TypedDeclReceiverName(decl), receiver, sizeof(receiver));
+                writer->file = previousFile;
+                if (strcmp(receiver, structName) == 0) {
+                    AddGenericFunctionInstance(writer, decl, declFile, structInstance->args, structInstance->argsFile);
+                }
+            }
+        }
+    }
 }
 
 static void WriteTypedNonArrayTypeWithGenericContext(struct CWriter* writer, struct KekType* type, struct AstNode* params, struct AstNode* args) {
@@ -2150,7 +2195,7 @@ static void WriteTypedCall(struct CWriter* writer, struct KekExpr* expr) {
             fputc('(', writer->out);
             struct CFunctionInfo* function = FindFunctionInfo(writer, functionName);
             if (function) {
-                WriteTypedKnownCallArgs(writer, expr, function, expr->callee->left, 0);
+                WriteTypedKnownCallArgs(writer, expr, function, expr->callee->left, FindLocalIsPointer(writer, objectName));
             } else {
                 fputc('&', writer->out);
                 WriteTypedExpr(writer, expr->callee->left);
@@ -2476,7 +2521,9 @@ static void WriteTypedDeclStatement(struct CWriter* writer, struct KekStmt* stmt
     }
     if (base && base->name) {
         char typeBuffer[128];
-        CopyTypedNodeText(writer, base->name, typeBuffer, sizeof(typeBuffer));
+        if (!GenericStructInstanceName(writer, base, typeBuffer, sizeof(typeBuffer))) {
+            CopyTypedNodeText(writer, base->name, typeBuffer, sizeof(typeBuffer));
+        }
         AddLocalTypeEx(writer, nameBuffer, typeBuffer, stmt->declType && stmt->declType->kind == KEK_TYPE_POINTER);
         if (!stmt->expr && IsKnownStruct(writer, typeBuffer)) {
             struct CStructInfo* info = FindStructInfo(writer, typeBuffer);
@@ -2642,18 +2689,33 @@ static void RegisterTypedFunctionWithName(struct CWriter* writer, const char* fu
 }
 
 static int TypedDeclIsMethod(struct KekDecl* decl) {
+    struct AstNode* receiver = TypedDeclReceiverName(decl);
+    struct AstNode* afterReceiver = receiver ? NextSibling(receiver) : NULL;
+    if (IsGenericNode(afterReceiver)) {
+        afterReceiver = NextSibling(afterReceiver);
+    }
     return decl
         && decl->kind == KEK_DECL_FUNCTION
         && decl->type
-        && NextSibling(NextSibling(decl->type))
-        && IsTokenNode(NextSibling(NextSibling(decl->type)))
-        && NextSibling(NextSibling(NextSibling(decl->type)))
-        && IsTokenNode(NextSibling(NextSibling(NextSibling(decl->type))))
-        && IsOperatorToken(&NextSibling(NextSibling(NextSibling(decl->type)))->token, OPERATOR_SCOPE);
+        && receiver
+        && IsTokenNode(receiver)
+        && afterReceiver
+        && IsTokenNode(afterReceiver)
+        && IsOperatorToken(&afterReceiver->token, OPERATOR_SCOPE);
 }
 
 static struct AstNode* TypedDeclReceiverName(struct KekDecl* decl) {
-    return TypedDeclIsMethod(decl) ? NextSibling(NextSibling(decl->type)) : NULL;
+    if (!decl || !decl->type) {
+        return NULL;
+    }
+    struct AstNode* colon = NextSibling(decl->type);
+    if (IsGenericNode(colon)) {
+        colon = NextSibling(colon);
+    }
+    if (!colon) {
+        return NULL;
+    }
+    return NextSibling(colon);
 }
 
 static void TypedFunctionName(struct CWriter* writer, struct KekDecl* decl, char* buffer, size_t bufferSize) {
@@ -2751,9 +2813,25 @@ static void WriteTypedGenericFunctionInstance(struct CWriter* writer, struct CGe
 
     WriteTypedBaseType(writer, decl->parsedType);
     fprintf(writer->out, " %s(", instance->name);
-    WriteTypedParams(writer, decl);
+    if (TypedDeclIsMethod(decl)) {
+        char receiver[128];
+        MangleGenericNameWithFiles(writer, instance->declFile, TypedDeclReceiverName(decl), instance->argsFile, instance->args, receiver, sizeof(receiver));
+        fprintf(writer->out, "struct %s* this", receiver);
+        if (decl->firstParam) {
+            fputc(',', writer->out);
+            WriteTypedParams(writer, decl);
+        }
+    } else {
+        WriteTypedParams(writer, decl);
+    }
     fputs(") ", writer->out);
+    int previousThisIsPointer = writer->thisIsPointer;
     size_t previousLocalCount = writer->localCount;
+    if (TypedDeclIsMethod(decl)) {
+        char receiver[128];
+        MangleGenericNameWithFiles(writer, instance->declFile, TypedDeclReceiverName(decl), instance->argsFile, instance->args, receiver, sizeof(receiver));
+        AddLocalTypeEx(writer, "this", receiver, 1);
+    }
     for (struct KekParam* param = decl->firstParam; param; param = param->next) {
         char paramName[64];
         char typeName[64];
@@ -2765,7 +2843,9 @@ static void WriteTypedGenericFunctionInstance(struct CWriter* writer, struct CGe
         CopyTypedNodeText(writer, base ? base->name : NULL, typeName, sizeof(typeName));
         AddLocalTypeEx(writer, paramName, typeName, param->type && param->type->kind == KEK_TYPE_POINTER);
     }
+    writer->thisIsPointer = TypedDeclIsMethod(decl);
     WriteTypedBlock(writer, decl->firstStmt);
+    writer->thisIsPointer = previousThisIsPointer;
     writer->localCount = previousLocalCount;
 
     writer->file = previousFile;
@@ -2879,6 +2959,11 @@ static void WriteTypedDecl(struct CWriter* writer, struct KekDecl* decl) {
             fputs(") ", writer->out);
             int previousThisIsPointer = writer->thisIsPointer;
             size_t previousLocalCount = writer->localCount;
+            if (TypedDeclIsMethod(decl)) {
+                char receiver[64];
+                CopyTypedNodeText(writer, TypedDeclReceiverName(decl), receiver, sizeof(receiver));
+                AddLocalTypeEx(writer, "this", receiver, 1);
+            }
             for (struct KekParam* param = decl->firstParam; param; param = param->next) {
                 char paramName[64];
                 char typeName[64];
@@ -3015,6 +3100,8 @@ int WriteTypedCFileForModules(const char* path, struct KekModule* modules, size_
         }
     }
 
+    AddGenericMethodInstancesForStructs(&writer, modules, count);
+
     for (size_t i = 0; i < count; i++) {
         writer.file = modules[i].file;
         if (modules[i].file && i + 1 < count) {
@@ -3034,7 +3121,7 @@ int WriteTypedCFileForModules(const char* path, struct KekModule* modules, size_
 
     for (size_t i = 0; i < writer.genericFunctionCount; i++) {
         writer.file = writer.genericFunctions[i].declFile ? writer.genericFunctions[i].declFile : writer.file;
-        RegisterTypedFunctionWithName(&writer, writer.genericFunctions[i].name, writer.genericFunctions[i].decl, 0);
+        RegisterTypedFunctionWithName(&writer, writer.genericFunctions[i].name, writer.genericFunctions[i].decl, TypedDeclIsMethod(writer.genericFunctions[i].decl));
     }
 
     for (size_t i = 0; i < writer.genericStructCount; i++) {

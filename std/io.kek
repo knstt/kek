@@ -26,54 +26,54 @@ MemoryWriter:MemoryWriterNew(Span<byte>:data) {
 	return(writer);
 }
 
-Result<usize>:MemoryRead(ptr<MemoryReader>:reader, Span<byte>:out) {
+Result<usize>:MemoryReader::Read(Span<byte>:out) {
 	Result<usize>:result;
-	if (reader.pos >= reader.len) {
+	if (this.pos >= this.len) {
 		result.status = Status::End;
 		return(result);
 	}
 
-	usize:remaining = reader.len - reader.pos;
+	usize:remaining = this.len - this.pos;
 	usize:amount = out.len;
 	if (amount > remaining) {
 		amount = remaining;
 	}
 
 	for (usize:i = 0; i < amount; i++) {
-		out.data[i] = reader.data[reader.pos + i];
+		out.data[i] = this.data[this.pos + i];
 	}
 
-	reader.pos += amount;
+	this.pos += amount;
 	result.status = Status::Ok;
 	result.value = amount;
 	return(result);
 }
 
-Result<usize>:MemoryWrite(ptr<MemoryWriter>:writer, Slice<byte>:data) {
+Result<usize>:MemoryWriter::Write(Slice<byte>:data) {
 	Result<usize>:result;
-	usize:remaining = writer.len - writer.pos;
+	usize:remaining = this.len - this.pos;
 	if (data.len > remaining) {
 		result.status = Status::NoMemory;
-		result.value = writer.pos;
+		result.value = this.pos;
 		return(result);
 	}
 
 	for (usize:i = 0; i < data.len; i++) {
-		writer.data[writer.pos + i] = data.data[i];
+		this.data[this.pos + i] = data.data[i];
 	}
 
-	writer.pos += data.len;
+	this.pos += data.len;
 	result.status = Status::Ok;
 	result.value = data.len;
 	return(result);
 }
 
-usize:MemoryWritten(ptr<MemoryWriter>:writer) {
-	return(writer.pos);
+usize:MemoryWriter::Written() {
+	return(this.pos);
 }
 
 Status:WriteByteToMemory(ptr<MemoryWriter>:writer, byte:value) {
 	byte:buffer[1] = { value };
-	Result<usize>:result = MemoryWrite(writer, std::FixedSlice<byte>(buffer, 1));
+	Result<usize>:result = writer.Write(std::FixedSlice<byte>(buffer, 1));
 	return(result.status);
 }

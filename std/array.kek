@@ -14,23 +14,23 @@ Array<T>:ArrayNew<T>(Allocator:allocator) {
 	return(array);
 }
 
-Status:ArrayDestroy<T>(ptr<Array<T>>:array) {
-	if (array.data != 0) {
-		Free<T>(array.allocator, array.data, array.cap);
+Status:Array<T>::Destroy() {
+	if (this.data != 0) {
+		Free<T>(this.allocator, this.data, this.cap);
 	}
-	array.data = 0;
-	array.len = 0;
-	array.cap = 0;
+	this.data = 0;
+	this.len = 0;
+	this.cap = 0;
 	return(Status::Ok);
 }
 
-Status:ArrayReserve<T>(ptr<Array<T>>:array, usize:additional) {
-	usize:needed = array.len + additional;
-	if (needed <= array.cap) {
+Status:Array<T>::Reserve(usize:additional) {
+	usize:needed = this.len + additional;
+	if (needed <= this.cap) {
 		return(Status::Ok);
 	}
 
-	usize:newCap = array.cap;
+	usize:newCap = this.cap;
 	if (newCap == 0) {
 		newCap = 8;
 	}
@@ -38,66 +38,66 @@ Status:ArrayReserve<T>(ptr<Array<T>>:array, usize:additional) {
 		newCap = newCap * 2;
 	}
 
-	ptr<T>:newData = std::Resize<T>(array.allocator, array.data, array.cap, newCap);
+	ptr<T>:newData = std::Resize<T>(this.allocator, this.data, this.cap, newCap);
 	if (newData == 0) {
 		return(Status::NoMemory);
 	}
-	array.data = newData;
-	array.cap = newCap;
+	this.data = newData;
+	this.cap = newCap;
 	return(Status::Ok);
 }
 
-Status:ArrayPush<T>(ptr<Array<T>>:array, T:value) {
-	Status:status = std::ArrayReserve<T>(array, 1);
+Status:Array<T>::Push(T:value) {
+	Status:status = this.Reserve(1);
 	if (status != Status::Ok) {
 		return(status);
 	}
-	array.data[array.len] = value;
-	array.len += 1;
+	this.data[this.len] = value;
+	this.len += 1;
 	return(Status::Ok);
 }
 
-Result<T>:ArrayPop<T>(ptr<Array<T>>:array) {
+Result<T>:Array<T>::Pop() {
 	Result<T>:result;
-	if (array.len == 0) {
+	if (this.len == 0) {
 		result.status = Status::End;
 		return(result);
 	}
-	array.len -= 1;
+	this.len -= 1;
 	result.status = Status::Ok;
-	result.value = array.data[array.len];
+	result.value = this.data[this.len];
 	return(result);
 }
 
-Result<T>:ArrayGet<T>(ptr<Array<T>>:array, usize:index) {
+Result<T>:Array<T>::Get(usize:index) {
 	Result<T>:result;
-	if (index >= array.len) {
+	if (index >= this.len) {
 		result.status = Status::Invalid;
 		return(result);
 	}
 	result.status = Status::Ok;
-	result.value = array.data[index];
+	result.value = this.data[index];
 	return(result);
 }
 
-Status:ArraySet<T>(ptr<Array<T>>:array, usize:index, T:value) {
-	if (index >= array.len) {
+Status:Array<T>::Set(usize:index, T:value) {
+	if (index >= this.len) {
 		return(Status::Invalid);
 	}
-	array.data[index] = value;
+	this.data[index] = value;
 	return(Status::Ok);
 }
 
-Span<T>:ArraySpan<T>(ptr<Array<T>>:array) {
+Span<T>:Array<T>::Span() {
 	Span<T>:out;
-	out.data = array.data;
-	out.len = array.len;
+	out.data = this.data;
+	out.len = this.len;
 	return(out);
 }
 
-Slice<T>:ArraySlice<T>(ptr<Array<T>>:array) {
+Slice<T>:Array<T>::Slice() {
 	Slice<T>:out;
-	out.data = array.data;
-	out.len = array.len;
+	out.data = this.data;
+	out.len = this.len;
 	return(out);
 }
