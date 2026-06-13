@@ -222,7 +222,11 @@ static struct AstNode* ParseGenericDelimited(struct Parser* parser) {
 }
 
 static int ShouldParseGenericList(struct Parser* parser, struct AstNode* previousChild) {
-    if (!previousChild || previousChild->type != AST_TOKEN || previousChild->token.type != TOKEN_IDENTIFIER) {
+    if (!previousChild || previousChild->type != AST_TOKEN) {
+        return 0;
+    }
+    // Allow identifiers and keywords to have generic arguments
+    if (previousChild->token.type != TOKEN_IDENTIFIER && previousChild->token.type != TOKEN_KEYWORD) {
         return 0;
     }
     if (TokenTextEquals(parser, &previousChild->token, "cast")) {

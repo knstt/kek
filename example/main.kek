@@ -2,7 +2,7 @@
 
 // Packages map directly to directories.
 // This imports all Kek files under example/MyPackage/ as the MyPackage package.
-using MyPackage;
+#import(example/MyPackage);
 
 // Variables and struct fields are zero-initialized by default.
 // A compile-time default value can override that zero value.
@@ -158,8 +158,6 @@ assert(len(MyArray) == 16);
 u8:MyMatrix[4][4] = {0};
 
 u8:MyValue = MyArray[0];  // First element.
-MyValue = MyArray[-1];    // Last element. Negative indexes count from the end.
-MyValue = MyArray[-2];    // Second-to-last element.
 
 for (u8:i = 0; i < 10; i++) {
 	if (i == 2) {
@@ -204,20 +202,20 @@ if (!false) {
 }
 
 // Switch follows C-style control flow: explicit break and a default case.
-switch MyEnumValue {
-	case MyEnum::None: {
+switch(MyEnumValue) {
+	case(MyEnum::None): {
 		MyFunc(0);
 		break;
 	}
-	case MyEnum::First: {
+	case(MyEnum::First): {
 		MyFunc(1);
 		break;
 	}
-	case MyEnum::Second: {
+	case(MyEnum::Second): {
 		MyFunc(2);
 		break;
 	}
-	case MyEnum::Third: {
+	case(MyEnum::Third): {
 		MyFunc(3);
 		break;
 	}
@@ -246,6 +244,3 @@ do {
 if (Tmp < 0) {
 	panic("Tmp must not be negative");
 }
-
-
-29ß429

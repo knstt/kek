@@ -123,6 +123,7 @@ enum KeywordType {
     KEYWORD_CASE,
     KEYWORD_DEFAULT,
     KEYWORD_IN,
+    KEYWORD_EACH,
     KEYWORD_PACKED,
     KEYWORD_ALIGNED,
     KEYWORD_COMPTIME,
@@ -130,6 +131,8 @@ enum KeywordType {
     KEYWORD_TAGGED,
     KEYWORD_TRUE,
     KEYWORD_FALSE,
+    KEYWORD_UNREACHABLE,
+    KEYWORD_PANIC,
 
     KEYWORD_COUNT
 };
@@ -232,6 +235,7 @@ enum KekStmtKind {
     KEK_STMT_WHILE,
     KEK_STMT_DO_WHILE,
     KEK_STMT_FOR,
+    KEK_STMT_EACH,
     KEK_STMT_SWITCH,
     KEK_STMT_CASE,
     KEK_STMT_DEFAULT,
@@ -239,6 +243,8 @@ enum KekStmtKind {
     KEK_STMT_RETURN,
     KEK_STMT_BREAK,
     KEK_STMT_CONTINUE,
+    KEK_STMT_UNREACHABLE,
+    KEK_STMT_PANIC,
     KEK_STMT_UNKNOWN,
 
     KEK_STMT_COUNT
@@ -259,6 +265,11 @@ enum KekExprKind {
     KEK_EXPR_BINARY,
     KEK_EXPR_ASSIGN,
     KEK_EXPR_CAST,
+    KEK_EXPR_SIZEOF,
+    KEK_EXPR_ALIGNOF,
+    KEK_EXPR_OFFSETOF,
+    KEK_EXPR_LEN,
+    KEK_EXPR_RANGE,
     KEK_EXPR_UNKNOWN,
 
     KEK_EXPR_COUNT
@@ -335,6 +346,7 @@ struct KekExpr {
     struct KekExpr* firstArg;
     struct KekExpr* lastArg;
     struct KekExpr* next;
+    struct KekExpr* step;         // Step expression (for range)
 };
 
 struct KekStmt {
@@ -350,6 +362,8 @@ struct KekStmt {
     struct KekStmt* firstChild;
     struct KekStmt* lastChild;
     struct KekStmt* next;
+    struct KekType* indexType;    // Type of index variable (for each)
+    struct AstNode* indexName;    // Name of index variable (for each)
 };
 
 struct KekParam {
@@ -368,6 +382,9 @@ struct KekField {
     struct AstNode* name;
     struct KekExpr* defaultValue;
     struct KekField* next;
+    struct KekField* nestedFields;  // For nested struct definitions
+    struct KekField* lastNestedField;
+    int isNestedStruct;
 };
 
 struct KekVariant {

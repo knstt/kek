@@ -45,6 +45,7 @@ struct CWriter {
     char namespacePrefix[64];
     struct KekStmt* deferred[128];
     size_t deferCount;
+    int eachIndexCounter;
 };
 
 static int IsPunctuationToken(struct Token* token, enum PunctuationType punctuation) {
@@ -75,6 +76,32 @@ static const char* CTokenText(struct Token* token, struct SourceFile* file, char
         }
         memcpy(buffer, file->content + token->location.offset, length);
         buffer[length] = '\0';
+
+        // Handle number literal normalization for C compatibility
+        if (token->type == TOKEN_NUMBER && length > 0) {
+            // Strip underscores from numeric literals
+            char* src = buffer;
+            char* dst = buffer;
+            while (*src) {
+                if (*src != '_') {
+                    *dst++ = *src;
+                }
+                src++;
+            }
+            *dst = '\0';
+
+            // Convert binary literals (0b...) to hex for C11 compatibility
+            if (buffer[0] == '0' && (buffer[1] == 'b' || buffer[1] == 'B')) {
+                unsigned long long value = 0;
+                char* p = buffer + 2;
+                while (*p == '0' || *p == '1') {
+                    value = (value << 1) | (*p - '0');
+                    p++;
+                }
+                snprintf(buffer, bufferSize, "0x%llX", value);
+            }
+        }
+
         return buffer;
     }
 
@@ -357,7 +384,8 @@ static void WritePrelude(FILE* out) {
     fputs("typedef int64_t i64;\n", out);
     fputs("typedef float f32;\n", out);
     fputs("typedef double f64;\n", out);
-    fputs("typedef void* ptr;\n\n", out);
+    fputs("typedef void* ptr;\n", out);
+    fputs("typedef const char* str;\n\n", out);
 }
 
 static void PackagePrefixFromPath(const char* path, char* buffer, size_t bufferSize) {
@@ -570,6 +598,11 @@ static void CopyExprSource(struct CWriter* writer, struct KekExpr* expr, char* b
 }
 
 static void CopyTypedFieldDefault(struct CWriter* writer, struct KekField* field, char* buffer, size_t bufferSize) {
+    if (field && field->isNestedStruct) {
+        snprintf(buffer, bufferSize, "{0}");
+        return;
+    }
+
     if (field && field->defaultValue) {
         CopyExprSource(writer, field->defaultValue, buffer, bufferSize);
         return;
@@ -1223,6 +1256,51 @@ static void WriteTypedExpr(struct CWriter* writer, struct KekExpr* expr) {
             WriteTypedExpr(writer, expr->right);
             fputs("))", writer->out);
             break;
+        case KEK_EXPR_SIZEOF:
+            fputs("sizeof(", writer->out);
+            if (expr->type) {
+                WriteTypedBaseType(writer, expr->type);
+            } else if (expr->right) {
+                WriteTypedExpr(writer, expr->right);
+            }
+            fputc(')', writer->out);
+            break;
+        case KEK_EXPR_ALIGNOF:
+            fputs("_Alignof(", writer->out);
+            if (expr->type) {
+                WriteTypedBaseType(writer, expr->type);
+            }
+            fputc(')', writer->out);
+            break;
+        case KEK_EXPR_OFFSETOF:
+            fputs("offsetof(", writer->out);
+            if (expr->type) {
+                WriteTypedBaseType(writer, expr->type);
+            }
+            fputc(',', writer->out);
+            if (expr->right) {
+                WriteTypedExpr(writer, expr->right);
+            }
+            fputc(')', writer->out);
+            break;
+        case KEK_EXPR_LEN:
+            fputs("(sizeof(", writer->out);
+            if (expr->right) {
+                WriteTypedExpr(writer, expr->right);
+            }
+            fputs(")/sizeof((", writer->out);
+            if (expr->right) {
+                WriteTypedExpr(writer, expr->right);
+            }
+            fputs(")[0]))", writer->out);
+            break;
+        case KEK_EXPR_RANGE:
+            // Range expressions are primarily handled inline by KEK_STMT_EACH codegen.
+            // If range appears in other contexts (e.g., array init), emit source for now.
+            if (expr->source) {
+                WriteSourceSlice(writer->out, writer->file, expr->source->location);
+            }
+            break;
         case KEK_EXPR_UNKNOWN:
         case KEK_EXPR_COUNT:
             if (expr->source) {
@@ -1393,6 +1471,85 @@ static void WriteTypedStatement(struct CWriter* writer, struct KekStmt* stmt) {
             fputs(") ", writer->out);
             WriteTypedBlock(writer, FirstTypedBlockChild(stmt));
             break;
+        case KEK_STMT_EACH: {
+            // each<Type:val>(arr){ body } or each<IndexType:i, Type:val>(arr){ body }
+            char idxName[64];
+            char valName[64];
+
+            // Determine index variable name
+            if (stmt->indexName) {
+                // User provided index variable
+                CopyTypedNodeText(writer, stmt->indexName, idxName, sizeof(idxName));
+            } else {
+                // Generate hidden index variable
+                snprintf(idxName, sizeof(idxName), "__kek_each_idx_%d", writer->eachIndexCounter++);
+            }
+
+            // Get value variable name
+            CopyTypedNodeText(writer, stmt->declName, valName, sizeof(valName));
+
+            // Check if iterating over a range expression
+            if (stmt->expr && stmt->expr->kind == KEK_EXPR_RANGE) {
+                // Optimized: direct for loop over range
+                // for (Type var = start; var < end; var += step) { body }
+                struct KekExpr* range = stmt->expr;
+
+                fputs("for (", writer->out);
+                WriteTypedBaseType(writer, stmt->declType);
+                fprintf(writer->out, " %s = ", valName);
+                WriteTypedExpr(writer, range->left);  // start
+                fprintf(writer->out, "; %s < ", valName);
+                WriteTypedExpr(writer, range->right); // end
+                fprintf(writer->out, "; %s += ", valName);
+                if (range->step) {
+                    WriteTypedExpr(writer, range->step);
+                } else {
+                    fputc('1', writer->out);
+                }
+                fputs(") ", writer->out);
+                WriteTypedBlock(writer, FirstTypedBlockChild(stmt));
+            } else {
+                // Array iteration
+                // for (IndexType idx = 0; idx < (sizeof(arr)/sizeof(arr[0])); idx++) {
+                //     Type val = arr[idx];
+                //     body
+                // }
+                fputs("for (", writer->out);
+                if (stmt->indexType) {
+                    WriteTypedBaseType(writer, stmt->indexType);
+                } else {
+                    fputs("size_t", writer->out);
+                }
+                fprintf(writer->out, " %s = 0; %s < (sizeof(", idxName, idxName);
+                WriteTypedExpr(writer, stmt->expr);
+                fputs(")/sizeof((", writer->out);
+                WriteTypedExpr(writer, stmt->expr);
+                fprintf(writer->out, ")[0])); %s++) {\n", idxName);
+                writer->indent++;
+
+                // Declare value variable at the top of the block
+                WriteIndent(writer->out, writer->indent);
+                WriteTypedBaseType(writer, stmt->declType);
+                fprintf(writer->out, " %s = (", valName);
+                WriteTypedExpr(writer, stmt->expr);
+                fprintf(writer->out, ")[%s];\n", idxName);
+
+                // Write body statements from the block
+                struct KekStmt* block = FirstTypedBlockChild(stmt);
+                if (block) {
+                    for (struct KekStmt* child = block->firstChild; child; child = child->next) {
+                        WriteIndent(writer->out, writer->indent);
+                        WriteTypedStatement(writer, child);
+                        fputc('\n', writer->out);
+                    }
+                }
+
+                writer->indent--;
+                WriteIndent(writer->out, writer->indent);
+                fputc('}', writer->out);
+            }
+            break;
+        }
         case KEK_STMT_SWITCH:
             fputs("switch (", writer->out);
             WriteTypedExpr(writer, stmt->condition);
@@ -1409,7 +1566,10 @@ static void WriteTypedStatement(struct CWriter* writer, struct KekStmt* stmt) {
             break;
         case KEK_STMT_DEFAULT:
             fputs("default:", writer->out);
-            if (stmt->expr) {
+            if (FirstTypedBlockChild(stmt)) {
+                fputc(' ', writer->out);
+                WriteTypedBlock(writer, FirstTypedBlockChild(stmt));
+            } else if (stmt->expr) {
                 fputc(' ', writer->out);
                 WriteTypedExpr(writer, stmt->expr);
                 fputc(';', writer->out);
@@ -1432,6 +1592,18 @@ static void WriteTypedStatement(struct CWriter* writer, struct KekStmt* stmt) {
             break;
         case KEK_STMT_CONTINUE:
             fputs("continue;", writer->out);
+            break;
+        case KEK_STMT_UNREACHABLE:
+            fputs("__builtin_unreachable();", writer->out);
+            break;
+        case KEK_STMT_PANIC:
+            fputs("do { fprintf(stderr, \"panic: %s\\n\", ", writer->out);
+            if (stmt->expr) {
+                WriteTypedExpr(writer, stmt->expr);
+            } else {
+                fputs("\"\"", writer->out);
+            }
+            fputs("); abort(); } while(0);", writer->out);
             break;
         case KEK_STMT_UNKNOWN:
         case KEK_STMT_COUNT:
@@ -1550,9 +1722,44 @@ static int AttributeListContains(struct CWriter* writer, struct AstNode* attribu
     return 0;
 }
 
+static int GetAlignedValue(struct CWriter* writer, struct AstNode* attributes) {
+    if (!attributes || attributes->type != AST_INDEX) {
+        return 0;
+    }
+
+    for (struct AstNode* statement = attributes->firstChild; statement; statement = statement->nextSibling) {
+        struct AstNode* first = statement->firstChild;
+        if (!first || !IsTokenNode(first)) {
+            continue;
+        }
+        char buffer[256];
+        const char* text = CTokenText(&first->token, writer->file, buffer, sizeof(buffer));
+        if (strcmp(text, "aligned") == 0) {
+            struct AstNode* group = first->nextSibling;
+            if (group && group->type == AST_GROUP && group->firstChild && group->firstChild->firstChild) {
+                struct AstNode* valueNode = group->firstChild->firstChild;
+                if (IsTokenNode(valueNode) && valueNode->token.type == TOKEN_NUMBER) {
+                    CopyTokenText(&valueNode->token, writer->file, buffer, sizeof(buffer));
+                    return atoi(buffer);
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
 static int TypedDeclHasAttribute(struct CWriter* writer, struct KekDecl* decl, const char* name) {
     struct AstNode* first = decl && decl->source ? decl->source->firstChild : NULL;
     return first && first->type == AST_INDEX && AttributeListContains(writer, first, name);
+}
+
+static int TypedDeclGetAlignedValue(struct CWriter* writer, struct KekDecl* decl) {
+    struct AstNode* first = decl && decl->source ? decl->source->firstChild : NULL;
+    if (first && first->type == AST_INDEX) {
+        return GetAlignedValue(writer, first);
+    }
+    return 0;
 }
 
 static void WriteTypedParams(struct CWriter* writer, struct KekDecl* decl) {
@@ -1737,8 +1944,22 @@ static void WriteTypedDecl(struct CWriter* writer, struct KekDecl* decl) {
             break;
         case KEK_DECL_STRUCT:
             fputs("struct", writer->out);
-            if (TypedDeclHasAttribute(writer, decl, "packed")) {
-                fputs(" __attribute__((packed))", writer->out);
+            {
+                int isPacked = TypedDeclHasAttribute(writer, decl, "packed");
+                int alignedValue = TypedDeclGetAlignedValue(writer, decl);
+                if (isPacked || alignedValue > 0) {
+                    fputs(" __attribute__((", writer->out);
+                    if (isPacked) {
+                        fputs("packed", writer->out);
+                        if (alignedValue > 0) {
+                            fputc(',', writer->out);
+                        }
+                    }
+                    if (alignedValue > 0) {
+                        fprintf(writer->out, "aligned(%d)", alignedValue);
+                    }
+                    fputs("))", writer->out);
+                }
             }
             fputc(' ', writer->out);
             fputs(TypedNodeText(writer, decl->name, name, sizeof(name)), writer->out);
@@ -1746,8 +1967,23 @@ static void WriteTypedDecl(struct CWriter* writer, struct KekDecl* decl) {
             writer->indent++;
             for (struct KekField* field = decl->firstField; field; field = field->next) {
                 WriteIndent(writer->out, writer->indent);
-                WriteTypedTypeAndName(writer, field->type, field->name);
-                fputs(";\n", writer->out);
+                if (field->isNestedStruct) {
+                    // Nested struct: emit inline struct definition
+                    char nestedName[128];
+                    fputs("struct {\n", writer->out);
+                    writer->indent++;
+                    for (struct KekField* nested = field->nestedFields; nested; nested = nested->next) {
+                        WriteIndent(writer->out, writer->indent);
+                        WriteTypedTypeAndName(writer, nested->type, nested->name);
+                        fputs(";\n", writer->out);
+                    }
+                    writer->indent--;
+                    WriteIndent(writer->out, writer->indent);
+                    fprintf(writer->out, "} %s;\n", TypedNodeText(writer, field->name, nestedName, sizeof(nestedName)));
+                } else {
+                    WriteTypedTypeAndName(writer, field->type, field->name);
+                    fputs(";\n", writer->out);
+                }
             }
             writer->indent--;
             fputs("};", writer->out);

@@ -76,6 +76,45 @@ void KekAddDiagnosticFormat(struct KekDiagnosticBag* bag, enum KekDiagnosticSeve
     KekAddDiagnostic(bag, severity, phase, fileIndex, location, message);
 }
 
+static void PrintSourceLine(FILE* out, struct SourceFile* file, struct SourceLocation location) {
+    if (!file || !file->content || location.offset > file->length) {
+        return;
+    }
+
+    // Find the start of the line
+    size_t lineStart = location.offset;
+    while (lineStart > 0 && file->content[lineStart - 1] != '\n') {
+        lineStart--;
+    }
+
+    // Find the end of the line
+    size_t lineEnd = location.offset;
+    while (lineEnd < file->length && file->content[lineEnd] != '\n') {
+        lineEnd++;
+    }
+
+    // Print the source line
+    size_t lineLength = lineEnd - lineStart;
+    if (lineLength > 0) {
+        fprintf(out, " %5zu | %.*s\n", location.line, (int)lineLength, file->content + lineStart);
+
+        // Print the column marker
+        fprintf(out, "       | ");
+        size_t markerCol = location.offset - lineStart;
+        for (size_t j = 0; j < markerCol; j++) {
+            char c = file->content[lineStart + j];
+            fputc(c == '\t' ? '\t' : ' ', out);
+        }
+        fputc('^', out);
+        // Extend marker for multi-character tokens
+        size_t tokenLen = location.length > 0 ? location.length : 1;
+        for (size_t j = 1; j < tokenLen && (lineStart + markerCol + j) < lineEnd; j++) {
+            fputc('~', out);
+        }
+        fputc('\n', out);
+    }
+}
+
 void PrintKekDiagnostics(FILE* out, struct KekDiagnosticBag* bag, struct FileTable* table) {
     if (!out || !bag) {
         return;
@@ -84,10 +123,12 @@ void PrintKekDiagnostics(FILE* out, struct KekDiagnosticBag* bag, struct FileTab
     for (size_t i = 0; i < bag->count; i++) {
         struct KekDiagnostic* diagnostic = &bag->items[i];
         const char* path = "<unknown>";
+        struct SourceFile* file = NULL;
         if (table
             && diagnostic->fileIndex >= 0
             && (size_t)diagnostic->fileIndex < table->count) {
-            path = table->files[diagnostic->fileIndex].path;
+            file = &table->files[diagnostic->fileIndex];
+            path = file->path;
         }
         fprintf(out, "%s:%zu:%zu: %s[%s]: %s\n",
             path,
@@ -96,6 +137,11 @@ void PrintKekDiagnostics(FILE* out, struct KekDiagnosticBag* bag, struct FileTab
             DiagnosticSeverityName(diagnostic->severity),
             DiagnosticPhaseName(diagnostic->phase),
             diagnostic->message);
+
+        // Print the source line with column marker
+        if (file && diagnostic->location.line > 0) {
+            PrintSourceLine(out, file, diagnostic->location);
+        }
     }
 }
 

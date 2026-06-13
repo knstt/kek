@@ -82,6 +82,17 @@ not required for the first self-host.
 - [x] C backend generated from typed AST instead of structural token patterns
 - [x] C interop declarations for allocation, file IO, string/memory helpers,
       formatted output, and exit
+- [x] Binary literals with underscore separators (`0b1010_0001`)
+- [x] Hex literals with underscore separators (`0xFF_AA_00_12`)
+- [x] `sizeof(Type)` builtin
+- [x] `alignof(Type)` builtin
+- [x] `offsetof(Type, field)` builtin
+- [x] `len(array)` builtin for fixed arrays
+- [x] `[aligned(N)]` struct attribute
+- [x] `unreachable` keyword
+- [x] `panic("msg")` statement
+- [x] Nested/internal structs
+- [ ] `for..in` loops and `Range<T>()` iterator
 - [ ] Port tokenizer to Kek
 - [ ] Port typed parser to Kek
 - [ ] Port semantic analysis to Kek
