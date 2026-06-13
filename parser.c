@@ -1,4 +1,4 @@
-#include "kek.h"
+#include "kek_internal.h"
 
 const char* KekDeclKindNames[] = {
     "Import",
@@ -104,19 +104,28 @@ static struct AstNode* Next(struct AstNode* node) {
     return node ? node->nextSibling : NULL;
 }
 
-static struct KekType* AddType(struct KekFrontend* frontend, struct KekModule* module, enum KekTypeKind kind, struct AstNode* source) {
-    if (frontend->typeCount >= frontend->typeCapacity) {
+static void* AddFrontendNode(struct KekFrontend* frontend, struct KekModule* module, struct KekNodePool* pool, struct AstNode* source, const char* message) {
+    if (pool->count >= pool->capacity) {
         KekAddDiagnostic(frontend->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_TYPED_PARSE,
             module->file ? module->file->fileIndex : -1,
             source ? source->location : (struct SourceLocation){0},
-            "typed type storage capacity exceeded");
+            message);
         frontend->errorCount++;
         module->errorCount++;
         return NULL;
     }
 
-    struct KekType* type = &frontend->types[frontend->typeCount++];
-    memset(type, 0, sizeof(*type));
+    char* items = pool->items;
+    void* node = items + pool->itemSize * pool->count++;
+    memset(node, 0, pool->itemSize);
+    return node;
+}
+
+static struct KekType* AddType(struct KekFrontend* frontend, struct KekModule* module, enum KekTypeKind kind, struct AstNode* source) {
+    struct KekType* type = AddFrontendNode(frontend, module, &frontend->types, source, "typed type storage capacity exceeded");
+    if (!type) {
+        return NULL;
+    }
     type->kind = kind;
     type->source = source;
     type->location = source ? source->location : (struct SourceLocation){0};
@@ -128,18 +137,10 @@ static struct KekType* AddType(struct KekFrontend* frontend, struct KekModule* m
 }
 
 static struct KekExpr* AddExpr(struct KekFrontend* frontend, struct KekModule* module, enum KekExprKind kind, struct AstNode* source) {
-    if (frontend->exprCount >= frontend->exprCapacity) {
-        KekAddDiagnostic(frontend->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_TYPED_PARSE,
-            module->file ? module->file->fileIndex : -1,
-            source ? source->location : (struct SourceLocation){0},
-            "typed expression storage capacity exceeded");
-        frontend->errorCount++;
-        module->errorCount++;
+    struct KekExpr* expr = AddFrontendNode(frontend, module, &frontend->exprs, source, "typed expression storage capacity exceeded");
+    if (!expr) {
         return NULL;
     }
-
-    struct KekExpr* expr = &frontend->exprs[frontend->exprCount++];
-    memset(expr, 0, sizeof(*expr));
     expr->kind = kind;
     expr->source = source;
     expr->location = source ? source->location : (struct SourceLocation){0};
@@ -154,18 +155,10 @@ static struct KekExpr* AddExpr(struct KekFrontend* frontend, struct KekModule* m
 }
 
 static struct KekStmt* AddStmt(struct KekFrontend* frontend, struct KekModule* module, enum KekStmtKind kind, struct AstNode* source) {
-    if (frontend->stmtCount >= frontend->stmtCapacity) {
-        KekAddDiagnostic(frontend->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_TYPED_PARSE,
-            module->file ? module->file->fileIndex : -1,
-            source ? source->location : (struct SourceLocation){0},
-            "typed statement storage capacity exceeded");
-        frontend->errorCount++;
-        module->errorCount++;
+    struct KekStmt* stmt = AddFrontendNode(frontend, module, &frontend->stmts, source, "typed statement storage capacity exceeded");
+    if (!stmt) {
         return NULL;
     }
-
-    struct KekStmt* stmt = &frontend->stmts[frontend->stmtCount++];
-    memset(stmt, 0, sizeof(*stmt));
     stmt->kind = kind;
     stmt->source = source;
     stmt->location = source ? source->location : (struct SourceLocation){0};
@@ -177,18 +170,10 @@ static struct KekStmt* AddStmt(struct KekFrontend* frontend, struct KekModule* m
 }
 
 static struct KekParam* AddParam(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* source) {
-    if (frontend->paramCount >= frontend->paramCapacity) {
-        KekAddDiagnostic(frontend->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_TYPED_PARSE,
-            module->file ? module->file->fileIndex : -1,
-            source ? source->location : (struct SourceLocation){0},
-            "typed parameter storage capacity exceeded");
-        frontend->errorCount++;
-        module->errorCount++;
+    struct KekParam* param = AddFrontendNode(frontend, module, &frontend->params, source, "typed parameter storage capacity exceeded");
+    if (!param) {
         return NULL;
     }
-
-    struct KekParam* param = &frontend->params[frontend->paramCount++];
-    memset(param, 0, sizeof(*param));
     param->source = source;
     param->location = source ? source->location : (struct SourceLocation){0};
     module->paramCount++;
@@ -196,18 +181,10 @@ static struct KekParam* AddParam(struct KekFrontend* frontend, struct KekModule*
 }
 
 static struct KekField* AddField(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* source) {
-    if (frontend->fieldCount >= frontend->fieldCapacity) {
-        KekAddDiagnostic(frontend->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_TYPED_PARSE,
-            module->file ? module->file->fileIndex : -1,
-            source ? source->location : (struct SourceLocation){0},
-            "typed field storage capacity exceeded");
-        frontend->errorCount++;
-        module->errorCount++;
+    struct KekField* field = AddFrontendNode(frontend, module, &frontend->fields, source, "typed field storage capacity exceeded");
+    if (!field) {
         return NULL;
     }
-
-    struct KekField* field = &frontend->fields[frontend->fieldCount++];
-    memset(field, 0, sizeof(*field));
     field->source = source;
     field->location = source ? source->location : (struct SourceLocation){0};
     module->fieldCount++;
@@ -215,18 +192,10 @@ static struct KekField* AddField(struct KekFrontend* frontend, struct KekModule*
 }
 
 static struct KekVariant* AddVariant(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* source) {
-    if (frontend->variantCount >= frontend->variantCapacity) {
-        KekAddDiagnostic(frontend->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_TYPED_PARSE,
-            module->file ? module->file->fileIndex : -1,
-            source ? source->location : (struct SourceLocation){0},
-            "typed variant storage capacity exceeded");
-        frontend->errorCount++;
-        module->errorCount++;
+    struct KekVariant* variant = AddFrontendNode(frontend, module, &frontend->variants, source, "typed variant storage capacity exceeded");
+    if (!variant) {
         return NULL;
     }
-
-    struct KekVariant* variant = &frontend->variants[frontend->variantCount++];
-    memset(variant, 0, sizeof(*variant));
     variant->source = source;
     variant->location = source ? source->location : (struct SourceLocation){0};
     module->variantCount++;
@@ -234,18 +203,10 @@ static struct KekVariant* AddVariant(struct KekFrontend* frontend, struct KekMod
 }
 
 static struct KekDecl* AddDecl(struct KekFrontend* frontend, struct KekModule* module, enum KekDeclKind kind, struct AstNode* source) {
-    if (frontend->declCount >= frontend->declCapacity) {
-        KekAddDiagnostic(frontend->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_TYPED_PARSE,
-            module->file ? module->file->fileIndex : -1,
-            source ? source->location : (struct SourceLocation){0},
-            "typed declaration storage capacity exceeded");
-        frontend->errorCount++;
-        module->errorCount++;
+    struct KekDecl* decl = AddFrontendNode(frontend, module, &frontend->decls, source, "typed declaration storage capacity exceeded");
+    if (!decl) {
         return NULL;
     }
-
-    struct KekDecl* decl = &frontend->decls[frontend->declCount++];
-    memset(decl, 0, sizeof(*decl));
     decl->kind = kind;
     decl->source = source;
     decl->location = source ? source->location : (struct SourceLocation){0};

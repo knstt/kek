@@ -208,18 +208,6 @@ struct AstNode {
     size_t childCount;
 };
 
-struct Parser {
-    struct Token* tokens;
-    size_t count;
-    size_t position;
-    struct SourceFile* file;
-    struct AstNode* astNodes;
-    size_t astNodeCount;
-    size_t astNodeCapacity;
-    int errorCount;
-    struct KekDiagnosticBag* diagnostics;
-};
-
 enum KekDeclKind {
     KEK_DECL_IMPORT,
     KEK_DECL_USING,
@@ -430,33 +418,6 @@ struct KekModule {
     int errorCount;
 };
 
-struct KekFrontend {
-    struct SourceFile* file;
-    struct KekDecl* decls;
-    size_t declCount;
-    size_t declCapacity;
-    struct KekType* types;
-    size_t typeCount;
-    size_t typeCapacity;
-    struct KekExpr* exprs;
-    size_t exprCount;
-    size_t exprCapacity;
-    struct KekStmt* stmts;
-    size_t stmtCount;
-    size_t stmtCapacity;
-    struct KekParam* params;
-    size_t paramCount;
-    size_t paramCapacity;
-    struct KekField* fields;
-    size_t fieldCount;
-    size_t fieldCapacity;
-    struct KekVariant* variants;
-    size_t variantCount;
-    size_t variantCapacity;
-    int errorCount;
-    struct KekDiagnosticBag* diagnostics;
-};
-
 struct KekSymbol {
     enum KekSymbolKind kind;
     struct SourceFile* file;
@@ -547,23 +508,17 @@ const char* TokenLexeme(struct Token* token, struct SourceFile* file);
 void PrintToken(struct Token* token, struct SourceFile* file);
 void FreeTokenArray(struct TokenArray* array);
 
-struct AstNode* ParseAst(struct Parser* parser);
 void PrintAst(struct AstNode* node, struct SourceFile* file, int indent);
 void FreeAst(struct AstNode* node);
 
-struct KekModule ParseKekModule(struct KekFrontend* frontend, struct AstNode* ast, struct SourceFile* file);
 void PrintKekModuleSummary(struct KekModule* module);
 int WriteKekModuleSummaryFile(const char* path, struct KekModule* modules, size_t moduleCount, struct KekProgram* program);
-int BuildKekProgramSymbols(struct KekProgram* program, struct KekModule* modules, size_t moduleCount);
 
 int WriteAstJsonFile(const char* path, struct AstNode* ast, struct SourceFile* file);
 void WriteAstJson(FILE* out, struct AstNode* node, struct SourceFile* file, int indent);
 void WriteJsonEscaped(FILE* out, const char* text, size_t length);
 
-int WriteCFile(const char* path, struct AstNode* ast, struct SourceFile* file);
-int WriteCFileForFiles(const char* path, struct AstNode** asts, struct SourceFile** files, size_t count);
 int WriteTypedCFileForModules(const char* path, struct KekModule* modules, size_t count);
-void WriteC(FILE* out, struct AstNode* ast, struct SourceFile* file);
 
 void FreeKekCompilationUnit(struct KekCompilationUnit* unit);
 void InitKekCompilation(struct KekCompilation* compilation, struct KekDiagnostic* diagnostics, size_t diagnosticCapacity);
@@ -572,6 +527,5 @@ int LoadKekCompilation(struct KekCompilation* compilation, const char* entryPath
 int BuildKekCompilation(struct KekCompilation* compilation);
 int WriteKekCompilationOutputs(struct KekCompilation* compilation, const char* cPath, const char* astJsonPath, const char* summaryPath);
 int CompileKekSmoke(const char* entryPath, const char* cPath, const char* astJsonPath, const char* summaryPath, struct KekCompilation* compilation);
-void AttachKekDocComments(struct KekModule* module, struct TokenArray* tokens, struct SourceFile* file);
 
 #endif

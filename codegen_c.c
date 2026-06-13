@@ -26,9 +26,6 @@ struct CWriter {
     FILE* out;
     struct SourceFile* file;
     int indent;
-    int atLineStart;
-    int needSpace;
-    struct Token* previous;
     struct CFunctionInfo functions[64];
     size_t functionCount;
     struct CStructInfo structs[64];
@@ -50,10 +47,6 @@ struct CWriter {
     size_t deferCount;
 };
 
-static int IsWordToken(struct Token* token) {
-    return token->type == TOKEN_IDENTIFIER || token->type == TOKEN_NUMBER || token->type == TOKEN_KEYWORD;
-}
-
 static int IsPunctuationToken(struct Token* token, enum PunctuationType punctuation) {
     return token->type == TOKEN_PUNCTUATION && token->value.punctuation == punctuation;
 }
@@ -68,10 +61,6 @@ static int IsKeywordToken(struct Token* token, enum KeywordType keyword) {
 
 static int IsTokenNode(struct AstNode* node) {
     return node && node->type == AST_TOKEN;
-}
-
-static int IsWordTokenNode(struct AstNode* node) {
-    return IsTokenNode(node) && IsWordToken(&node->token);
 }
 
 static struct AstNode* NextSibling(struct AstNode* node) {
@@ -329,10 +318,6 @@ static void AddLocalTypeEx(struct CWriter* writer, const char* name, const char*
     writer->localCount++;
 }
 
-static void AddLocalType(struct CWriter* writer, const char* name, const char* type) {
-    AddLocalTypeEx(writer, name, type, 0);
-}
-
 static const char* FindLocalType(struct CWriter* writer, const char* name) {
     for (size_t i = writer->localCount; i > 0; i--) {
         if (strcmp(writer->localNames[i - 1], name) == 0) {
@@ -349,71 +334,6 @@ static int FindLocalIsPointer(struct CWriter* writer, const char* name) {
         }
     }
     return 0;
-}
-
-static int IsMainReturnType(struct AstNode* node, struct SourceFile* file) {
-    return IsTokenNode(node)
-        && IsTokenNode(node->nextSibling)
-        && IsTokenNode(node->nextSibling->nextSibling)
-        && TokenTextEquals(&node->token, file, "i64")
-        && IsPunctuationToken(&node->nextSibling->token, PUNCTUATION_COLON)
-        && TokenTextEquals(&node->nextSibling->nextSibling->token, file, "main");
-}
-
-static int ShouldSkipKekColon(struct AstNode* node, struct AstNode* previous) {
-    return IsTokenNode(node)
-        && IsPunctuationToken(&node->token, PUNCTUATION_COLON)
-        && IsWordTokenNode(previous)
-        && previous->token.type != TOKEN_KEYWORD
-        && IsWordTokenNode(node->nextSibling)
-        && node->nextSibling->token.type == TOKEN_IDENTIFIER;
-}
-
-static size_t NodeEndOffset(struct AstNode* node) {
-    return node->location.offset + node->location.length;
-}
-
-static int SkipWhitespaceAndComments(struct SourceFile* file, size_t* offset) {
-    for (;;) {
-        while (*offset < file->length && isspace((unsigned char)file->content[*offset])) {
-            (*offset)++;
-        }
-
-        if (*offset + 1 < file->length && file->content[*offset] == '/' && file->content[*offset + 1] == '/') {
-            *offset += 2;
-            while (*offset < file->length && file->content[*offset] != '\n') {
-                (*offset)++;
-            }
-            continue;
-        }
-
-        if (*offset + 1 < file->length && file->content[*offset] == '/' && file->content[*offset + 1] == '*') {
-            *offset += 2;
-            while (*offset + 1 < file->length) {
-                if (file->content[*offset] == '*' && file->content[*offset + 1] == '/') {
-                    *offset += 2;
-                    break;
-                }
-                (*offset)++;
-            }
-            continue;
-        }
-
-        break;
-    }
-
-    return *offset < file->length;
-}
-
-static char StatementSeparator(struct SourceFile* file, struct AstNode* statement) {
-    size_t offset = NodeEndOffset(statement);
-    if (!SkipWhitespaceAndComments(file, &offset)) {
-        return '\0';
-    }
-    if (file->content[offset] == ';' || file->content[offset] == ',') {
-        return file->content[offset];
-    }
-    return '\0';
 }
 
 static void WriteIndent(FILE* out, int indent) {
@@ -440,1118 +360,6 @@ static void WritePrelude(FILE* out) {
     fputs("typedef void* ptr;\n\n", out);
 }
 
-static void ResetStatementState(struct CWriter* writer) {
-    writer->atLineStart = 1;
-    writer->needSpace = 0;
-    writer->previous = NULL;
-}
-
-static int WriteStatement(struct CWriter* writer, struct AstNode* statement);
-static void WriteStatementList(struct CWriter* writer, struct AstNode* list, int multiline);
-static void WriteDelimited(struct CWriter* writer, struct AstNode* node, char open, char close);
-static void WriteTokenNode(struct CWriter* writer, struct AstNode* node);
-static void WriteStatementChildren(struct CWriter* writer, struct AstNode* firstChild);
-
-static void WriteStatementList(struct CWriter* writer, struct AstNode* list, int multiline) {
-    for (struct AstNode* statement = list->firstChild; statement; statement = statement->nextSibling) {
-        if (multiline && writer->atLineStart) {
-            WriteIndent(writer->out, writer->indent);
-            writer->atLineStart = 0;
-        }
-
-        if (!WriteStatement(writer, statement)) {
-            ResetStatementState(writer);
-            continue;
-        }
-
-        char separator = StatementSeparator(writer->file, statement);
-        if (separator == ';' || separator == ',') {
-            fputc(separator, writer->out);
-        }
-
-        if (multiline && separator == ',' && list->type == AST_FILE) {
-            writer->needSpace = 0;
-            writer->previous = NULL;
-            continue;
-        }
-
-        if (multiline) {
-            fputc('\n', writer->out);
-            ResetStatementState(writer);
-        } else if (separator) {
-            writer->needSpace = separator == ';';
-            writer->previous = NULL;
-        }
-    }
-}
-
-static void WriteBlock(struct CWriter* writer, struct AstNode* block) {
-    if (writer->previous && !IsPunctuationToken(writer->previous, PUNCTUATION_LEFT_PAREN)) {
-        fputc(' ', writer->out);
-    }
-
-    fputs("{\n", writer->out);
-    writer->indent++;
-    ResetStatementState(writer);
-    WriteStatementList(writer, block, 1);
-    if (writer->indent > 0) {
-        writer->indent--;
-    }
-    WriteIndent(writer->out, writer->indent);
-    fputc('}', writer->out);
-    writer->atLineStart = 0;
-    writer->needSpace = 0;
-    writer->previous = NULL;
-}
-
-static void WriteStructField(struct CWriter* writer, struct AstNode* field) {
-    struct AstNode* previousChild = NULL;
-    for (struct AstNode* child = field->firstChild; child; child = child->nextSibling) {
-        if (IsTokenNode(child) && IsOperatorToken(&child->token, OPERATOR_ASSIGN)) {
-            break;
-        }
-
-        if (ShouldSkipKekColon(child, previousChild)) {
-            previousChild = child;
-            continue;
-        }
-
-        switch (child->type) {
-            case AST_TOKEN:
-                WriteTokenNode(writer, child);
-                break;
-            case AST_BLOCK:
-                WriteBlock(writer, child);
-                break;
-            case AST_GROUP:
-                WriteDelimited(writer, child, '(', ')');
-                break;
-            case AST_INDEX:
-                WriteDelimited(writer, child, '[', ']');
-                break;
-            case AST_GENERIC:
-                WriteDelimited(writer, child, '<', '>');
-                break;
-            case AST_STATEMENT:
-            case AST_FILE:
-                WriteStatementList(writer, child, child->type == AST_FILE);
-                break;
-        }
-
-        previousChild = child;
-    }
-}
-
-static void WriteStructBlock(struct CWriter* writer, struct AstNode* block) {
-    fputs(" {\n", writer->out);
-    writer->indent++;
-    ResetStatementState(writer);
-    for (struct AstNode* field = block->firstChild; field; field = field->nextSibling) {
-        if (writer->atLineStart) {
-            WriteIndent(writer->out, writer->indent);
-            writer->atLineStart = 0;
-        }
-
-        WriteStructField(writer, field);
-
-        char separator = StatementSeparator(writer->file, field);
-        if (separator == ';' || separator == ',') {
-            fputc(separator, writer->out);
-        }
-        fputc('\n', writer->out);
-        ResetStatementState(writer);
-    }
-    if (writer->indent > 0) {
-        writer->indent--;
-    }
-    WriteIndent(writer->out, writer->indent);
-    fputc('}', writer->out);
-    writer->atLineStart = 0;
-    writer->needSpace = 0;
-    writer->previous = NULL;
-}
-
-static void WriteAttributeList(struct CWriter* writer, struct AstNode* attributes) {
-    for (struct AstNode* statement = attributes->firstChild; statement; statement = statement->nextSibling) {
-        if (!statement->firstChild || !IsTokenNode(statement->firstChild)) {
-            continue;
-        }
-
-        if (writer->needSpace) {
-            fputc(' ', writer->out);
-        }
-
-        char buffer[256];
-        fputs(CTokenText(&statement->firstChild->token, writer->file, buffer, sizeof(buffer)), writer->out);
-        writer->needSpace = 1;
-    }
-}
-
-static int AttributeListContains(struct CWriter* writer, struct AstNode* attributes, const char* name) {
-    if (!attributes || attributes->type != AST_INDEX) {
-        return 0;
-    }
-
-    for (struct AstNode* statement = attributes->firstChild; statement; statement = statement->nextSibling) {
-        if (statement->firstChild && IsTokenNode(statement->firstChild)) {
-            char buffer[256];
-            const char* text = CTokenText(&statement->firstChild->token, writer->file, buffer, sizeof(buffer));
-            if (strcmp(text, name) == 0) {
-                return 1;
-            }
-        }
-    }
-
-    return 0;
-}
-
-static int ParameterDefaultText(struct CWriter* writer, struct AstNode* parameter, char* buffer, size_t bufferSize) {
-    for (struct AstNode* child = parameter->firstChild; child; child = child->nextSibling) {
-        if (IsTokenNode(child) && IsOperatorToken(&child->token, OPERATOR_ASSIGN)) {
-            struct AstNode* value = child->nextSibling;
-            if (IsTokenNode(value)) {
-                CopyTokenText(&value->token, writer->file, buffer, bufferSize);
-                return 1;
-            }
-            break;
-        }
-    }
-
-    if (bufferSize > 0) {
-        buffer[0] = '\0';
-    }
-    return 0;
-}
-
-static int ParameterNameText(struct CWriter* writer, struct AstNode* parameter, char* buffer, size_t bufferSize) {
-    for (struct AstNode* child = parameter->firstChild; child; child = child->nextSibling) {
-        if (IsTokenNode(child)
-            && child->token.type == TOKEN_IDENTIFIER
-            && IsTokenNode(child->nextSibling)
-            && IsOperatorToken(&child->nextSibling->token, OPERATOR_ASSIGN)) {
-            CopyTokenText(&child->token, writer->file, buffer, bufferSize);
-            return 1;
-        }
-    }
-
-    if (bufferSize > 0) {
-        buffer[0] = '\0';
-    }
-    return 0;
-}
-
-static int FieldNameText(struct CWriter* writer, struct AstNode* field, char* buffer, size_t bufferSize) {
-    struct AstNode* type = field ? field->firstChild : NULL;
-    struct AstNode* colon = NextSibling(type);
-    struct AstNode* name = NextSibling(colon);
-    if (IsTokenNode(type)
-        && IsTokenNode(colon)
-        && IsPunctuationToken(&colon->token, PUNCTUATION_COLON)
-        && IsTokenNode(name)
-        && name->token.type == TOKEN_IDENTIFIER) {
-        CopyTokenText(&name->token, writer->file, buffer, bufferSize);
-        return 1;
-    }
-
-    if (bufferSize > 0) {
-        buffer[0] = '\0';
-    }
-    return 0;
-}
-
-static int FieldDefaultText(struct CWriter* writer, struct AstNode* field, char* buffer, size_t bufferSize) {
-    for (struct AstNode* child = field ? field->firstChild : NULL; child; child = child->nextSibling) {
-        if (IsTokenNode(child) && IsOperatorToken(&child->token, OPERATOR_ASSIGN)) {
-            struct AstNode* value = child->nextSibling;
-            if (IsTokenNode(value)) {
-                CopyTokenText(&value->token, writer->file, buffer, bufferSize);
-                return 1;
-            }
-            break;
-        }
-    }
-
-    if (bufferSize > 0) {
-        snprintf(buffer, bufferSize, "0");
-    }
-    return 0;
-}
-
-static void RegisterStructFields(struct CWriter* writer, struct CStructInfo* info, struct AstNode* block) {
-    if (!info || !block || block->type != AST_BLOCK) {
-        return;
-    }
-
-    for (struct AstNode* field = block->firstChild; field && info->fieldCount < 64; field = field->nextSibling) {
-        if (FieldNameText(writer, field, info->fieldNames[info->fieldCount], sizeof(info->fieldNames[info->fieldCount]))) {
-            FieldDefaultText(writer, field, info->defaults[info->fieldCount], sizeof(info->defaults[info->fieldCount]));
-            info->fieldCount++;
-        }
-    }
-}
-
-static void WriteParameter(struct CWriter* writer, struct AstNode* parameter) {
-    struct AstNode* previousChild = NULL;
-    for (struct AstNode* child = parameter->firstChild; child; child = child->nextSibling) {
-        if (IsTokenNode(child) && IsOperatorToken(&child->token, OPERATOR_ASSIGN)) {
-            break;
-        }
-
-        if (ShouldSkipKekColon(child, previousChild)) {
-            previousChild = child;
-            continue;
-        }
-
-        if (child->type == AST_TOKEN) {
-            WriteTokenNode(writer, child);
-        } else if (child->type == AST_GROUP) {
-            WriteDelimited(writer, child, '(', ')');
-        } else if (child->type == AST_INDEX) {
-            WriteDelimited(writer, child, '[', ']');
-        }
-
-        previousChild = child;
-    }
-}
-
-static void RegisterFunctionDefaults(struct CWriter* writer, const char* functionName, struct AstNode* params) {
-    if (!functionName || !params || params->type != AST_GROUP) {
-        return;
-    }
-
-    struct CFunctionInfo* function = AddFunctionInfo(writer, functionName);
-    if (!function) {
-        return;
-    }
-
-    for (struct AstNode* parameter = params->firstChild; parameter && function->paramCount < 16; parameter = parameter->nextSibling) {
-        ParameterNameText(writer, parameter, function->paramNames[function->paramCount], sizeof(function->paramNames[function->paramCount]));
-        ParameterDefaultText(writer, parameter, function->defaults[function->paramCount], sizeof(function->defaults[function->paramCount]));
-        function->paramCount++;
-    }
-}
-
-static void WriteParameterList(struct CWriter* writer, struct AstNode* params, struct AstNode* nameNode) {
-    if (params->childCount == 0) {
-        (void)nameNode;
-        fputs("void", writer->out);
-        return;
-    }
-
-    int first = 1;
-    for (struct AstNode* parameter = params->firstChild; parameter; parameter = parameter->nextSibling) {
-        if (!first) {
-            fputc(',', writer->out);
-        }
-        first = 0;
-        writer->previous = NULL;
-        writer->needSpace = 0;
-        WriteParameter(writer, parameter);
-    }
-}
-
-static int TryWriteFunction(struct CWriter* writer, struct AstNode* statement) {
-    struct AstNode* attributes = NULL;
-    struct AstNode* returnType = statement->firstChild;
-    if (returnType && returnType->type == AST_INDEX) {
-        attributes = returnType;
-        returnType = returnType->nextSibling;
-    }
-
-    struct AstNode* colon = NextSibling(returnType);
-    struct AstNode* name = NextSibling(colon);
-    struct AstNode* params = NextSibling(name);
-    struct AstNode* block = NextSibling(params);
-
-    if (!IsTokenNode(returnType)
-        || !IsTokenNode(colon)
-        || !IsPunctuationToken(&colon->token, PUNCTUATION_COLON)
-        || !IsTokenNode(name)
-        || name->token.type != TOKEN_IDENTIFIER
-        || !params
-        || params->type != AST_GROUP
-        || !block
-        || block->type != AST_BLOCK) {
-        return 0;
-    }
-
-    char nameBuffer[64];
-    char cFunctionName[128];
-    CopyTokenText(&name->token, writer->file, nameBuffer, sizeof(nameBuffer));
-    snprintf(cFunctionName, sizeof(cFunctionName), "%s%s", writer->namespacePrefix, nameBuffer);
-    RegisterFunctionDefaults(writer, cFunctionName, params);
-
-    if (attributes) {
-        WriteAttributeList(writer, attributes);
-    }
-
-    writer->previous = NULL;
-    writer->needSpace = attributes != NULL;
-    WriteTokenNode(writer, returnType);
-    fputc(' ', writer->out);
-    writer->needSpace = 0;
-    fputs(cFunctionName, writer->out);
-    fputc('(', writer->out);
-    WriteParameterList(writer, params, name);
-    fputc(')', writer->out);
-    writer->previous = &name->token;
-    writer->needSpace = 0;
-    WriteBlock(writer, block);
-    return 1;
-}
-
-static void WriteEnumVariant(struct CWriter* writer, const char* enumName, struct AstNode* variant) {
-    struct AstNode* name = variant ? variant->firstChild : NULL;
-    if (!IsTokenNode(name) || name->token.type != TOKEN_IDENTIFIER) {
-        return;
-    }
-
-    char nameBuffer[64];
-    CopyTokenText(&name->token, writer->file, nameBuffer, sizeof(nameBuffer));
-    fprintf(writer->out, "%s_%s", enumName, nameBuffer);
-
-    for (struct AstNode* child = name->nextSibling; child; child = child->nextSibling) {
-        switch (child->type) {
-            case AST_TOKEN:
-                WriteTokenNode(writer, child);
-                break;
-            case AST_GROUP:
-                WriteDelimited(writer, child, '(', ')');
-                break;
-            case AST_INDEX:
-                WriteDelimited(writer, child, '[', ']');
-                break;
-            case AST_GENERIC:
-                WriteDelimited(writer, child, '<', '>');
-                break;
-            case AST_BLOCK:
-                WriteBlock(writer, child);
-                break;
-            case AST_STATEMENT:
-            case AST_FILE:
-                WriteStatementList(writer, child, child->type == AST_FILE);
-                break;
-        }
-    }
-}
-
-static int TryWriteEnum(struct CWriter* writer, struct AstNode* statement) {
-    struct AstNode* keyword = statement->firstChild;
-    struct AstNode* firstColon = NextSibling(keyword);
-    struct AstNode* underlyingType = NextSibling(firstColon);
-    struct AstNode* secondColon = NextSibling(underlyingType);
-    struct AstNode* name = NextSibling(secondColon);
-    struct AstNode* block = NextSibling(name);
-
-    if (!IsTokenNode(keyword)
-        || !IsKeywordToken(&keyword->token, KEYWORD_ENUM)
-        || !IsTokenNode(firstColon)
-        || !IsPunctuationToken(&firstColon->token, PUNCTUATION_COLON)
-        || !IsWordTokenNode(underlyingType)
-        || !IsTokenNode(secondColon)
-        || !IsPunctuationToken(&secondColon->token, PUNCTUATION_COLON)
-        || !IsTokenNode(name)
-        || name->token.type != TOKEN_IDENTIFIER
-        || !block
-        || block->type != AST_BLOCK) {
-        return 0;
-    }
-
-    (void)underlyingType;
-
-    char enumName[64];
-    CopyTokenText(&name->token, writer->file, enumName, sizeof(enumName));
-    fprintf(writer->out, "typedef enum %s {\n", enumName);
-    writer->indent++;
-    ResetStatementState(writer);
-    for (struct AstNode* variant = block->firstChild; variant; variant = variant->nextSibling) {
-        WriteIndent(writer->out, writer->indent);
-        writer->atLineStart = 0;
-        writer->previous = NULL;
-        writer->needSpace = 0;
-        WriteEnumVariant(writer, enumName, variant);
-        char separator = StatementSeparator(writer->file, variant);
-        if (separator == ',' || separator == ';') {
-            fputc(',', writer->out);
-        }
-        fputc('\n', writer->out);
-    }
-    if (writer->indent > 0) {
-        writer->indent--;
-    }
-    WriteIndent(writer->out, writer->indent);
-    fprintf(writer->out, "} %s", enumName);
-    writer->atLineStart = 0;
-    writer->needSpace = 0;
-    writer->previous = &name->token;
-    return 1;
-}
-
-static void WriteStructFunctionDefaults(struct CWriter* writer, const char* functionName, struct AstNode* params) {
-    struct CFunctionInfo* function = AddFunctionInfo(writer, functionName);
-    if (!function) {
-        return;
-    }
-
-    snprintf(function->paramNames[function->paramCount++], sizeof(function->paramNames[0]), "this");
-
-    for (struct AstNode* parameter = params->firstChild; parameter && function->paramCount < 16; parameter = parameter->nextSibling) {
-        ParameterNameText(writer, parameter, function->paramNames[function->paramCount], sizeof(function->paramNames[function->paramCount]));
-        ParameterDefaultText(writer, parameter, function->defaults[function->paramCount], sizeof(function->defaults[function->paramCount]));
-        function->paramCount++;
-    }
-}
-
-static int TryWriteStructFunction(struct CWriter* writer, struct AstNode* statement) {
-    struct AstNode* returnType = statement->firstChild;
-    struct AstNode* colon = NextSibling(returnType);
-    struct AstNode* structName = NextSibling(colon);
-    struct AstNode* scope = NextSibling(structName);
-    struct AstNode* functionName = NextSibling(scope);
-    struct AstNode* params = NextSibling(functionName);
-    struct AstNode* block = NextSibling(params);
-
-    if (!IsTokenNode(returnType)
-        || !IsTokenNode(colon)
-        || !IsPunctuationToken(&colon->token, PUNCTUATION_COLON)
-        || !IsTokenNode(structName)
-        || structName->token.type != TOKEN_IDENTIFIER
-        || !IsTokenNode(scope)
-        || !IsOperatorToken(&scope->token, OPERATOR_SCOPE)
-        || !IsTokenNode(functionName)
-        || functionName->token.type != TOKEN_IDENTIFIER
-        || !params
-        || params->type != AST_GROUP
-        || !block
-        || block->type != AST_BLOCK) {
-        return 0;
-    }
-
-    char structBuffer[64];
-    char functionBuffer[64];
-    char cFunctionName[128];
-    CopyTokenText(&structName->token, writer->file, structBuffer, sizeof(structBuffer));
-    CopyTokenText(&functionName->token, writer->file, functionBuffer, sizeof(functionBuffer));
-    snprintf(cFunctionName, sizeof(cFunctionName), "%s_%s", structBuffer, functionBuffer);
-    WriteStructFunctionDefaults(writer, cFunctionName, params);
-
-    writer->previous = NULL;
-    writer->needSpace = 0;
-    WriteTokenNode(writer, returnType);
-    fprintf(writer->out, " %s(struct %s* this", cFunctionName, structBuffer);
-    if (params->childCount > 0) {
-        fputc(',', writer->out);
-        WriteParameterList(writer, params, functionName);
-    }
-    fputc(')', writer->out);
-
-    writer->previous = &functionName->token;
-    writer->needSpace = 0;
-    int previousThisIsPointer = writer->thisIsPointer;
-    writer->thisIsPointer = 1;
-    WriteBlock(writer, block);
-    writer->thisIsPointer = previousThisIsPointer;
-    return 1;
-}
-
-static int TryWriteStruct(struct CWriter* writer, struct AstNode* statement) {
-    struct AstNode* attributes = NULL;
-    struct AstNode* keyword = statement->firstChild;
-    if (keyword && keyword->type == AST_INDEX) {
-        attributes = keyword;
-        keyword = keyword->nextSibling;
-    }
-
-    struct AstNode* colon = NextSibling(keyword);
-    struct AstNode* name = NextSibling(colon);
-    struct AstNode* block = NextSibling(name);
-
-    if (!IsTokenNode(keyword)
-        || !IsKeywordToken(&keyword->token, KEYWORD_STRUCT)
-        || !IsTokenNode(colon)
-        || !IsPunctuationToken(&colon->token, PUNCTUATION_COLON)
-        || !IsTokenNode(name)
-        || name->token.type != TOKEN_IDENTIFIER
-        || !block
-        || block->type != AST_BLOCK) {
-        return 0;
-    }
-
-    char structBuffer[64];
-    CopyTokenText(&name->token, writer->file, structBuffer, sizeof(structBuffer));
-    struct CStructInfo* info = AddStructInfo(writer, structBuffer);
-    RegisterStructFields(writer, info, block);
-
-    fputs("struct", writer->out);
-    if (AttributeListContains(writer, attributes, "packed")) {
-        fputs(" __attribute__((packed))", writer->out);
-    }
-
-    fputc(' ', writer->out);
-    writer->previous = NULL;
-    writer->needSpace = 0;
-    WriteTokenNode(writer, name);
-    writer->previous = &name->token;
-    writer->needSpace = 0;
-    WriteStructBlock(writer, block);
-    return 1;
-}
-
-static int TryWriteUnion(struct CWriter* writer, struct AstNode* statement) {
-    struct AstNode* keyword = statement->firstChild;
-    struct AstNode* colon = NextSibling(keyword);
-    struct AstNode* name = NextSibling(colon);
-    struct AstNode* block = NextSibling(name);
-
-    if (!IsTokenNode(keyword)
-        || !IsKeywordToken(&keyword->token, KEYWORD_UNION)
-        || !IsTokenNode(colon)
-        || !IsPunctuationToken(&colon->token, PUNCTUATION_COLON)
-        || !IsTokenNode(name)
-        || name->token.type != TOKEN_IDENTIFIER
-        || !block
-        || block->type != AST_BLOCK) {
-        return 0;
-    }
-
-    char unionName[64];
-    CopyTokenText(&name->token, writer->file, unionName, sizeof(unionName));
-    fprintf(writer->out, "typedef union %s", unionName);
-    writer->previous = &name->token;
-    writer->needSpace = 0;
-    WriteStructBlock(writer, block);
-    fprintf(writer->out, " %s", unionName);
-    return 1;
-}
-
-static int IsNamedArgument(struct AstNode* argument, char* name, size_t nameSize, struct AstNode** valueStart, struct CWriter* writer) {
-    struct AstNode* first = argument ? argument->firstChild : NULL;
-    struct AstNode* equals = first ? first->nextSibling : NULL;
-    if (!IsTokenNode(first)
-        || first->token.type != TOKEN_IDENTIFIER
-        || !IsTokenNode(equals)
-        || !IsOperatorToken(&equals->token, OPERATOR_ASSIGN)) {
-        return 0;
-    }
-
-    CopyTokenText(&first->token, writer->file, name, nameSize);
-    *valueStart = equals->nextSibling;
-    return 1;
-}
-
-static int FindParameterIndex(struct CFunctionInfo* function, const char* name) {
-    for (size_t i = 0; i < function->paramCount; i++) {
-        if (strcmp(function->paramNames[i], name) == 0) {
-            return (int)i;
-        }
-    }
-    return -1;
-}
-
-static void WriteCallValue(struct CWriter* writer, struct AstNode* argument) {
-    char name[64];
-    struct AstNode* valueStart = NULL;
-    if (!IsNamedArgument(argument, name, sizeof(name), &valueStart, writer)) {
-        valueStart = argument->firstChild;
-    }
-
-    writer->previous = NULL;
-    writer->needSpace = 0;
-    WriteStatementChildren(writer, valueStart);
-}
-
-static void WriteCallValueFrom(struct CWriter* writer, struct AstNode* valueStart) {
-    writer->previous = NULL;
-    writer->needSpace = 0;
-    WriteStatementChildren(writer, valueStart);
-}
-
-static int TryWriteKnownFunctionCallArguments(struct CWriter* writer, struct AstNode* node, struct CFunctionInfo* function, int thisArgumentIsPointer) {
-    struct AstNode* arguments[16] = {0};
-    size_t positionalIndex = 0;
-    int hasNamedArgument = 0;
-
-    for (struct AstNode* argument = node->firstChild; argument; argument = argument->nextSibling) {
-        char name[64];
-        struct AstNode* valueStart = NULL;
-        if (IsNamedArgument(argument, name, sizeof(name), &valueStart, writer)) {
-            int parameterIndex = FindParameterIndex(function, name);
-            if (parameterIndex >= 0 && (size_t)parameterIndex < sizeof(arguments) / sizeof(arguments[0])) {
-                arguments[parameterIndex] = argument;
-                hasNamedArgument = 1;
-            }
-        } else if (positionalIndex < sizeof(arguments) / sizeof(arguments[0])) {
-            while (positionalIndex < function->paramCount && arguments[positionalIndex]) {
-                positionalIndex++;
-            }
-            if (positionalIndex < sizeof(arguments) / sizeof(arguments[0])) {
-                arguments[positionalIndex++] = argument;
-            }
-        }
-    }
-
-    if (!hasNamedArgument && node->childCount < function->paramCount) {
-        return 0;
-    }
-
-    for (size_t i = 0; i < function->paramCount; i++) {
-        if (i > 0) {
-            fputc(',', writer->out);
-        }
-
-        if (arguments[i]) {
-            if (thisArgumentIsPointer && i == 0) {
-                fputc('&', writer->out);
-                WriteCallValueFrom(writer, arguments[i]->firstChild);
-            } else {
-                WriteCallValue(writer, arguments[i]);
-            }
-        } else {
-            fputs(function->defaults[i], writer->out);
-        }
-    }
-
-    return 1;
-}
-
-static void WriteDelimited(struct CWriter* writer, struct AstNode* node, char open, char close) {
-    int isMainEmptyGroup = open == '('
-        && node->childCount == 0
-        && writer->previous
-        && TokenTextEquals(writer->previous, writer->file, "main");
-    char callName[64];
-    struct CFunctionInfo* function = NULL;
-
-    if (open == '(' && writer->previous && writer->previous->type == TOKEN_IDENTIFIER) {
-        CopyTokenText(writer->previous, writer->file, callName, sizeof(callName));
-        function = FindFunctionInfo(writer, callName);
-    }
-
-    fputc(open, writer->out);
-    if (isMainEmptyGroup) {
-        fputs("void", writer->out);
-    } else {
-        struct Token* previous = writer->previous;
-        int needSpace = writer->needSpace;
-        writer->previous = NULL;
-        writer->needSpace = 0;
-        if (!function || !TryWriteKnownFunctionCallArguments(writer, node, function, 0)) {
-            WriteStatementList(writer, node, 0);
-        }
-        writer->previous = previous;
-        writer->needSpace = needSpace;
-    }
-    fputc(close, writer->out);
-    writer->needSpace = 0;
-}
-
-static void WriteTokenNode(struct CWriter* writer, struct AstNode* node) {
-    struct Token* token = &node->token;
-    if (token->type == TOKEN_EOF) {
-        return;
-    }
-
-    if (IsKeywordToken(token, KEYWORD_EXPORT)) {
-        writer->previous = token;
-        return;
-    }
-
-    if (IsOperatorToken(token, OPERATOR_SCOPE)) {
-        int isLeadingScope = writer->previous == NULL
-            || (writer->previous->type == TOKEN_OPERATOR && writer->previous->value.operator != OPERATOR_SCOPE)
-            || IsPunctuationToken(writer->previous, PUNCTUATION_SEMICOLON)
-            || IsPunctuationToken(writer->previous, PUNCTUATION_COMMA)
-            || IsPunctuationToken(writer->previous, PUNCTUATION_LEFT_BRACE)
-            || IsPunctuationToken(writer->previous, PUNCTUATION_RIGHT_BRACE)
-            || IsPunctuationToken(writer->previous, PUNCTUATION_LEFT_PAREN);
-        if (!isLeadingScope) {
-            fputc('_', writer->out);
-        }
-        writer->needSpace = 0;
-        writer->previous = token;
-        return;
-    }
-
-    if (writer->needSpace && IsWordToken(token)) {
-        fputc(' ', writer->out);
-    }
-
-    char buffer[256];
-    const char* text = IsMainReturnType(node, writer->file) ? "int" : CTokenText(token, writer->file, buffer, sizeof(buffer));
-    if (token->type == TOKEN_IDENTIFIER && IsKnownStruct(writer, text) && node->nextSibling && IsTokenNode(node->nextSibling) && IsPunctuationToken(&node->nextSibling->token, PUNCTUATION_COLON)) {
-        fputs("struct ", writer->out);
-    }
-    fputs(text, writer->out);
-
-    writer->needSpace = IsWordToken(token);
-    writer->previous = token;
-}
-
-static int TryWriteStructVariableDeclaration(struct CWriter* writer, struct AstNode* firstChild) {
-    if (!IsTokenNode(firstChild)
-        || firstChild->token.type != TOKEN_IDENTIFIER
-        || !IsTokenNode(firstChild->nextSibling)
-        || !IsPunctuationToken(&firstChild->nextSibling->token, PUNCTUATION_COLON)
-        || !IsTokenNode(firstChild->nextSibling->nextSibling)
-        || firstChild->nextSibling->nextSibling->token.type != TOKEN_IDENTIFIER) {
-        return 0;
-    }
-
-    char typeName[64];
-    char variableName[64];
-    CopyTokenText(&firstChild->token, writer->file, typeName, sizeof(typeName));
-    struct CStructInfo* info = FindStructInfo(writer, typeName);
-    if (!info) {
-        return 0;
-    }
-
-    struct AstNode* nameNode = firstChild->nextSibling->nextSibling;
-    if (nameNode->nextSibling) {
-        return 0;
-    }
-
-    CopyTokenText(&nameNode->token, writer->file, variableName, sizeof(variableName));
-    fprintf(writer->out, "struct %s %s = {", typeName, variableName);
-    if (info->fieldCount == 0) {
-        fputc('0', writer->out);
-    } else {
-        for (size_t i = 0; i < info->fieldCount; i++) {
-            if (i > 0) {
-                fputc(',', writer->out);
-            }
-            fprintf(writer->out, ".%s=%s", info->fieldNames[i], info->defaults[i][0] ? info->defaults[i] : "0");
-        }
-    }
-    fputc('}', writer->out);
-    writer->previous = &nameNode->token;
-    writer->needSpace = 0;
-    return 1;
-}
-
-static void WriteStatementChildren(struct CWriter* writer, struct AstNode* firstChild) {
-    struct AstNode* previousChild = NULL;
-
-    if (IsTokenNode(firstChild)
-        && firstChild->token.type == TOKEN_IDENTIFIER
-        && IsTokenNode(firstChild->nextSibling)
-        && IsPunctuationToken(&firstChild->nextSibling->token, PUNCTUATION_COLON)
-        && IsTokenNode(firstChild->nextSibling->nextSibling)
-        && firstChild->nextSibling->nextSibling->token.type == TOKEN_IDENTIFIER) {
-        char typeName[64];
-        char variableName[64];
-        CopyTokenText(&firstChild->token, writer->file, typeName, sizeof(typeName));
-        CopyTokenText(&firstChild->nextSibling->nextSibling->token, writer->file, variableName, sizeof(variableName));
-        AddLocalType(writer, variableName, typeName);
-    }
-
-    if (TryWriteStructVariableDeclaration(writer, firstChild)) {
-        return;
-    }
-
-    for (struct AstNode* child = firstChild; child; child = child->nextSibling) {
-        if (ShouldSkipKekColon(child, previousChild)) {
-            previousChild = child;
-            continue;
-        }
-
-        if (IsTokenNode(child)
-            && TokenTextEquals(&child->token, writer->file, "cast")
-            && IsTokenNode(child->nextSibling)
-            && IsOperatorToken(&child->nextSibling->token, OPERATOR_LESS)
-            && IsTokenNode(child->nextSibling->nextSibling)
-            && IsTokenNode(child->nextSibling->nextSibling->nextSibling)
-            && IsOperatorToken(&child->nextSibling->nextSibling->nextSibling->token, OPERATOR_GREATER)
-            && child->nextSibling->nextSibling->nextSibling->nextSibling
-            && child->nextSibling->nextSibling->nextSibling->nextSibling->type == AST_GROUP) {
-            struct AstNode* typeNode = child->nextSibling->nextSibling;
-            struct AstNode* valueGroup = child->nextSibling->nextSibling->nextSibling->nextSibling;
-            fputs("((", writer->out);
-            writer->previous = NULL;
-            writer->needSpace = 0;
-            WriteTokenNode(writer, typeNode);
-            fputc(')', writer->out);
-            WriteDelimited(writer, valueGroup, '(', ')');
-            fputc(')', writer->out);
-            writer->previous = &child->token;
-            writer->needSpace = 0;
-            child = valueGroup;
-            previousChild = child;
-            continue;
-        }
-
-        if (writer->thisIsPointer
-            && IsTokenNode(child)
-            && TokenTextEquals(&child->token, writer->file, "this")
-            && IsTokenNode(child->nextSibling)
-            && IsPunctuationToken(&child->nextSibling->token, PUNCTUATION_DOT)) {
-            WriteTokenNode(writer, child);
-            fputs("->", writer->out);
-            writer->needSpace = 0;
-            child = child->nextSibling;
-            previousChild = child;
-            continue;
-        }
-
-        if (IsTokenNode(child)
-            && child->token.type == TOKEN_IDENTIFIER
-            && IsKnownStruct(writer, CTokenText(&child->token, writer->file, (char[256]){0}, 256))
-            && IsTokenNode(child->nextSibling)
-            && IsOperatorToken(&child->nextSibling->token, OPERATOR_SCOPE)
-            && IsTokenNode(child->nextSibling->nextSibling)
-            && child->nextSibling->nextSibling->token.type == TOKEN_IDENTIFIER
-            && child->nextSibling->nextSibling->nextSibling
-            && child->nextSibling->nextSibling->nextSibling->type == AST_GROUP) {
-            char structBuffer[64];
-            char methodBuffer[64];
-            char cFunctionName[128];
-            struct AstNode* methodName = child->nextSibling->nextSibling;
-            struct AstNode* args = methodName->nextSibling;
-            CopyTokenText(&child->token, writer->file, structBuffer, sizeof(structBuffer));
-            CopyTokenText(&methodName->token, writer->file, methodBuffer, sizeof(methodBuffer));
-            snprintf(cFunctionName, sizeof(cFunctionName), "%s_%s", structBuffer, methodBuffer);
-            fputs(cFunctionName, writer->out);
-            fputc('(', writer->out);
-            struct CFunctionInfo* function = FindFunctionInfo(writer, cFunctionName);
-            if (!function || !TryWriteKnownFunctionCallArguments(writer, args, function, 1)) {
-                WriteStatementList(writer, args, 0);
-            }
-            fputc(')', writer->out);
-            writer->previous = &methodName->token;
-            writer->needSpace = 0;
-            child = args;
-            previousChild = child;
-            continue;
-        }
-
-        if (IsTokenNode(child)
-            && child->token.type == TOKEN_IDENTIFIER
-            && IsTokenNode(child->nextSibling)
-            && IsPunctuationToken(&child->nextSibling->token, PUNCTUATION_DOT)
-            && IsTokenNode(child->nextSibling->nextSibling)
-            && child->nextSibling->nextSibling->token.type == TOKEN_IDENTIFIER
-            && child->nextSibling->nextSibling->nextSibling
-            && child->nextSibling->nextSibling->nextSibling->type == AST_GROUP) {
-            char receiverName[64];
-            char methodBuffer[64];
-            char cFunctionName[128];
-            CopyTokenText(&child->token, writer->file, receiverName, sizeof(receiverName));
-            const char* receiverType = FindLocalType(writer, receiverName);
-            if (receiverType && IsKnownStruct(writer, receiverType)) {
-                struct AstNode* methodName = child->nextSibling->nextSibling;
-                struct AstNode* args = methodName->nextSibling;
-                CopyTokenText(&methodName->token, writer->file, methodBuffer, sizeof(methodBuffer));
-                snprintf(cFunctionName, sizeof(cFunctionName), "%s_%s", receiverType, methodBuffer);
-                fputs(cFunctionName, writer->out);
-                fputc('(', writer->out);
-                fputc('&', writer->out);
-                WriteTokenNode(writer, child);
-                if (args->childCount > 0) {
-                    fputc(',', writer->out);
-                    struct CFunctionInfo* function = FindFunctionInfo(writer, cFunctionName);
-                    if (function && function->paramCount > 1) {
-                        struct CFunctionInfo callFunction = *function;
-                        for (size_t i = 1; i < function->paramCount; i++) {
-                            snprintf(callFunction.paramNames[i - 1], sizeof(callFunction.paramNames[0]), "%s", function->paramNames[i]);
-                            snprintf(callFunction.defaults[i - 1], sizeof(callFunction.defaults[0]), "%s", function->defaults[i]);
-                        }
-                        callFunction.paramCount = function->paramCount - 1;
-                        if (!TryWriteKnownFunctionCallArguments(writer, args, &callFunction, 0)) {
-                            WriteStatementList(writer, args, 0);
-                        }
-                    } else {
-                        WriteStatementList(writer, args, 0);
-                    }
-                }
-                fputc(')', writer->out);
-                writer->previous = &methodName->token;
-                writer->needSpace = 0;
-                child = args;
-                previousChild = child;
-                continue;
-            }
-        }
-
-        switch (child->type) {
-            case AST_TOKEN:
-                WriteTokenNode(writer, child);
-                break;
-            case AST_BLOCK:
-                WriteBlock(writer, child);
-                break;
-            case AST_GROUP:
-                WriteDelimited(writer, child, '(', ')');
-                break;
-            case AST_INDEX:
-                WriteDelimited(writer, child, '[', ']');
-                break;
-            case AST_GENERIC:
-                WriteDelimited(writer, child, '<', '>');
-                break;
-            case AST_STATEMENT:
-            case AST_FILE:
-                WriteStatementList(writer, child, child->type == AST_FILE);
-                break;
-        }
-
-        previousChild = child;
-    }
-}
-
-static int TryWriteAlias(struct CWriter* writer, struct AstNode* statement) {
-    struct AstNode* alias = statement->firstChild;
-    struct AstNode* name = alias ? alias->nextSibling : NULL;
-    if (IsTokenNode(name) && IsPunctuationToken(&name->token, PUNCTUATION_COLON)) {
-        name = name->nextSibling;
-    }
-    struct AstNode* equals = name ? name->nextSibling : NULL;
-    struct AstNode* type = equals ? equals->nextSibling : NULL;
-
-    if (!IsTokenNode(alias)
-        || !IsKeywordToken(&alias->token, KEYWORD_ALIAS)
-        || !IsTokenNode(name)
-        || name->token.type != TOKEN_IDENTIFIER
-        || !IsTokenNode(equals)
-        || !IsOperatorToken(&equals->token, OPERATOR_ASSIGN)
-        || !IsWordTokenNode(type)) {
-        return 0;
-    }
-
-    char nameBuffer[256];
-    char typeBuffer[256];
-    fprintf(writer->out, "typedef %s %s",
-        CTokenText(&type->token, writer->file, typeBuffer, sizeof(typeBuffer)),
-        CTokenText(&name->token, writer->file, nameBuffer, sizeof(nameBuffer)));
-    ResetStatementState(writer);
-    return 1;
-}
-
-static int TryWriteSwitch(struct CWriter* writer, struct AstNode* statement) {
-    struct AstNode* keyword = statement->firstChild;
-    if (!IsTokenNode(keyword) || !IsKeywordToken(&keyword->token, KEYWORD_SWITCH)) {
-        return 0;
-    }
-
-    struct AstNode* block = NULL;
-    for (struct AstNode* child = keyword->nextSibling; child; child = child->nextSibling) {
-        if (child->type == AST_BLOCK) {
-            block = child;
-            break;
-        }
-    }
-
-    if (!block || block == keyword->nextSibling) {
-        return 0;
-    }
-
-    fputs("switch (", writer->out);
-    writer->previous = NULL;
-    writer->needSpace = 0;
-    for (struct AstNode* child = keyword->nextSibling; child && child != block; child = child->nextSibling) {
-        switch (child->type) {
-            case AST_TOKEN:
-                WriteTokenNode(writer, child);
-                break;
-            case AST_GROUP:
-                WriteDelimited(writer, child, '(', ')');
-                break;
-            case AST_INDEX:
-                WriteDelimited(writer, child, '[', ']');
-                break;
-            case AST_GENERIC:
-                WriteDelimited(writer, child, '<', '>');
-                break;
-            case AST_BLOCK:
-                break;
-            case AST_STATEMENT:
-            case AST_FILE:
-                WriteStatementList(writer, child, child->type == AST_FILE);
-                break;
-        }
-    }
-    fputc(')', writer->out);
-    writer->previous = &keyword->token;
-    writer->needSpace = 0;
-    WriteBlock(writer, block);
-    return 1;
-}
-
-static int TryWriteExternC(struct CWriter* writer, struct AstNode* statement) {
-    struct AstNode* externNode = statement->firstChild;
-    struct AstNode* abi = externNode ? externNode->nextSibling : NULL;
-    struct AstNode* block = abi ? abi->nextSibling : NULL;
-
-    if (!IsTokenNode(externNode)
-        || !IsKeywordToken(&externNode->token, KEYWORD_EXTERN)
-        || !IsTokenNode(abi)
-        || abi->token.type != TOKEN_STRING
-        || !TokenTextEquals(&abi->token, writer->file, "\"C\"")
-        || !block
-        || block->type != AST_BLOCK) {
-        return 0;
-    }
-
-    size_t start = block->location.offset + 1;
-    size_t end = block->location.offset + block->location.length;
-    if (end > start) {
-        end--;
-    }
-
-    if (end > start) {
-        fwrite(writer->file->content + start, 1, end - start, writer->out);
-        if (writer->file->content[end - 1] != '\n') {
-            fputc('\n', writer->out);
-        }
-    }
-
-    ResetStatementState(writer);
-    return 1;
-}
-
-static int WriteStatement(struct CWriter* writer, struct AstNode* statement) {
-    if (!statement || statement->type != AST_STATEMENT || statement->childCount == 0) {
-        return 0;
-    }
-
-    struct AstNode* first = statement->firstChild;
-    if (IsTokenNode(first)
-        && IsPunctuationToken(&first->token, PUNCTUATION_HASH)
-        && IsTokenNode(first->nextSibling)
-        && TokenTextEquals(&first->nextSibling->token, writer->file, "import")) {
-        ResetStatementState(writer);
-        return 0;
-    }
-
-    if (IsTokenNode(first) && IsKeywordToken(&first->token, KEYWORD_USING)) {
-        ResetStatementState(writer);
-        return 0;
-    }
-
-    if (TryWriteAlias(writer, statement)
-        || TryWriteExternC(writer, statement)
-        || TryWriteEnum(writer, statement)
-        || TryWriteUnion(writer, statement)
-        || TryWriteStruct(writer, statement)
-        || TryWriteStructFunction(writer, statement)
-        || TryWriteSwitch(writer, statement)
-        || TryWriteFunction(writer, statement)) {
-        return 1;
-    }
-
-    WriteStatementChildren(writer, statement->firstChild);
-
-    return 1;
-}
-
-void WriteC(FILE* out, struct AstNode* ast, struct SourceFile* file) {
-    struct CWriter writer = {0};
-    writer.out = out;
-    writer.file = file;
-    writer.atLineStart = 1;
-
-    WritePrelude(out);
-    WriteStatementList(&writer, ast, 1);
-}
-
 static void PackagePrefixFromPath(const char* path, char* buffer, size_t bufferSize) {
     const char* slash = strrchr(path, '/');
     if (!slash) {
@@ -1574,31 +382,6 @@ static void PackagePrefixFromPath(const char* path, char* buffer, size_t bufferS
     memcpy(buffer, start, length);
     buffer[length] = '_';
     buffer[length + 1] = '\0';
-}
-
-int WriteCFileForFiles(const char* path, struct AstNode** asts, struct SourceFile** files, size_t count) {
-    FILE* out = fopen(path, "w");
-    if (!out) {
-        return -1;
-    }
-
-    struct CWriter writer = {0};
-    writer.out = out;
-    writer.atLineStart = 1;
-
-    WritePrelude(out);
-    for (size_t i = 0; i < count; i++) {
-        writer.file = files[i];
-        if (i + 1 < count) {
-            PackagePrefixFromPath(files[i]->path, writer.namespacePrefix, sizeof(writer.namespacePrefix));
-        } else {
-            writer.namespacePrefix[0] = '\0';
-        }
-        WriteStatementList(&writer, asts[i], 1);
-    }
-
-    fclose(out);
-    return 0;
 }
 
 static const char* TypedNodeText(struct CWriter* writer, struct AstNode* node, char* buffer, size_t bufferSize) {
@@ -2092,6 +875,15 @@ static int TypedNamedArgument(struct CWriter* writer, struct KekExpr* arg, char*
     CopyTypedNodeText(writer, arg->left->token, name, nameSize);
     *value = arg->right;
     return 1;
+}
+
+static int FindParameterIndex(struct CFunctionInfo* function, const char* name) {
+    for (size_t i = 0; i < function->paramCount; i++) {
+        if (strcmp(function->paramNames[i], name) == 0) {
+            return (int)i;
+        }
+    }
+    return -1;
 }
 
 static void WriteTypedKnownCallArgs(struct CWriter* writer, struct KekExpr* call, struct CFunctionInfo* function, struct KekExpr* implicitThis, int implicitThisIsPointer) {
@@ -2745,6 +1537,19 @@ static void RegisterTypedDeclForCodegen(struct CWriter* writer, struct KekDecl* 
     }
 }
 
+static int AttributeListContains(struct CWriter* writer, struct AstNode* attributes, const char* name) {
+    if (!attributes || attributes->type != AST_INDEX) {
+        return 0;
+    }
+    for (struct AstNode* attribute = attributes->firstChild; attribute; attribute = attribute->nextSibling) {
+        struct AstNode* token = attribute->firstChild;
+        if (token && IsTokenNode(token) && TokenTextEquals(&token->token, writer->file, name)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static int TypedDeclHasAttribute(struct CWriter* writer, struct KekDecl* decl, const char* name) {
     struct AstNode* first = decl && decl->source ? decl->source->firstChild : NULL;
     return first && first->type == AST_INDEX && AttributeListContains(writer, first, name);
@@ -2763,6 +1568,37 @@ static void WriteTypedParams(struct CWriter* writer, struct KekDecl* decl) {
         first = 0;
         WriteTypedTypeAndName(writer, param->type, param->name);
     }
+}
+
+static void WriteTypedFunctionSignature(struct CWriter* writer, struct KekDecl* decl, const char* functionName) {
+    char returnName[128];
+    if (TypedDeclHasAttribute(writer, decl, "static")) {
+        fputs("static ", writer->out);
+    }
+    if (TypedDeclHasAttribute(writer, decl, "inline")) {
+        fputs("inline ", writer->out);
+    }
+    if (!TypedDeclIsMethod(decl)
+        && TypedNodeText(writer, decl->parsedType ? decl->parsedType->name : NULL, returnName, sizeof(returnName))
+        && strcmp(returnName, "i64") == 0
+        && strcmp(functionName, "main") == 0) {
+        fputs("int", writer->out);
+    } else {
+        WriteTypedBaseType(writer, decl->parsedType);
+    }
+    fprintf(writer->out, " %s(", functionName);
+    if (TypedDeclIsMethod(decl)) {
+        char receiver[64];
+        CopyTypedNodeText(writer, TypedDeclReceiverName(decl), receiver, sizeof(receiver));
+        fprintf(writer->out, "struct %s* this", receiver);
+        if (decl->firstParam) {
+            fputc(',', writer->out);
+            WriteTypedParams(writer, decl);
+        }
+    } else {
+        WriteTypedParams(writer, decl);
+    }
+    fputc(')', writer->out);
 }
 
 static void WriteTypedGenericStructInstance(struct CWriter* writer, struct CGenericInstance* instance) {
@@ -2794,6 +1630,39 @@ static void WriteTypedGenericStructInstance(struct CWriter* writer, struct CGene
     writer->genericArgFile = previousArgFile;
 }
 
+static void WriteTypedGenericFunctionSignature(struct CWriter* writer, struct CGenericInstance* instance) {
+    struct KekDecl* decl = instance->decl;
+    struct SourceFile* previousFile = writer->file;
+    struct AstNode* previousParams = writer->genericParams;
+    struct AstNode* previousArgs = writer->genericArgs;
+    struct SourceFile* previousArgFile = writer->genericArgFile;
+
+    writer->file = instance->declFile ? instance->declFile : previousFile;
+    writer->genericParams = decl->genericParams;
+    writer->genericArgs = instance->args;
+    writer->genericArgFile = instance->argsFile;
+
+    WriteTypedBaseType(writer, decl->parsedType);
+    fprintf(writer->out, " %s(", instance->name);
+    if (TypedDeclIsMethod(decl)) {
+        char receiver[128];
+        MangleGenericNameWithFiles(writer, instance->declFile, TypedDeclReceiverName(decl), instance->argsFile, instance->args, receiver, sizeof(receiver));
+        fprintf(writer->out, "struct %s* this", receiver);
+        if (decl->firstParam) {
+            fputc(',', writer->out);
+            WriteTypedParams(writer, decl);
+        }
+    } else {
+        WriteTypedParams(writer, decl);
+    }
+    fputc(')', writer->out);
+
+    writer->file = previousFile;
+    writer->genericParams = previousParams;
+    writer->genericArgs = previousArgs;
+    writer->genericArgFile = previousArgFile;
+}
+
 static void WriteTypedGenericFunctionInstance(struct CWriter* writer, struct CGenericInstance* instance) {
     if (!instance || !instance->decl) {
         return;
@@ -2811,20 +1680,8 @@ static void WriteTypedGenericFunctionInstance(struct CWriter* writer, struct CGe
     writer->genericArgs = instance->args;
     writer->genericArgFile = instance->argsFile ? instance->argsFile : writer->file;
 
-    WriteTypedBaseType(writer, decl->parsedType);
-    fprintf(writer->out, " %s(", instance->name);
-    if (TypedDeclIsMethod(decl)) {
-        char receiver[128];
-        MangleGenericNameWithFiles(writer, instance->declFile, TypedDeclReceiverName(decl), instance->argsFile, instance->args, receiver, sizeof(receiver));
-        fprintf(writer->out, "struct %s* this", receiver);
-        if (decl->firstParam) {
-            fputc(',', writer->out);
-            WriteTypedParams(writer, decl);
-        }
-    } else {
-        WriteTypedParams(writer, decl);
-    }
-    fputs(") ", writer->out);
+    WriteTypedGenericFunctionSignature(writer, instance);
+    fputc(' ', writer->out);
     int previousThisIsPointer = writer->thisIsPointer;
     size_t previousLocalCount = writer->localCount;
     if (TypedDeclIsMethod(decl)) {
@@ -2928,35 +1785,9 @@ static void WriteTypedDecl(struct CWriter* writer, struct KekDecl* decl) {
             break;
         case KEK_DECL_FUNCTION: {
             char functionName[128];
-            char returnName[128];
             TypedFunctionName(writer, decl, functionName, sizeof(functionName));
-            if (TypedDeclHasAttribute(writer, decl, "static")) {
-                fputs("static ", writer->out);
-            }
-            if (TypedDeclHasAttribute(writer, decl, "inline")) {
-                fputs("inline ", writer->out);
-            }
-            if (!TypedDeclIsMethod(decl)
-                && TypedNodeText(writer, decl->parsedType ? decl->parsedType->name : NULL, returnName, sizeof(returnName))
-                && strcmp(returnName, "i64") == 0
-                && strcmp(functionName, "main") == 0) {
-                fputs("int", writer->out);
-            } else {
-                WriteTypedBaseType(writer, decl->parsedType);
-            }
-            fprintf(writer->out, " %s(", functionName);
-            if (TypedDeclIsMethod(decl)) {
-                char receiver[64];
-                CopyTypedNodeText(writer, TypedDeclReceiverName(decl), receiver, sizeof(receiver));
-                fprintf(writer->out, "struct %s* this", receiver);
-                if (decl->firstParam) {
-                    fputc(',', writer->out);
-                    WriteTypedParams(writer, decl);
-                }
-            } else {
-                WriteTypedParams(writer, decl);
-            }
-            fputs(") ", writer->out);
+            WriteTypedFunctionSignature(writer, decl, functionName);
+            fputc(' ', writer->out);
             int previousThisIsPointer = writer->thisIsPointer;
             size_t previousLocalCount = writer->localCount;
             if (TypedDeclIsMethod(decl)) {
@@ -3081,7 +1912,6 @@ int WriteTypedCFileForModules(const char* path, struct KekModule* modules, size_
 
     struct CWriter writer = {0};
     writer.out = out;
-    writer.atLineStart = 1;
 
     WritePrelude(out);
     for (size_t i = 0; i < count; i++) {
@@ -3114,7 +1944,6 @@ int WriteTypedCFileForModules(const char* path, struct KekModule* modules, size_
             if (IsTypedTypeDecl(decl)) {
                 WriteTypedDecl(&writer, decl);
                 fputc('\n', writer.out);
-                ResetStatementState(&writer);
             }
         }
     }
@@ -3127,13 +1956,34 @@ int WriteTypedCFileForModules(const char* path, struct KekModule* modules, size_
     for (size_t i = 0; i < writer.genericStructCount; i++) {
         WriteTypedGenericStructInstance(&writer, &writer.genericStructs[i]);
         fputc('\n', writer.out);
-        ResetStatementState(&writer);
+    }
+
+    for (size_t i = 0; i < count; i++) {
+        writer.file = modules[i].file;
+        if (modules[i].file && i + 1 < count) {
+            PackagePrefixFromPath(modules[i].file->path, writer.namespacePrefix, sizeof(writer.namespacePrefix));
+        } else {
+            writer.namespacePrefix[0] = '\0';
+        }
+
+        for (struct KekDecl* decl = modules[i].firstDecl; decl; decl = decl->next) {
+            if (decl->kind == KEK_DECL_FUNCTION && !decl->genericParams) {
+                char functionName[128];
+                TypedFunctionName(&writer, decl, functionName, sizeof(functionName));
+                WriteTypedFunctionSignature(&writer, decl, functionName);
+                fputs(";\n", writer.out);
+            }
+        }
+    }
+
+    for (size_t i = 0; i < writer.genericFunctionCount; i++) {
+        WriteTypedGenericFunctionSignature(&writer, &writer.genericFunctions[i]);
+        fputs(";\n", writer.out);
     }
 
     for (size_t i = 0; i < writer.genericFunctionCount; i++) {
         WriteTypedGenericFunctionInstance(&writer, &writer.genericFunctions[i]);
         fputc('\n', writer.out);
-        ResetStatementState(&writer);
     }
 
     for (size_t i = 0; i < count; i++) {
@@ -3148,21 +1998,10 @@ int WriteTypedCFileForModules(const char* path, struct KekModule* modules, size_
             if (decl->kind == KEK_DECL_FUNCTION) {
                 WriteTypedDecl(&writer, decl);
                 fputc('\n', writer.out);
-                ResetStatementState(&writer);
             }
         }
     }
 
-    fclose(out);
-    return 0;
-}
-
-int WriteCFile(const char* path, struct AstNode* ast, struct SourceFile* file) {
-    FILE* out = fopen(path, "w");
-    if (!out) {
-        return -1;
-    }
-    WriteC(out, ast, file);
     fclose(out);
     return 0;
 }

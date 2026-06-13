@@ -1,4 +1,4 @@
-#include "kek.h"
+#include "kek_internal.h"
 
 #include <errno.h>
 #include <sys/stat.h>
@@ -196,8 +196,11 @@ static int TestStdlibExample(void) {
         || !FileContains("out/std_example.c", "LinkedList__byte_PushBack")
         || !FileContains("out/std_example.c", "File_Write")
         || !FileContains("out/std_example.c", "std_FormatI64ToBuilder")
-        || !FileContains("out/std_example.c", "std_FileOpenCString")) {
+        || !FileContains("out/std_example.c", "std_FileOpen")) {
         return Fail("stdlib example did not emit expected stdlib symbols");
+    }
+    if (!FileContains("out/std_example.c", "struct Result__File std_FileOpen(byte* path,FileMode mode);")) {
+        return Fail("stdlib generated C did not emit expected function prototype");
     }
 
     if (system("cc -std=c11 -Wall -Wextra -o out/std_example out/std_example.c") != 0) {

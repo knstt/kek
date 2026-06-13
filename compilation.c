@@ -1,4 +1,4 @@
-#include "kek.h"
+#include "kek_internal.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -277,22 +277,16 @@ static int ParseUnit(struct KekCompilation* compilation, struct KekCompilationUn
         goto fail;
     }
 
-    struct KekFrontend frontend = {0};
-    frontend.decls = unit->decls;
-    frontend.declCapacity = declCapacity;
-    frontend.types = unit->types;
-    frontend.typeCapacity = typeCapacity;
-    frontend.exprs = unit->exprs;
-    frontend.exprCapacity = exprCapacity;
-    frontend.stmts = unit->stmts;
-    frontend.stmtCapacity = stmtCapacity;
-    frontend.params = unit->params;
-    frontend.paramCapacity = paramCapacity;
-    frontend.fields = unit->fields;
-    frontend.fieldCapacity = fieldCapacity;
-    frontend.variants = unit->variants;
-    frontend.variantCapacity = variantCapacity;
-    frontend.diagnostics = &compilation->diagnostics;
+    struct KekFrontend frontend = {
+        .decls = {unit->decls, 0, declCapacity, sizeof(*unit->decls)},
+        .types = {unit->types, 0, typeCapacity, sizeof(*unit->types)},
+        .exprs = {unit->exprs, 0, exprCapacity, sizeof(*unit->exprs)},
+        .stmts = {unit->stmts, 0, stmtCapacity, sizeof(*unit->stmts)},
+        .params = {unit->params, 0, paramCapacity, sizeof(*unit->params)},
+        .fields = {unit->fields, 0, fieldCapacity, sizeof(*unit->fields)},
+        .variants = {unit->variants, 0, variantCapacity, sizeof(*unit->variants)},
+        .diagnostics = &compilation->diagnostics,
+    };
     unit->module = ParseKekModule(&frontend, unit->ast, sourceFile);
     if (unit->module.errorCount > 0) {
         goto fail;

@@ -1,4 +1,4 @@
-#include "kek.h"
+#include "kek_internal.h"
 
 const char* KekSymbolKindNames[] = {
     "Type",
