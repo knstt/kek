@@ -45,6 +45,20 @@ bool:String::Equals(String:other) {
 	return(true);
 }
 
+bool:String::EqualsBytes(ptr<byte>:data, usize:len) {
+	if (this.len != len) {
+		return(false);
+	}
+
+	for (usize:i = 0; i < len; i++) {
+		if (this.data[i] != data[i]) {
+			return(false);
+		}
+	}
+
+	return(true);
+}
+
 bool:String::StartsWith(String:prefix) {
 	if (prefix.len > this.len) {
 		return(false);
@@ -72,6 +86,26 @@ bool:String::EndsWith(String:suffix) {
 	}
 
 	return(true);
+}
+
+bool:IsAsciiSpace(byte:c) {
+	return(c == 32 || c == 9 || c == 10 || c == 13);
+}
+
+bool:IsAsciiAlpha(byte:c) {
+	return((c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95);
+}
+
+bool:IsAsciiDigit(byte:c) {
+	return(c >= 48 && c <= 57);
+}
+
+bool:IsAsciiWord(byte:c) {
+	return(IsAsciiAlpha(c) || IsAsciiDigit(c));
+}
+
+bool:IsAsciiOperator(byte:c) {
+	return(c == 33 || c == 37 || c == 38 || c == 42 || c == 43 || c == 45 || c == 47 || c == 60 || c == 61 || c == 62 || c == 94 || c == 124);
 }
 
 String:OwnedString::View() {
@@ -181,4 +215,13 @@ Result<OwnedString>:StringBuilder::ToOwnedString() {
 Status:WriteStringToBuilder(ptr<StringBuilder>:builder, String:text) {
 	Result<usize>:result = builder.Write(text.Bytes());
 	return(result.status);
+}
+
+Status:WriteSliceToBuilder(ptr<StringBuilder>:builder, Slice<byte>:data) {
+	Result<usize>:result = builder.Write(data);
+	return(result.status);
+}
+
+Status:DestroyStringBuilder(ptr<StringBuilder>:builder) {
+	return(builder.Destroy());
 }

@@ -11,12 +11,13 @@ SMOKE_BIN ?= out/tmp
 SMOKE_EXPECTED_EXIT ?= 91
 PYTHON ?= python3
 
-.PHONY: help build c-build test api-test fmt lint clean install noop-build
+.PHONY: help build c-build test api-test kekfmt kekfmt-test fmt lint clean install noop-build
 
 help:
 	@printf "Usage:\n"
 	@printf "  make build          Build the compiler into $(BIN_DIR)/$(PROJECT)\n"
 	@printf "  make test           Build and run the tmp.kek smoke test\n"
+	@printf "  make kekfmt         Build the Kek formatter into out/kekfmt\n"
 	@printf "  make fmt            Normalize generated smoke C output, if present\n"
 	@printf "  make lint           Build with the configured warning flags\n"
 	@printf "  make clean          Remove build artifacts\n"
@@ -65,6 +66,7 @@ test:
 	diff -u out/out.pretty.norm.c out/out.min.norm.c >/dev/null
 	@echo "Whitespace smoke test passed"
 	@$(MAKE) api-test
+	@$(MAKE) kekfmt-test
 
 api-test:
 	@if [ -z "$(CC)" ]; then echo "C compiler not found in PATH"; exit 1; fi
@@ -74,6 +76,30 @@ api-test:
 	@echo "Building API/tooling tests -> out/api_tests"
 	@$(CC) $(CFLAGS) -o out/api_tests tests.c $(CORE_SRCS)
 	@out/api_tests
+
+kekfmt:
+	@if [ -z "$(CC)" ]; then echo "C compiler not found in PATH"; exit 1; fi
+	@$(MAKE) build
+	@mkdir -p out
+	@set -e; \
+	tmp_backup=$$(mktemp out/tmp.kek.XXXXXX); \
+	cp tmp.kek $$tmp_backup; \
+	trap 'cp $$tmp_backup tmp.kek; rm -f $$tmp_backup' EXIT; \
+	cp fmt.kek tmp.kek; \
+	$(BIN_DIR)/$(PROJECT); \
+	$(CC) $(CFLAGS) -o out/kekfmt out/out.c
+	@echo "Wrote out/kekfmt"
+
+kekfmt-test: kekfmt
+	@out/kekfmt fmt.kek > out/fmt.formatted.kek
+	@set -e; \
+	tmp_backup=$$(mktemp out/tmp.kek.XXXXXX); \
+	cp tmp.kek $$tmp_backup; \
+	trap 'cp $$tmp_backup tmp.kek; rm -f $$tmp_backup' EXIT; \
+	cp out/fmt.formatted.kek tmp.kek; \
+	$(BIN_DIR)/$(PROJECT); \
+	$(CC) $(CFLAGS) -o out/kekfmt.formatted out/out.c
+	@echo "Kek formatter self-test passed"
 
 fmt:
 	@if [ -f out/out.c ]; then \

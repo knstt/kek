@@ -152,3 +152,31 @@ File:Stderr() {
 	file.owned = false;
 	return(file);
 }
+
+Status:ReadAllToOwnedString(File:file, Allocator:allocator, ptr<OwnedString>:out) {
+	StringBuilder:builder = std::StringBuilderNew(allocator);
+	byte:buffer[4096] = {0};
+	while (true) {
+		Result<usize>:read = file.Read(std::FixedSpan<byte>(buffer, len(buffer)));
+		if (read.status == Status::End) {
+			break;
+		}
+		if (read.status != Status::Ok) {
+			builder.Destroy();
+			return(read.status);
+		}
+		Result<usize>:write = builder.Write(std::FixedSlice<byte>(buffer, read.value));
+		if (write.status != Status::Ok) {
+			builder.Destroy();
+			return(write.status);
+		}
+	}
+	out.data = builder.data;
+	out.len = builder.len;
+	out.cap = builder.cap;
+	out.allocator = builder.allocator;
+	builder.data = 0;
+	builder.len = 0;
+	builder.cap = 0;
+	return(Status::Ok);
+}
