@@ -87,6 +87,77 @@ static int FileContains(const char* path, const char* text) {
     return contains;
 }
 
+static int FileExists(const char* path) {
+    FILE* file = fopen(path, "rb");
+    if (!file) {
+        return 0;
+    }
+    fclose(file);
+    return 1;
+}
+
+static int TestCliInterface(void) {
+    if (system("bin/kek --help > out/cli_help.txt") != 0) {
+        return Fail("CLI --help failed");
+    }
+    if (!FileContains("out/cli_help.txt", "kek build <input.kek>")) {
+        return Fail("CLI help did not mention build usage");
+    }
+
+    if (system("bin/kek --version > out/cli_version.txt") != 0) {
+        return Fail("CLI --version failed");
+    }
+    if (!FileContains("out/cli_version.txt", VERSION)) {
+        return Fail("CLI version did not print VERSION");
+    }
+
+    remove("out/out.c");
+    remove("out/ast.json");
+    remove("out/module.txt");
+    if (system("bin/kek build tmp.kek > out/cli_build_default.stdout 2> out/cli_build_default.stderr") != 0) {
+        return Fail("CLI build default failed");
+    }
+    if (!FileExists("out/out.c") || !FileExists("out/ast.json") || !FileExists("out/module.txt")) {
+        return Fail("CLI build default did not write expected outputs");
+    }
+
+    remove("out/custom.c");
+    remove("out/custom.json");
+    remove("out/custom.txt");
+    if (system("bin/kek build tmp.kek -o out/custom.c --ast-json out/custom.json --summary out/custom.txt > out/cli_build_custom.stdout 2> out/cli_build_custom.stderr") != 0) {
+        return Fail("CLI build custom outputs failed");
+    }
+    if (!FileExists("out/custom.c") || !FileExists("out/custom.json") || !FileExists("out/custom.txt")) {
+        return Fail("CLI build custom did not write expected outputs");
+    }
+
+    remove("out/cli-out-dir/out.c");
+    remove("out/cli-out-dir/ast.json");
+    remove("out/cli-out-dir/module.txt");
+    if (system("bin/kek build tmp.kek --out-dir out/cli-out-dir > out/cli_build_out_dir.stdout 2> out/cli_build_out_dir.stderr") != 0) {
+        return Fail("CLI build with out-dir failed");
+    }
+    if (!FileExists("out/cli-out-dir/out.c") || !FileExists("out/cli-out-dir/ast.json") || !FileExists("out/cli-out-dir/module.txt")) {
+        return Fail("CLI build with out-dir did not write expected outputs");
+    }
+
+    if (system("bin/kek build > out/cli_missing.stdout 2> out/cli_missing.stderr") == 0) {
+        return Fail("CLI build without input succeeded");
+    }
+    if (!FileContains("out/cli_missing.stderr", "missing input path")) {
+        return Fail("CLI missing input did not explain the error");
+    }
+
+    if (system("bin/kek build tmp.kek --wat > out/cli_unknown.stdout 2> out/cli_unknown.stderr") == 0) {
+        return Fail("CLI unknown flag succeeded");
+    }
+    if (!FileContains("out/cli_unknown.stderr", "unknown flag: --wat")) {
+        return Fail("CLI unknown flag did not explain the error");
+    }
+
+    return 0;
+}
+
 static int TestCompilationApiRegression(void) {
     struct KekDiagnostic diagnostics[256];
     struct KekCompilation compilation;
@@ -362,6 +433,9 @@ static int TestDiagnostics(void) {
 int main(void) {
     if (mkdir("out", 0755) != 0 && errno != EEXIST) {
         return Fail("could not create out directory");
+    }
+    if (TestCliInterface() != 0) {
+        return 1;
     }
     if (TestCompilationApiRegression() != 0) {
         return 1;

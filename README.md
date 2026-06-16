@@ -12,14 +12,24 @@ Build:
 make build
 ```
 
-Run the fixed smoke compile:
+Build a Kek source file:
 
 ```sh
-bin/kek
+bin/kek build tmp.kek
 ```
 
-This reads `tmp.kek`, writes generated C to `out/out.c`, writes AST JSON
-to `out/ast.json`, and writes a typed frontend summary to `out/module.txt`.
+By default this writes generated C to `out/out.c`, writes AST JSON to
+`out/ast.json`, and writes a typed frontend summary to `out/module.txt`.
+
+Custom output paths:
+
+```sh
+bin/kek build tmp.kek -o out/custom.c --ast-json out/custom.json --summary out/custom.txt
+```
+
+Use `--out-dir <dir>` to change the directory for default output names.
+Running bare `bin/kek` is still supported as a compatibility smoke alias for
+`bin/kek build tmp.kek --out-dir out`.
 
 Run the smoke test:
 
