@@ -1,417 +1,256 @@
 #import(std);
 
 extern "C" {
-#include <stdio.h>
+    #include <stdio.h>
 
-static int kek_fmt_fprintf_stderr(const char* text) {
-	return fprintf(stderr, "%s", text);
-}
+    static int kek_fmt_fprintf_stderr(const char* text) {
+        return fprintf(stderr, "%s", text);
+    }
 }
 
-enum:u8:TokenKind {
-	None,
-	Word,
+struct: Formatter {
+    String: input;
+    StringBuilder: out;
+    Status: status;
+    usize: pos;
+    usize: indent;
+    bool: lineStart;
+    bool: stringLiteral;
+    bool: escape;
+    bool: lineComment;
+    bool: blockComment;
 };
 
-struct:Formatter {
-	String:input;
-	StringBuilder:out;
-	Status:status;
-	usize:pos;
-	usize:indent;
-	bool:lineStart;
-	bool:needSpace;
-	TokenKind:lastToken;
-};
-
-bool:IsControlKeyword(String:text) {
-	byte:ifText[2] = { 105, 102 };
-	byte:forText[3] = { 102, 111, 114 };
-	byte:whileText[5] = { 119, 104, 105, 108, 101 };
-	byte:switchText[6] = { 115, 119, 105, 116, 99, 104 };
-	byte:caseText[4] = { 99, 97, 115, 101 };
-	byte:eachText[4] = { 101, 97, 99, 104 };
-	return(text.EqualsBytes(ifText, len(ifText))
-		|| text.EqualsBytes(forText, len(forText))
-		|| text.EqualsBytes(whileText, len(whileText))
-		|| text.EqualsBytes(switchText, len(switchText))
-		|| text.EqualsBytes(caseText, len(caseText))
-		|| text.EqualsBytes(eachText, len(eachText)));
+void: FormatterWriteByte(ptr<Formatter>: formatter, byte: c) {
+    if (formatter.status == Status::Ok) {
+        formatter.status = std::WriteByteToBuilder(&formatter.out, c);
+    }
 }
 
-void:FormatterWriteByte(ptr<Formatter>:formatter, byte:c) {
-	if (formatter.status == Status::Ok) {
-		formatter.status = std::WriteByteToBuilder(&formatter.out, c);
-	}
+void: FormatterWriteIndent(ptr<Formatter>: formatter, usize: indent) {
+    for (usize: i = 0; i < indent * 4 && formatter.status == Status::Ok; i++) {
+        FormatterWriteByte(formatter, 32);
+    }
 }
 
-void:FormatterWriteSlice(ptr<Formatter>:formatter, usize:start, usize:end) {
-	if (end > start) {
-		if (formatter.status == Status::Ok) {
-			formatter.status = std::WriteSliceToBuilder(&formatter.out, std::FixedSlice<byte>(formatter.input.data + start, end - start));
-		}
-	}
+byte: FormatterFirstLineByte(ptr<Formatter>: formatter) {
+    usize: i = formatter.pos;
+    while (i < formatter.input.len && (formatter.input.data[i] == 32 || formatter.input.data[i] == 9)) {
+        i += 1;
+    }
+    if (i >= formatter.input.len || formatter.input.data[i] == 10) {
+        return(0);
+    }
+    return(formatter.input.data[i]);
 }
 
-void:FormatterWriteIndent(ptr<Formatter>:formatter) {
-	for (usize:i = 0; i < formatter.indent && formatter.status == Status::Ok; i++) {
-		FormatterWriteByte(formatter, 9);
-	}
-	formatter.lineStart = false;
+void: FormatterBeginLine(ptr<Formatter>: formatter) {
+    while (formatter.pos < formatter.input.len && (formatter.input.data[formatter.pos] == 32 || formatter.input.data[formatter.pos] == 9)) {
+        formatter.pos += 1;
+    }
+
+    byte: first = FormatterFirstLineByte(formatter);
+    if (first == 0) {
+        formatter.lineStart = false;
+    } else {
+        usize: lineIndent = formatter.indent;
+        if (!formatter.blockComment && first == 125 && lineIndent > 0) {
+            lineIndent -= 1;
+        }
+        FormatterWriteIndent(formatter, lineIndent);
+        formatter.lineStart = false;
+    }
 }
 
-void:FormatterBeforeToken(ptr<Formatter>:formatter) {
-	if (formatter.lineStart) {
-		FormatterWriteIndent(formatter);
-	} else {
-		if (formatter.needSpace) {
-			FormatterWriteByte(formatter, 32);
-			formatter.needSpace = false;
-		}
-	}
+void: FormatterWriteColon(ptr<Formatter>: formatter) {
+    FormatterWriteByte(formatter, 58);
+    formatter.pos += 1;
+    if (formatter.pos < formatter.input.len && formatter.input.data[formatter.pos] == 58) {
+        FormatterWriteByte(formatter, 58);
+        formatter.pos += 1;
+    } else {
+        if (formatter.pos < formatter.input.len && formatter.input.data[formatter.pos] != 10 && formatter.input.data[formatter.pos] != 32 && formatter.input.data[formatter.pos] != 9) {
+            FormatterWriteByte(formatter, 32);
+        }
+    }
 }
 
-void:FormatterNewline(ptr<Formatter>:formatter) {
-	if (formatter.out.len > 0 && formatter.out.data[formatter.out.len - 1] != 10) {
-		FormatterWriteByte(formatter, 10);
-	}
-	formatter.lineStart = true;
-	formatter.needSpace = false;
-	formatter.lastToken = TokenKind::None;
+void: FormatterWriteStringByte(ptr<Formatter>: formatter, byte: c) {
+    FormatterWriteByte(formatter, c);
+    formatter.pos += 1;
+    if (formatter.escape) {
+        formatter.escape = false;
+    } else {
+        if (c == 92) {
+            formatter.escape = true;
+        } else {
+            if (c == 34) {
+                formatter.stringLiteral = false;
+            }
+        }
+    }
 }
 
-byte:FormatterPeekNonSpace(ptr<Formatter>:formatter) {
-	usize:i = formatter.pos;
-	while (i < formatter.input.len && std::IsAsciiSpace(formatter.input.data[i])) {
-		i += 1;
-	}
-	if (i >= formatter.input.len) {
-		return(0);
-	}
-	return(formatter.input.data[i]);
+void: FormatterWriteCodeByte(ptr<Formatter>: formatter, byte: c) {
+    bool: handled = false;
+    if (c == 58) {
+        FormatterWriteColon(formatter);
+        handled = true;
+    }
+
+    if (!handled && c == 34) {
+        formatter.stringLiteral = true;
+        formatter.escape = false;
+        FormatterWriteByte(formatter, c);
+        formatter.pos += 1;
+        handled = true;
+    }
+
+    if (!handled && c == 47 && formatter.pos + 1 < formatter.input.len && formatter.input.data[formatter.pos + 1] == 47) {
+        formatter.lineComment = true;
+        FormatterWriteByte(formatter, c);
+        formatter.pos += 1;
+        handled = true;
+    }
+
+    if (!handled && c == 47 && formatter.pos + 1 < formatter.input.len && formatter.input.data[formatter.pos + 1] == 42) {
+        formatter.blockComment = true;
+        FormatterWriteByte(formatter, c);
+        formatter.pos += 1;
+        handled = true;
+    }
+
+    if (!handled) {
+        if (c == 123) {
+            formatter.indent += 1;
+        } else {
+            if (c == 125 && formatter.indent > 0) {
+                formatter.indent -= 1;
+            }
+        }
+        FormatterWriteByte(formatter, c);
+        formatter.pos += 1;
+    }
 }
 
-void:FormatterWriteWord(ptr<Formatter>:formatter) {
-	usize:start = formatter.pos;
-	formatter.pos += 1;
-	while (formatter.pos < formatter.input.len && std::IsAsciiWord(formatter.input.data[formatter.pos])) {
-		formatter.pos += 1;
-	}
-
-	if (formatter.lastToken == TokenKind::Word) {
-		formatter.needSpace = true;
-	}
-	FormatterBeforeToken(formatter);
-	FormatterWriteSlice(formatter, start, formatter.pos);
-
-	String:text = std::StringFromBytes(std::FixedSlice<byte>(formatter.input.data + start, formatter.pos - start));
-	formatter.needSpace = IsControlKeyword(text);
-	formatter.lastToken = TokenKind::Word;
+void: FormatterWriteCommentByte(ptr<Formatter>: formatter, byte: c) {
+    FormatterWriteByte(formatter, c);
+    formatter.pos += 1;
+    if (formatter.blockComment && c == 42 && formatter.pos < formatter.input.len && formatter.input.data[formatter.pos] == 47) {
+        FormatterWriteByte(formatter, 47);
+        formatter.pos += 1;
+        formatter.blockComment = false;
+    }
 }
 
-void:FormatterWriteStringLiteral(ptr<Formatter>:formatter) {
-	FormatterBeforeToken(formatter);
-	FormatterWriteByte(formatter, formatter.input.data[formatter.pos]);
-	formatter.pos += 1;
+Status: FormatterFormat(ptr<Formatter>: formatter) {
+    while (formatter.pos < formatter.input.len && formatter.status == Status::Ok) {
+        if (formatter.lineStart) {
+            FormatterBeginLine(formatter);
+        }
 
-	while (formatter.pos < formatter.input.len && formatter.status == Status::Ok) {
-		byte:c = formatter.input.data[formatter.pos];
-		FormatterWriteByte(formatter, c);
-		formatter.pos += 1;
-		if (c == 92 && formatter.pos < formatter.input.len) {
-			FormatterWriteByte(formatter, formatter.input.data[formatter.pos]);
-			formatter.pos += 1;
-		} else {
-			if (c == 34) {
-				break;
-			}
-		}
-	}
-	formatter.needSpace = false;
-	formatter.lastToken = TokenKind::Word;
+        if (formatter.pos >= formatter.input.len) {
+            break;
+        }
+
+        byte: c = formatter.input.data[formatter.pos];
+        if (c == 10) {
+            FormatterWriteByte(formatter, c);
+            formatter.pos += 1;
+            formatter.lineStart = true;
+            formatter.lineComment = false;
+            continue;
+        }
+
+        if (formatter.stringLiteral) {
+            FormatterWriteStringByte(formatter, c);
+            continue;
+        }
+
+        if (formatter.lineComment || formatter.blockComment) {
+            FormatterWriteCommentByte(formatter, c);
+            continue;
+        }
+
+        FormatterWriteCodeByte(formatter, c);
+    }
+    return(formatter.status);
 }
 
-void:FormatterWriteLineComment(ptr<Formatter>:formatter) {
-	FormatterBeforeToken(formatter);
-	while (formatter.pos < formatter.input.len && formatter.input.data[formatter.pos] != 10 && formatter.status == Status::Ok) {
-		FormatterWriteByte(formatter, formatter.input.data[formatter.pos]);
-		formatter.pos += 1;
-	}
-	FormatterNewline(formatter);
-}
+int: main(int: argc, ptr<str>: argv) {
+    Allocator: allocator = std::DefaultAllocator();
+    File: input;
+    bool: closeInput = false;
 
-void:FormatterWriteBlockComment(ptr<Formatter>:formatter) {
-	FormatterBeforeToken(formatter);
-	while (formatter.pos < formatter.input.len && formatter.status == Status::Ok) {
-		byte:c = formatter.input.data[formatter.pos];
-		FormatterWriteByte(formatter, c);
-		formatter.pos += 1;
-		if (c == 42 && formatter.pos < formatter.input.len && formatter.input.data[formatter.pos] == 47) {
-			FormatterWriteByte(formatter, 47);
-			formatter.pos += 1;
-			break;
-		}
-		if (c == 10) {
-			formatter.lineStart = true;
-			FormatterWriteIndent(formatter);
-		}
-	}
-	formatter.needSpace = true;
-	formatter.lastToken = TokenKind::Word;
-}
+    if (argc > 1) {
+        Result<File>: opened = std::FileOpen(argv[1], FileMode::Read);
+        if (opened.status != Status::Ok) {
+            ::kek_fmt_fprintf_stderr("fmt.kek: could not open input\n");
+            return(1);
+        }
+        input = opened.value;
+        closeInput = true;
+    } else {
+        input = std::Stdin();
+    }
 
-void:FormatterWriteHashLine(ptr<Formatter>:formatter) {
-	if (formatter.lineStart) {
-		FormatterWriteIndent(formatter);
-	}
-	while (formatter.pos < formatter.input.len && formatter.status == Status::Ok) {
-		byte:c = formatter.input.data[formatter.pos];
-		FormatterWriteByte(formatter, c);
-		formatter.pos += 1;
-		if (c == 59) {
-			FormatterNewline(formatter);
-			break;
-		}
-		if (c == 10) {
-			formatter.lineStart = true;
-			formatter.needSpace = false;
-			break;
-		}
-	}
-}
+    OwnedString: source;
+    Status: readStatus = std::ReadAllToOwnedString(input, allocator, &source);
+    if (closeInput) {
+        input.Close();
+    }
+    if (readStatus != Status::Ok) {
+        ::kek_fmt_fprintf_stderr("fmt.kek: could not read input\n");
+        return(1);
+    }
 
-void:FormatterWriteOperator(ptr<Formatter>:formatter) {
-	usize:start = formatter.pos;
-	formatter.pos += 1;
-	while (formatter.pos < formatter.input.len && std::IsAsciiOperator(formatter.input.data[formatter.pos])) {
-		formatter.pos += 1;
-	}
+    Formatter: formatter;
+    formatter.input = source.View();
+    formatter.out = std::StringBuilderNew(allocator);
+    formatter.status = Status::Ok;
+    formatter.pos = 0;
+    formatter.indent = 0;
+    formatter.lineStart = true;
+    formatter.stringLiteral = false;
+    formatter.escape = false;
+    formatter.lineComment = false;
+    formatter.blockComment = false;
 
-	byte:first = formatter.input.data[start];
-	if (!formatter.lineStart && first != 60 && first != 62 && first != 33) {
-		FormatterWriteByte(formatter, 32);
-	}
-	FormatterBeforeToken(formatter);
-	FormatterWriteSlice(formatter, start, formatter.pos);
-	formatter.needSpace = first != 60 && first != 62 && first != 33;
-	formatter.lastToken = TokenKind::None;
-}
+    Status: formatStatus = FormatterFormat(&formatter);
+    if (formatStatus != Status::Ok) {
+        ::kek_fmt_fprintf_stderr("fmt.kek: out of memory\n");
+        source.Destroy();
+        return(1);
+    }
 
-void:FormatterWriteOpenBrace(ptr<Formatter>:formatter) {
-	FormatterBeforeToken(formatter);
-	FormatterWriteByte(formatter, 123);
-	formatter.pos += 1;
-	formatter.indent += 1;
-	FormatterNewline(formatter);
-}
+    String: formatted;
+    formatted.data = formatter.out.data;
+    formatted.len = formatter.out.len;
 
-void:FormatterWriteCloseBrace(ptr<Formatter>:formatter) {
-	if (!formatter.lineStart) {
-		FormatterNewline(formatter);
-	}
-	if (formatter.indent > 0) {
-		formatter.indent -= 1;
-	}
-	FormatterBeforeToken(formatter);
-	FormatterWriteByte(formatter, 125);
-	formatter.pos += 1;
+    Status: writeStatus = Status::Ok;
+    if (argc > 1) {
+        Result<File>: opened = std::FileOpen(argv[1], FileMode::Write);
+        if (opened.status != Status::Ok) {
+            ::kek_fmt_fprintf_stderr("fmt.kek: could not open output\n");
+            std::DestroyStringBuilder(&formatter.out);
+            source.Destroy();
+            return(1);
+        }
+        File: output = opened.value;
+        writeStatus = output.Write(formatted.Bytes()).status;
+        output.Close();
+    } else {
+        File: stdout = std::Stdout();
+        writeStatus = stdout.Write(formatted.Bytes()).status;
+    }
+    if (writeStatus != Status::Ok) {
+        ::kek_fmt_fprintf_stderr("fmt.kek: could not write output\n");
+        std::DestroyStringBuilder(&formatter.out);
+        source.Destroy();
+        return(1);
+    }
 
-	byte:next = FormatterPeekNonSpace(formatter);
-	if (next != 59 && next != 44 && next != 41 && next != 0) {
-		FormatterNewline(formatter);
-	}
-}
-
-void:FormatterWriteSemicolon(ptr<Formatter>:formatter) {
-	FormatterWriteByte(formatter, 59);
-	formatter.pos += 1;
-	FormatterNewline(formatter);
-}
-
-void:FormatterWriteComma(ptr<Formatter>:formatter) {
-	FormatterWriteByte(formatter, 44);
-	formatter.pos += 1;
-	formatter.needSpace = true;
-}
-
-void:FormatterWriteColon(ptr<Formatter>:formatter) {
-	if (formatter.lineStart) {
-		FormatterWriteIndent(formatter);
-	}
-	FormatterWriteByte(formatter, 58);
-	formatter.pos += 1;
-	if (formatter.pos < formatter.input.len && formatter.input.data[formatter.pos] == 58) {
-		FormatterWriteByte(formatter, 58);
-		formatter.pos += 1;
-	}
-	formatter.needSpace = false;
-}
-
-void:FormatterWriteOpenGroup(ptr<Formatter>:formatter, byte:c) {
-	FormatterBeforeToken(formatter);
-	FormatterWriteByte(formatter, c);
-	formatter.pos += 1;
-	formatter.needSpace = false;
-	formatter.lastToken = TokenKind::None;
-}
-
-void:FormatterWriteCloseGroup(ptr<Formatter>:formatter, byte:c) {
-	FormatterWriteByte(formatter, c);
-	formatter.pos += 1;
-	formatter.needSpace = false;
-}
-
-void:FormatterWriteDot(ptr<Formatter>:formatter) {
-	if (formatter.lineStart) {
-		FormatterWriteIndent(formatter);
-	}
-	FormatterWriteByte(formatter, 46);
-	formatter.pos += 1;
-	formatter.needSpace = false;
-}
-
-void:FormatterWriteOther(ptr<Formatter>:formatter, byte:c) {
-	FormatterBeforeToken(formatter);
-	FormatterWriteByte(formatter, c);
-	formatter.pos += 1;
-	formatter.needSpace = false;
-}
-
-void:FormatterDispatchPunctuation(ptr<Formatter>:formatter, byte:c) {
-	bool:handled = false;
-	if (c == 35) {
-		FormatterWriteHashLine(formatter);
-		handled = true;
-	}
-	if (!handled && (c == 40 || c == 91)) {
-		FormatterWriteOpenGroup(formatter, c);
-		handled = true;
-	}
-	if (!handled && (c == 41 || c == 93)) {
-		FormatterWriteCloseGroup(formatter, c);
-		handled = true;
-	}
-	if (!handled && c == 44) {
-		FormatterWriteComma(formatter);
-		handled = true;
-	}
-	if (!handled && c == 46) {
-		FormatterWriteDot(formatter);
-		handled = true;
-	}
-	if (!handled && c == 58) {
-		FormatterWriteColon(formatter);
-		handled = true;
-	}
-	if (!handled && c == 59) {
-		FormatterWriteSemicolon(formatter);
-		handled = true;
-	}
-	if (!handled && c == 123) {
-		FormatterWriteOpenBrace(formatter);
-		handled = true;
-	}
-	if (!handled && c == 125) {
-		FormatterWriteCloseBrace(formatter);
-		handled = true;
-	}
-	if (!handled) {
-		if (std::IsAsciiOperator(c)) {
-			FormatterWriteOperator(formatter);
-		} else {
-			FormatterWriteOther(formatter, c);
-		}
-	}
-}
-
-Status:FormatterFormat(ptr<Formatter>:formatter) {
-	while (formatter.pos < formatter.input.len && formatter.status == Status::Ok) {
-		byte:c = formatter.input.data[formatter.pos];
-		if (std::IsAsciiSpace(c)) {
-			formatter.pos += 1;
-			continue;
-		}
-		if (std::IsAsciiAlpha(c) || std::IsAsciiDigit(c)) {
-			FormatterWriteWord(formatter);
-			continue;
-		}
-		if (c == 34) {
-			FormatterWriteStringLiteral(formatter);
-			continue;
-		}
-		if (c == 47 && formatter.pos + 1 < formatter.input.len && formatter.input.data[formatter.pos + 1] == 47) {
-			FormatterWriteLineComment(formatter);
-			continue;
-		}
-		if (c == 47 && formatter.pos + 1 < formatter.input.len && formatter.input.data[formatter.pos + 1] == 42) {
-			FormatterWriteBlockComment(formatter);
-			continue;
-		}
-		FormatterDispatchPunctuation(formatter, c);
-	}
-	if (formatter.status == Status::Ok) {
-		FormatterNewline(formatter);
-	}
-	return(formatter.status);
-}
-
-int:main(int:argc, ptr<str>:argv) {
-	Allocator:allocator = std::DefaultAllocator();
-	File:input;
-	bool:closeInput = false;
-
-	if (argc > 1) {
-		Result<File>:opened = std::FileOpen(argv[1], FileMode::Read);
-		if (opened.status != Status::Ok) {
-			::kek_fmt_fprintf_stderr("fmt.kek: could not open input\n");
-			return(1);
-		}
-		input = opened.value;
-		closeInput = true;
-	} else {
-		input = std::Stdin();
-	}
-
-	OwnedString:source;
-	Status:readStatus = std::ReadAllToOwnedString(input, allocator, &source);
-	if (closeInput) {
-		input.Close();
-	}
-	if (readStatus != Status::Ok) {
-		::kek_fmt_fprintf_stderr("fmt.kek: could not read input\n");
-		return(1);
-	}
-
-	Formatter:formatter;
-	formatter.input = source.View();
-	formatter.out = std::StringBuilderNew(allocator);
-	formatter.status = Status::Ok;
-	formatter.pos = 0;
-	formatter.indent = 0;
-	formatter.lineStart = true;
-	formatter.needSpace = false;
-	formatter.lastToken = TokenKind::None;
-
-	Status:formatStatus = FormatterFormat(&formatter);
-	if (formatStatus != Status::Ok) {
-		::kek_fmt_fprintf_stderr("fmt.kek: out of memory\n");
-		source.Destroy();
-		return(1);
-	}
-
-	File:stdout = std::Stdout();
-	String:formatted;
-	formatted.data = formatter.out.data;
-	formatted.len = formatter.out.len;
-	Status:writeStatus = stdout.Write(formatted.Bytes()).status;
-	if (writeStatus != Status::Ok) {
-		::kek_fmt_fprintf_stderr("fmt.kek: could not write output\n");
-		std::DestroyStringBuilder(&formatter.out);
-		source.Destroy();
-		return(1);
-	}
-
-	std::DestroyStringBuilder(&formatter.out);
-	source.Destroy();
-	return(0);
+    std::DestroyStringBuilder(&formatter.out);
+    source.Destroy();
+    return(0);
 }

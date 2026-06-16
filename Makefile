@@ -91,7 +91,8 @@ kekfmt:
 	@echo "Wrote out/kekfmt"
 
 kekfmt-test: kekfmt
-	@out/kekfmt fmt.kek > out/fmt.formatted.kek
+	@cp fmt.kek out/fmt.formatted.kek
+	@out/kekfmt out/fmt.formatted.kek
 	@set -e; \
 	tmp_backup=$$(mktemp out/tmp.kek.XXXXXX); \
 	cp tmp.kek $$tmp_backup; \

@@ -3,115 +3,115 @@
 
 extern "C" {
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <string.h>
 
-typedef FILE KekFile;
-typedef size_t KekSize;
-typedef int KekStatus;
+    typedef FILE KekFile;
+    typedef size_t KekSize;
+    typedef int KekStatus;
 
-struct CPoint {
-    int x;
-    int y;
-};
+    struct CPoint {
+        int x;
+        int y;
+    };
 
-void* kek_alloc(KekSize size) { return malloc(size); }
-void kek_free(void* memory) { free(memory); }
-KekFile* kek_file_open(const char* path, const char* mode) { return fopen(path, mode); }
-KekSize kek_file_read(void* buffer, KekSize size, KekSize count, KekFile* file) { return fread(buffer, size, count, file); }
-KekSize kek_file_write(const void* buffer, KekSize size, KekSize count, KekFile* file) { return fwrite(buffer, size, count, file); }
-KekStatus kek_file_close(KekFile* file) { return fclose(file); }
-void* kek_mem_copy(void* dest, const void* src, KekSize count) { return memcpy(dest, src, count); }
-void* kek_mem_set(void* dest, int value, KekSize count) { return memset(dest, value, count); }
-int kek_str_cmp(const char* left, const char* right) { return strcmp(left, right); }
-void kek_exit(int status) { exit(status); }
+    void* kek_alloc(KekSize size) { return malloc(size); }
+    void kek_free(void* memory) { free(memory); }
+    KekFile* kek_file_open(const char* path, const char* mode) { return fopen(path, mode); }
+    KekSize kek_file_read(void* buffer, KekSize size, KekSize count, KekFile* file) { return fread(buffer, size, count, file); }
+    KekSize kek_file_write(const void* buffer, KekSize size, KekSize count, KekFile* file) { return fwrite(buffer, size, count, file); }
+    KekStatus kek_file_close(KekFile* file) { return fclose(file); }
+    void* kek_mem_copy(void* dest, const void* src, KekSize count) { return memcpy(dest, src, count); }
+    void* kek_mem_set(void* dest, int value, KekSize count) { return memset(dest, value, count); }
+    int kek_str_cmp(const char* left, const char* right) { return strcmp(left, right); }
+    void kek_exit(int status) { exit(status); }
 
-void println(const char* str) {
-    printf("%s\n", str);
+    void println(const char* str) {
+        printf("%s\n", str);
+    }
+
 }
 
-}
-
-alias:byte = u8;
-alias:usize = u64;
+alias: byte = u8;
+alias: usize = u64;
 
 // Struct with aligned attribute
-[packed,aligned(8)]struct:AlignedPacket {
-u8:tag;
-u32:data;
+[packed,aligned(8)]struct: AlignedPacket {
+    u8: tag;
+    u32: data;
 };
 
 // Struct with nested internal struct
-struct:Container {
-u32:id;
-struct:Inner {
-    u8:value;
-};
-};
-
-[packed]struct:Packet{
-u8:kind=4;
-u32:id=0;
+struct: Container {
+    u32: id;
+    struct: Inner {
+        u8: value;
+    };
 };
 
-enum:u8:PacketKind {
-None,
-Add = 3,
+[packed]struct: Packet{
+    u8: kind=4;
+    u32: id=0;
 };
 
-union:PacketValue {
-u8:kind;
-u32:id;
+enum: u8: PacketKind {
+    None,
+    Add = 3,
 };
 
-struct:GenericBox<T> {
-T:value=0;
+union: PacketValue {
+    u8: kind;
+    u32: id;
 };
 
-struct:Generics<T1, T2> {
-T1:first;
-T2:second;
+struct: GenericBox<T> {
+    T: value=0;
 };
 
-struct:Vec2 {
-i32:x;
-i32:y;
+struct: Generics<T1, T2> {
+    T1: first;
+    T2: second;
 };
 
-Vec2:Vec2::operator+(Vec2:rhs) {
-return(Vec2:{ x = this.x + rhs.x, y = this.y + rhs.y });
+struct: Vec2 {
+    i32: x;
+    i32: y;
+};
+
+Vec2: Vec2::operator+(Vec2: rhs) {
+    return(Vec2: { x = this.x + rhs.x, y = this.y + rhs.y });
 }
 
-Vec2:Vec2::operator-(Vec2:rhs) {
-return(Vec2:{ x = this.x - rhs.x, y = this.y - rhs.y });
+Vec2: Vec2::operator-(Vec2: rhs) {
+    return(Vec2: { x = this.x - rhs.x, y = this.y - rhs.y });
 }
 
-Vec2:Vec2::operator-() {
-return(Vec2:{ x = -this.x, y = -this.y });
+Vec2: Vec2::operator-() {
+    return(Vec2: { x = -this.x, y = -this.y });
 }
 
-bool:Vec2::operator==(Vec2:rhs) {
-return(this.x == rhs.x && this.y == rhs.y);
+bool: Vec2::operator==(Vec2: rhs) {
+    return(this.x == rhs.x && this.y == rhs.y);
 }
 
-void:Vec2::operator+=(Vec2:rhs) {
-this.x += rhs.x;
-this.y += rhs.y;
+void: Vec2::operator+=(Vec2: rhs) {
+    this.x += rhs.x;
+    this.y += rhs.y;
 }
 
-T:GenericAdd<T>(T:left, T:right) {
-return(left + right);
+T: GenericAdd<T>(T: left, T: right) {
+    return(left + right);
 }
 
-[static,inline]int:add(int:a=0,int:b=0){
-int:sum=a+b;
-return(sum);
+[static,inline]int: add(int: a=0,int: b=0){
+    int: sum=a+b;
+    return(sum);
 }
 
-u8:Packet::Add(u8:val=0){
- this.kind += val;
- return(this.kind);
+u8: Packet::Add(u8: val=0){
+    this.kind += val;
+    return(this.kind);
 }
 
 i64: main() {
@@ -120,55 +120,55 @@ i64: main() {
     assert(8 - 3 - 2 == 3);
     assert(1 + 2 < 4 && 5 == 5);
 
-    int:genericSum = GenericAdd<int>(20, 22);
+    int: genericSum = GenericAdd<int>(20, 22);
     assert(genericSum == 42);
 
-    GenericBox<u8>:genericBox;
+    GenericBox<u8>: genericBox;
     genericBox.value = 5;
     assert(genericBox.value == 5);
 
-    Generics<u8, u16>:genericPair;
+    Generics<u8, u16>: genericPair;
     genericPair.first = 7;
     genericPair.second = 300;
     assert(genericPair.first == 7);
     assert(genericPair.second == 300);
 
-    Vec2:vecA = { x = 2, y = 3 };
-    ptr:vecPtr = &vecA;
-    ptr<Vec2>:typedVecPtr = &vecA;
+    Vec2: vecA = { x = 2, y = 3 };
+    ptr: vecPtr = &vecA;
+    ptr<Vec2>: typedVecPtr = &vecA;
     assert(vecPtr != 0);
     assert(typedVecPtr != 0);
-    Vec2:vecB = { y = 7, x = 5 }; // Test that field order doesn't matter
-    Vec2:vecExpected;
+    Vec2: vecB = { y = 7, x = 5 }; // Test that field order doesn't matter
+    Vec2: vecExpected;
     vecExpected.x = 7;
     vecExpected.y = 10;
-    Vec2:vecSum = vecA + vecB;
+    Vec2: vecSum = vecA + vecB;
     assert(vecSum == vecExpected);
-    Vec2:vecDiff = vecB - vecA;
+    Vec2: vecDiff = vecB - vecA;
     assert(vecDiff.x == 3);
     assert(vecDiff.y == 4);
-    Vec2:vecNeg = -vecA;
+    Vec2: vecNeg = -vecA;
     assert(vecNeg.x == -2);
     assert(vecNeg.y == -3);
     vecA += vecB;
     assert(vecA == vecExpected);
 
-    u8:packageGeneric = MyPackage::PkgGenericEcho<u8>(11);
+    u8: packageGeneric = MyPackage::PkgGenericEcho<u8>(11);
     assert(packageGeneric == 11);
 
-    byte:small = 7;
+    byte: small = 7;
     assert(small == 7);
-    int:both = add(40, 2);
-    int:one = add(a=42);
-    Packet:packet;
+    int: both = add(40, 2);
+    int: one = add(a=42);
+    Packet: packet;
     assert(packet.kind == 4);
-    u8:kind = packet.Add(3);
+    u8: kind = packet.Add(3);
     assert(kind == 7);
 
     assert(MyPackage::MyPackageFunc() == 69);
 
-    PacketKind:tag = PacketKind::Add;
-    u8:switchValue = 0;
+    PacketKind: tag = PacketKind::Add;
+    u8: switchValue = 0;
     switch(tag) {
         case(PacketKind::None): {
             switchValue = 1;
@@ -182,14 +182,14 @@ i64: main() {
     }
     assert(switchValue == 2);
 
-    PacketValue:value;
+    PacketValue: value;
     value.kind = kind;
     assert(value.kind == 7);
 
-    CPoint:cPoint = { x = 9, y = 4 };
+    CPoint: cPoint = { x = 9, y = 4 };
     assert(cPoint.x == 9);
 
-    u8:branchValue = 0;
+    u8: branchValue = 0;
     if (kind == 7) {
         branchValue = 1;
     } else {
@@ -197,8 +197,8 @@ i64: main() {
     }
     assert(branchValue == 1);
 
-    int:loopSum = 0;
-    for (int:i = 0; i < 4; i++) {
+    int: loopSum = 0;
+    for (int: i = 0; i < 4; i++) {
         if (i == 1) {
             continue;
         }
@@ -210,7 +210,7 @@ i64: main() {
     }
     assert(loopSum == 2);
 
-    int:whileValue = 0;
+    int: whileValue = 0;
     while (whileValue < 3) {
         whileValue += 1;
     }
@@ -221,10 +221,10 @@ i64: main() {
     } while (whileValue > 1);
     assert(whileValue == 1);
 
-    u8:castValue = cast<u8>(whileValue + 6);
+    u8: castValue = cast<u8>(whileValue + 6);
     assert(castValue == 7);
 
-    int:deferValue = 0;
+    int: deferValue = 0;
     if (true) {
         defer deferValue += 5;
         defer {
@@ -234,49 +234,49 @@ i64: main() {
     }
     assert(deferValue == 15);
 
-    u8:bytes[4] = {1, 2, 3, 4};
+    u8: bytes[4] = {1, 2, 3, 4};
     assert(bytes[2] == 3);
 
     // Binary and hex literals with separators
-    u8:bitMask = 0b1010_0001;
+    u8: bitMask = 0b1010_0001;
     assert(bitMask == 161);
-    u32:hexColor = 0xFF_AA_00_12;
+    u32: hexColor = 0xFF_AA_00_12;
     assert(hexColor == 0xFFAA0012);
 
     // sizeof, alignof
-    usize:packetSize = sizeof(Packet);
+    usize: packetSize = sizeof(Packet);
     assert(packetSize == 5);
-    usize:alignedSize = alignof(AlignedPacket);
+    usize: alignedSize = alignof(AlignedPacket);
     assert(alignedSize == 8);
     // offsetof
-    usize:fieldOffset = offsetof(Packet, id);
+    usize: fieldOffset = offsetof(Packet, id);
     assert(fieldOffset == 1);
 
     // Compile-time assert with alignof
     assert(alignof(AlignedPacket) == 8);
 
     // len() for fixed arrays
-    u8:testArray[8] = {0};
-    usize:arrayLen = len(testArray);
+    u8: testArray[8] = {0};
+    usize: arrayLen = len(testArray);
     assert(arrayLen == 8);
     assert(len(bytes) == 4);
 
     // Multi-dimensional arrays
-    u8:matrix[2][3] = {0};
+    u8: matrix[2][3] = {0};
     matrix[0][0] = 1;
     matrix[1][2] = 6;
     assert(matrix[0][0] == 1);
     assert(matrix[1][2] == 6);
 
     // Nested struct access
-    Container:container;
+    Container: container;
     container.id = 42;
     container.Inner.value = 7;
     assert(container.id == 42);
     assert(container.Inner.value == 7);
 
     // unreachable in switch default
-    u8:unreachableTest = 1;
+    u8: unreachableTest = 1;
     switch(unreachableTest) {
         case(1): {
             break;
@@ -291,30 +291,30 @@ i64: main() {
         panic("This should never happen");
     }
 
-    ptr:mem = ::malloc(16);
+    ptr: mem = ::malloc(16);
     assert(mem != 0);
     ::free(mem);
 
     ::println("Hello, world!");
 
 
-    str:my_string = "Whats uuuuuuuuuuuuuuuuuuuuuup!";
+    str: my_string = "Whats uuuuuuuuuuuuuuuuuuuuuup!";
 
     ::println(my_string);
 
     // === each and range tests ===
 
     // Basic each over array
-    u8:eachArr[4] = {10, 20, 30, 40};
-    int:eachSum = 0;
-    each<u8:val>(eachArr){
+    u8: eachArr[4] = {10, 20, 30, 40};
+    int: eachSum = 0;
+    each<u8: val>(eachArr){
         eachSum += val;
     }
     assert(eachSum == 100);
 
     // Each with index
-    u8:eachIndexed[4] = {0};
-    each<usize:idx, u8:val>(eachArr){
+    u8: eachIndexed[4] = {0};
+    each<usize: idx, u8: val>(eachArr){
         eachIndexed[idx] = val + 1;
     }
     assert(eachIndexed[0] == 11);
@@ -323,23 +323,23 @@ i64: main() {
     assert(eachIndexed[3] == 41);
 
     // Each over range (basic)
-    int:rangeSum = 0;
-    each<int:n>(range<int>(0, 5)){
+    int: rangeSum = 0;
+    each<int: n>(range<int>(0, 5)){
         rangeSum += n;
     }
     assert(rangeSum == 10); // 0+1+2+3+4
 
     // Each over range with step
-    int:stepSum = 0;
-    each<int:n>(range<int>(0, 10, 2)){
+    int: stepSum = 0;
+    each<int: n>(range<int>(0, 10, 2)){
         stepSum += n;
     }
     assert(stepSum == 20); // 0+2+4+6+8
 
     // Nested each over ranges (multiplication table check)
-    int:mulCheck = 0;
-    each<int:i>(range<int>(1, 4)){
-        each<int:j>(range<int>(1, 4)){
+    int: mulCheck = 0;
+    each<int: i>(range<int>(1, 4)){
+        each<int: j>(range<int>(1, 4)){
             mulCheck += i * j;
         }
     }
@@ -354,9 +354,9 @@ i64: main() {
     // assert(vecXSum == 9);
 
     // Each with index accessing array elements
-    int:idxTest[3] = {100, 200, 300};
-    int:idxSum = 0;
-    each<usize:i, int:val>(idxTest){
+    int: idxTest[3] = {100, 200, 300};
+    int: idxSum = 0;
+    each<usize: i, int: val>(idxTest){
         idxSum += cast<int>(i) * val;
     }
     assert(idxSum == 800); // 0*100 + 1*200 + 2*300 = 0 + 200 + 600 = 800
