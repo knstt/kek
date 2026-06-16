@@ -926,7 +926,10 @@ static struct KekStmt* ParseStatement(struct KekFrontend* frontend, struct KekMo
         stmt->condition = ParseFirstGroupStatementExpr(frontend, module, Next(first));
         stmt->expr = stmt->condition;
     } else if (kind == KEK_STMT_RETURN) {
-        stmt->expr = ParseExprUntil(frontend, module, Next(first), NULL);
+        struct AstNode* value = Next(first);
+        if (value) {
+            stmt->expr = ParseExprUntil(frontend, module, value, NULL);
+        }
     } else if (kind == KEK_STMT_DEFAULT) {
         struct AstNode* colon = Next(first);
         if (IsPunctuationNode(colon, PUNCTUATION_COLON) && Next(colon)) {
