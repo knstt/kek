@@ -347,7 +347,7 @@ void PrintAst(struct AstNode* node, struct SourceFile* file, int indent) {
     printf("%s", AstNodeTypeNames[node->type]);
     if (node->type == AST_TOKEN) {
         printf(" %s", TokenTypeNames[node->token.type]);
-        if (node->token.type == TOKEN_IDENTIFIER || node->token.type == TOKEN_NUMBER || node->token.type == TOKEN_STRING) {
+        if (node->token.type == TOKEN_IDENTIFIER || node->token.type == TOKEN_NUMBER || node->token.type == TOKEN_STRING || node->token.type == TOKEN_CHAR) {
             printf(" '%.*s'", (int)node->token.location.length, file->content + node->token.location.offset);
         } else if (node->token.type != TOKEN_EOF) {
             printf(" '%s'", TokenLexeme(&node->token, file));

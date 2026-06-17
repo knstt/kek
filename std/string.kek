@@ -24,10 +24,37 @@ String:StringFromBytes(Slice<byte>:bytes) {
 	return(out);
 }
 
+String:StringFromCString(str:text) {
+	String:out;
+	usize:count = 0;
+	while (text[count] != 0) {
+		count += 1;
+	}
+	out.data = cast<ptr>(text);
+	out.len = count;
+	return(out);
+}
+
 Slice<byte>:String::Bytes() {
 	Slice<byte>:out;
 	out.data = this.data;
 	out.len = this.len;
+	return(out);
+}
+
+String:String::Slice(usize:start, usize:length) {
+	String:out;
+	if (start >= this.len) {
+		out.data = this.data + this.len;
+		out.len = 0;
+		return(out);
+	}
+	usize:available = this.len - start;
+	if (length > available) {
+		length = available;
+	}
+	out.data = this.data + start;
+	out.len = length;
 	return(out);
 }
 
@@ -45,6 +72,10 @@ bool:String::Equals(String:other) {
 	return(true);
 }
 
+bool:String::EqualsCString(str:text) {
+	return(this.Equals(StringFromCString(text)));
+}
+
 bool:String::EqualsBytes(ptr<byte>:data, usize:len) {
 	if (this.len != len) {
 		return(false);
@@ -57,6 +88,24 @@ bool:String::EqualsBytes(ptr<byte>:data, usize:len) {
 	}
 
 	return(true);
+}
+
+Result<usize>:String::FindByte(byte:value) {
+	Result<usize>:result;
+	for (usize:i = 0; i < this.len; i++) {
+		if (this.data[i] == value) {
+			result.status = Status::Ok;
+			result.value = i;
+			return(result);
+		}
+	}
+	result.status = Status::NotFound;
+	return(result);
+}
+
+bool:String::ContainsByte(byte:value) {
+	Result<usize>:found = this.FindByte(value);
+	return(found.status == Status::Ok);
 }
 
 bool:String::StartsWith(String:prefix) {
@@ -190,6 +239,35 @@ Result<usize>:StringBuilder::Write(Slice<byte>:data) {
 	return(result);
 }
 
+Status:StringBuilder::WriteByte(byte:value) {
+	byte:buffer[1] = { value };
+	Result<usize>:result = this.Write(FixedSlice<byte>(buffer, 1));
+	return(result.status);
+}
+
+Status:StringBuilder::WriteString(String:text) {
+	Result<usize>:result = this.Write(text.Bytes());
+	return(result.status);
+}
+
+Status:StringBuilder::WriteCString(str:text) {
+	return(this.WriteString(StringFromCString(text)));
+}
+
+Status:StringBuilder::WriteRepeatByte(byte:value, usize:count) {
+	for (usize:i = 0; i < count; i++) {
+		Status:status = this.WriteByte(value);
+		if (status != Status::Ok) {
+			return(status);
+		}
+	}
+	return(Status::Ok);
+}
+
+Status:StringBuilder::WriteIndent(usize:count) {
+	return(this.WriteRepeatByte(' ', count));
+}
+
 String:StringBuilder::View() {
 	String:out;
 	out.data = this.data;
@@ -197,7 +275,7 @@ String:StringBuilder::View() {
 	return(out);
 }
 
-Result<OwnedString>:StringBuilder::ToOwnedString() {
+Result<OwnedString>:StringBuilder::Detach() {
 	OwnedString:out;
 	out.data = this.data;
 	out.len = this.len;
@@ -210,6 +288,10 @@ Result<OwnedString>:StringBuilder::ToOwnedString() {
 	result.status = Status::Ok;
 	result.value = out;
 	return(result);
+}
+
+Result<OwnedString>:StringBuilder::ToOwnedString() {
+	return(this.Detach());
 }
 
 Status:WriteStringToBuilder(ptr<StringBuilder>:builder, String:text) {

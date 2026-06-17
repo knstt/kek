@@ -46,9 +46,9 @@ struct:File {
 	bool:owned;
 };
 
-Result<File>:FileOpen(ptr:path, FileMode:mode) {
+Result<File>:FileOpen(str:path, FileMode:mode) {
 	Result<File>:result;
-	ptr:modeText = "rb";
+	str:modeText = "rb";
 	if (mode == FileMode::Write) {
 		modeText = "wb";
 	} else {
@@ -115,6 +115,34 @@ Status:File::Flush() {
 		return(Status::IoError);
 	}
 	return(Status::Ok);
+}
+
+Status:ReadFileToOwnedString(str:path, Allocator:allocator, ptr<OwnedString>:out) {
+	Result<File>:opened = FileOpen(path, FileMode::Read);
+	if (opened.status != Status::Ok) {
+		return(opened.status);
+	}
+	File:file = opened.value;
+	Status:status = ReadAllToOwnedString(file, allocator, out);
+	Status:closeStatus = file.Close();
+	if (status != Status::Ok) {
+		return(status);
+	}
+	return(closeStatus);
+}
+
+Status:WriteFile(str:path, String:text) {
+	Result<File>:opened = FileOpen(path, FileMode::Write);
+	if (opened.status != Status::Ok) {
+		return(opened.status);
+	}
+	File:file = opened.value;
+	Result<usize>:write = file.Write(text.Bytes());
+	Status:closeStatus = file.Close();
+	if (write.status != Status::Ok) {
+		return(write.status);
+	}
+	return(closeStatus);
 }
 
 Status:File::Close() {

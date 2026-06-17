@@ -1,4 +1,4 @@
-#import(example/MyPackage);
+#import(tests/fixtures/MyPackage);
 #import(std);
 
 extern "C" {

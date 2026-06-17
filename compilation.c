@@ -26,6 +26,7 @@ static int StdlibImportRank(const char* name) {
         "file.kek",
         "io.kek",
         "string.kek",
+        "scan.kek",
         "array.kek",
         "list.kek",
         "hash.kek",

@@ -1,10 +1,10 @@
 // This file belongs to the MyPackage package because it lives in the
-// example/MyPackage/ directory.
+// tests/fixtures/MyPackage/ directory.
 //
 // All .kek files in the same directory are part of the same package namespace.
 // Code outside this directory can import the package with:
 //
-// #import(example/MyPackage);
+// #import(tests/fixtures/MyPackage);
 //
 // and then call this function as:
 //

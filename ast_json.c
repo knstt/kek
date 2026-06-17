@@ -23,7 +23,7 @@ void WriteJsonEscaped(FILE* out, const char* text, size_t length) {
 }
 
 static void WriteTokenTextJson(FILE* out, struct Token* token, struct SourceFile* file) {
-    if (token->type == TOKEN_IDENTIFIER || token->type == TOKEN_NUMBER || token->type == TOKEN_STRING) {
+    if (token->type == TOKEN_IDENTIFIER || token->type == TOKEN_NUMBER || token->type == TOKEN_STRING || token->type == TOKEN_CHAR) {
         WriteJsonEscaped(out, file->content + token->location.offset, token->location.length);
     } else if (token->type == TOKEN_EOF) {
         WriteJsonEscaped(out, "", 0);

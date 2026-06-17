@@ -253,7 +253,7 @@ static int TestStdlibExample(void) {
     struct KekDiagnostic diagnostics[256];
     struct KekCompilation compilation;
     InitKekCompilation(&compilation, diagnostics, sizeof(diagnostics) / sizeof(diagnostics[0]));
-    int result = CompileKekSmoke("example/std.kek", "out/std_example.c", "out/std_example.json", "out/std_example.txt", &compilation);
+    int result = CompileKekSmoke("tests/fixtures/std_smoke.kek", "out/std_smoke.c", "out/std_smoke.json", "out/std_smoke.txt", &compilation);
     if (result != 0) {
         PrintKekDiagnostics(stderr, &compilation.diagnostics, &compilation.fileTable);
         FreeKekCompilation(&compilation);
@@ -261,23 +261,23 @@ static int TestStdlibExample(void) {
     }
     FreeKekCompilation(&compilation);
 
-    if (!FileContains("out/std_example.c", "struct Slice__byte")
-        || !FileContains("out/std_example.c", "StringBuilder_Write")
-        || !FileContains("out/std_example.c", "Array__byte_Push")
-        || !FileContains("out/std_example.c", "LinkedList__byte_PushBack")
-        || !FileContains("out/std_example.c", "File_Write")
-        || !FileContains("out/std_example.c", "std_FormatI64ToBuilder")
-        || !FileContains("out/std_example.c", "std_FileOpen")) {
+    if (!FileContains("out/std_smoke.c", "struct Slice__byte")
+        || !FileContains("out/std_smoke.c", "StringBuilder_Write")
+        || !FileContains("out/std_smoke.c", "Array__byte_Push")
+        || !FileContains("out/std_smoke.c", "LinkedList__byte_PushBack")
+        || !FileContains("out/std_smoke.c", "File_Write")
+        || !FileContains("out/std_smoke.c", "std_FormatI64ToBuilder")
+        || !FileContains("out/std_smoke.c", "std_FileOpen")) {
         return Fail("stdlib example did not emit expected stdlib symbols");
     }
-    if (!FileContains("out/std_example.c", "struct Result__File std_FileOpen(ptr path,FileMode mode);")) {
+    if (!FileContains("out/std_smoke.c", "struct Result__File std_FileOpen(str path,FileMode mode);")) {
         return Fail("stdlib generated C did not emit expected function prototype");
     }
 
-    if (system("cc -std=c11 -Wall -Wextra -o out/std_example out/std_example.c") != 0) {
+    if (system("cc -std=c11 -Wall -Wextra -Werror -o out/std_smoke out/std_smoke.c") != 0) {
         return Fail("stdlib generated C did not compile");
     }
-    if (system("./out/std_example") != 0) {
+    if (system("./out/std_smoke") != 0) {
         return Fail("stdlib generated binary failed");
     }
     return 0;
@@ -303,8 +303,8 @@ static int ParseChildCount(struct SourceFile* file, struct TokenArray* tokens) {
 
 static int TestToolingLexComments(void) {
     struct FileTable table = {0};
-    if (ReadFile("example/docs.kek", &table) < 0) {
-        return Fail("could not load example/docs.kek");
+    if (ReadFile("tests/fixtures/docs.kek", &table) < 0) {
+        return Fail("could not load tests/fixtures/docs.kek");
     }
 
     struct SourceFile* file = &table.files[0];
@@ -358,6 +358,99 @@ static int TestToolingLexComments(void) {
     if (normalChildCount < 0 || toolingChildCount < 0 || normalChildCount != toolingChildCount) {
         return Fail("parser changed structural AST shape when comments were present");
     }
+    return 0;
+}
+
+static int TestRewritePrepLanguageSurface(void) {
+    if (WriteTextFile("out/in_token.kek", "in\n") != 0) {
+        return Fail("could not write in token fixture");
+    }
+
+    struct FileTable table = {0};
+    if (ReadFile("out/in_token.kek", &table) < 0) {
+        return Fail("could not load in token fixture");
+    }
+    struct SourceFile* file = &table.files[0];
+    struct Token* storage = malloc(sizeof(*storage) * (file->length + 1));
+    if (!storage) {
+        FreeFileTable(&table);
+        return Fail("could not allocate in token storage");
+    }
+    struct Tokenizer tokenizer = CreateTokenizer(0, &table);
+    struct TokenArray tokens = TokenizeFile(&tokenizer, storage, file->length + 1);
+    int inIsIdentifier = tokens.count > 0
+        && tokens.items[0].type == TOKEN_IDENTIFIER
+        && tokens.items[0].location.length == 2;
+    free(storage);
+    FreeFileTable(&table);
+    if (!inIsIdentifier) {
+        return Fail("in did not tokenize as an identifier");
+    }
+
+    const char* charSource =
+        "i64:main(){\n"
+        "u8:a='a';\n"
+        "u8:n='\\n';\n"
+        "u8:t='\\t';\n"
+        "u8:z='\\0';\n"
+        "u8:q='\\'';\n"
+        "u8:s='\\\\';\n"
+        "assert(a == 97);\n"
+        "assert(n == 10);\n"
+        "assert(t == 9);\n"
+        "assert(z == 0);\n"
+        "assert(q == 39);\n"
+        "assert(s == 92);\n"
+        "return(0);\n"
+        "}\n";
+    if (WriteTextFile("out/char_literals.kek", charSource) != 0) {
+        return Fail("could not write char literal fixture");
+    }
+    struct KekDiagnostic charDiagnostics[128];
+    struct KekCompilation charCompilation;
+    InitKekCompilation(&charCompilation, charDiagnostics, sizeof(charDiagnostics) / sizeof(charDiagnostics[0]));
+    int charResult = CompileKekSmoke("out/char_literals.kek", "out/char_literals.c", "out/char_literals.json", "out/char_literals.txt", &charCompilation);
+    if (charResult != 0) {
+        PrintKekDiagnostics(stderr, &charCompilation.diagnostics, &charCompilation.fileTable);
+        FreeKekCompilation(&charCompilation);
+        return Fail("char literal fixture did not compile");
+    }
+    FreeKekCompilation(&charCompilation);
+    if (!FileContains("out/char_literals.c", "u8 a=97;")
+        || !FileContains("out/char_literals.c", "u8 n=10;")
+        || !FileContains("out/char_literals.c", "u8 s=92;")) {
+        return Fail("char literals were not normalized in generated C");
+    }
+    if (system("cc -std=c11 -Wall -Wextra -Werror -o out/char_literals out/char_literals.c") != 0) {
+        return Fail("char literal generated C did not compile");
+    }
+    if (system("./out/char_literals") != 0) {
+        return Fail("char literal binary failed");
+    }
+
+    const char* forInSource =
+        "i64:main(){\n"
+        "u8:items[1] = { 1 };\n"
+        "for (u8:item) in items { }\n"
+        "return(0);\n"
+        "}\n";
+    if (WriteTextFile("out/for_in_removed.kek", forInSource) != 0) {
+        return Fail("could not write retired iteration fixture");
+    }
+    struct KekDiagnostic forInDiagnostics[128];
+    struct KekCompilation forInCompilation;
+    InitKekCompilation(&forInCompilation, forInDiagnostics, sizeof(forInDiagnostics) / sizeof(forInDiagnostics[0]));
+    int forInResult = CompileKekSmoke("out/for_in_removed.kek", "out/for_in_removed.c", "out/for_in_removed.json", "out/for_in_removed.txt", &forInCompilation);
+    int hasForInDiagnostic = HasDiagnostic(&forInCompilation.diagnostics, KEK_PHASE_TYPED_PARSE, "for-in syntax is not supported");
+    FreeKekCompilation(&forInCompilation);
+    if (forInResult == 0 || !hasForInDiagnostic) {
+        return Fail("retired for-in syntax did not fail with a typed parse diagnostic");
+    }
+
+    if (system("rg \"example\"\"/\" README.md Makefile tests.c tmp.kek std/*.kek *.c *.h > out/no_example_refs.txt") == 0) {
+        return Fail("active files still reference the retired fixture directory");
+    }
+
     return 0;
 }
 
@@ -447,6 +540,9 @@ int main(void) {
         return 1;
     }
     if (TestStdlibExample() != 0) {
+        return 1;
+    }
+    if (TestRewritePrepLanguageSurface() != 0) {
         return 1;
     }
     if (TestDiagnostics() != 0) {

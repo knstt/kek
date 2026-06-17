@@ -5,6 +5,7 @@ const char* TokenTypeNames[] = {
     "IDENTIFIER",
     "NUMBER",
     "STRING",
+    "CHAR",
     "COMMENT",
     "DOC_COMMENT",
     "OPERATOR",
@@ -20,7 +21,7 @@ const char* OperatorNames[] = {
 const char* KeywordNames[] = {
     "if", "else", "while", "for", "return", "do", "break", "continue",
     "using", "alias", "export", "extern", "enum", "struct", "union",
-    "switch", "case", "default", "in", "each", "packed", "aligned", "comptime",
+    "switch", "case", "default", "each", "packed", "aligned", "comptime",
     "defer", "tagged", "true", "false", "unreachable", "panic"
 };
 
@@ -288,6 +289,22 @@ struct Token GetNextToken(struct Tokenizer* tokenizer) {
         return CreateTextToken(TOKEN_STRING, start, tokenizer->position - start, line, column);
     }
 
+    if (c == '\'') {
+        Advance(tokenizer, 1);
+        while (PeekChar(tokenizer) != '\0') {
+            if (PeekChar(tokenizer) == '\\') {
+                Advance(tokenizer, 2);
+                continue;
+            }
+            if (PeekChar(tokenizer) == '\'') {
+                Advance(tokenizer, 1);
+                break;
+            }
+            Advance(tokenizer, 1);
+        }
+        return CreateTextToken(TOKEN_CHAR, start, tokenizer->position - start, line, column);
+    }
+
     int opIndex = IsOperator(tokenizer);
     if (opIndex >= 0) {
         size_t length = strlen(OperatorNames[opIndex]);
@@ -329,6 +346,7 @@ void PrintToken(struct Token* token, struct SourceFile* file) {
         case TOKEN_IDENTIFIER:
         case TOKEN_NUMBER:
         case TOKEN_STRING:
+        case TOKEN_CHAR:
         case TOKEN_COMMENT:
         case TOKEN_DOC_COMMENT:
             if (token->location.offset + token->location.length <= file->length) {

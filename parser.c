@@ -103,7 +103,7 @@ static int IsAnyOverloadableOperatorNode(struct AstNode* node) {
 static int TokenTextEquals(struct AstNode* node, struct SourceFile* file, const char* text) {
     size_t length = strlen(text);
     return IsTokenNode(node)
-        && (node->token.type == TOKEN_IDENTIFIER || node->token.type == TOKEN_NUMBER || node->token.type == TOKEN_STRING)
+        && (node->token.type == TOKEN_IDENTIFIER || node->token.type == TOKEN_NUMBER || node->token.type == TOKEN_STRING || node->token.type == TOKEN_CHAR)
         && node->token.location.length == length
         && strncmp(file->content + node->token.location.offset, text, length) == 0;
 }
@@ -556,7 +556,7 @@ static struct KekExpr* ParsePrimaryExpr(struct KekFrontend* frontend, struct Kek
     enum KekExprKind kind = KEK_EXPR_UNKNOWN;
     if (IsTokenNode(node) && node->token.type == TOKEN_IDENTIFIER) {
         kind = KEK_EXPR_NAME;
-    } else if (IsTokenNode(node) && node->token.type == TOKEN_NUMBER) {
+    } else if (IsTokenNode(node) && (node->token.type == TOKEN_NUMBER || node->token.type == TOKEN_CHAR)) {
         kind = KEK_EXPR_NUMBER;
     } else if (IsTokenNode(node) && node->token.type == TOKEN_STRING) {
         kind = KEK_EXPR_STRING;
@@ -863,6 +863,10 @@ static struct KekStmt* ParseStatement(struct KekFrontend* frontend, struct KekMo
         }
     } else if (kind == KEK_STMT_FOR) {
         struct AstNode* group = Next(first);
+        struct AstNode* afterGroup = group ? Next(group) : NULL;
+        if (TokenTextEquals(afterGroup, module->file, "in")) {
+            AddTypedParseDiagnostic(frontend, module, afterGroup, "for-in syntax is not supported; use each");
+        }
         struct AstNode* init = group && group->type == AST_GROUP ? group->firstChild : NULL;
         struct AstNode* condition = init ? init->nextSibling : NULL;
         struct AstNode* step = condition ? condition->nextSibling : NULL;

@@ -27,13 +27,13 @@ struct CWriter {
     FILE* out;
     struct SourceFile* file;
     int indent;
-    struct CFunctionInfo functions[64];
+    struct CFunctionInfo functions[256];
     size_t functionCount;
-    struct CStructInfo structs[64];
+    struct CStructInfo structs[128];
     size_t structCount;
-    struct CGenericInstance genericStructs[64];
+    struct CGenericInstance genericStructs[128];
     size_t genericStructCount;
-    struct CGenericInstance genericFunctions[64];
+    struct CGenericInstance genericFunctions[128];
     size_t genericFunctionCount;
     char localNames[128][64];
     char localTypes[128][64];
@@ -69,7 +69,61 @@ static struct AstNode* NextSibling(struct AstNode* node) {
     return node ? node->nextSibling : NULL;
 }
 
+static unsigned int DecodeCharLiteral(struct Token* token, struct SourceFile* file) {
+    if (!token || !file || token->location.length < 2) {
+        return 0;
+    }
+
+    size_t start = token->location.offset;
+    size_t end = start + token->location.length;
+    if (end > file->length || file->content[start] != '\'') {
+        return 0;
+    }
+
+    size_t cursor = start + 1;
+    if (cursor >= end) {
+        return 0;
+    }
+
+    unsigned char value = (unsigned char)file->content[cursor];
+    if (value == '\\' && cursor + 1 < end) {
+        cursor++;
+        switch (file->content[cursor]) {
+            case '0':
+                value = '\0';
+                break;
+            case 'n':
+                value = '\n';
+                break;
+            case 'r':
+                value = '\r';
+                break;
+            case 't':
+                value = '\t';
+                break;
+            case '\'':
+                value = '\'';
+                break;
+            case '"':
+                value = '"';
+                break;
+            case '\\':
+                value = '\\';
+                break;
+            default:
+                value = (unsigned char)file->content[cursor];
+                break;
+        }
+    }
+    return (unsigned int)value;
+}
+
 static const char* CTokenText(struct Token* token, struct SourceFile* file, char* buffer, size_t bufferSize) {
+    if (token->type == TOKEN_CHAR) {
+        snprintf(buffer, bufferSize, "%u", DecodeCharLiteral(token, file));
+        return buffer;
+    }
+
     if (token->type == TOKEN_IDENTIFIER || token->type == TOKEN_NUMBER || token->type == TOKEN_STRING) {
         size_t length = token->location.length;
         if (length >= bufferSize) {
@@ -983,6 +1037,13 @@ static int FindParameterIndex(struct CFunctionInfo* function, const char* name) 
     return -1;
 }
 
+static int ExprIsThisName(struct CWriter* writer, struct KekExpr* expr) {
+    return expr
+        && expr->kind == KEK_EXPR_NAME
+        && expr->token
+        && TokenTextEquals(&expr->token->token, writer->file, "this");
+}
+
 static void WriteTypedKnownCallArgs(struct CWriter* writer, struct KekExpr* call, struct CFunctionInfo* function, struct KekExpr* implicitThis, int implicitThisIsPointer) {
     struct KekExpr* ordered[16] = {0};
     int consumed[16] = {0};
@@ -1021,7 +1082,7 @@ static void WriteTypedKnownCallArgs(struct CWriter* writer, struct KekExpr* call
             fputc(',', writer->out);
         }
         if (ordered[i]) {
-            if (i == 0 && implicitThis && implicitThisIsPointer) {
+            if (i == 0 && implicitThis && (implicitThisIsPointer || (writer->thisIsPointer && ExprIsThisName(writer, implicitThis)))) {
                 WriteTypedExpr(writer, ordered[i]);
             } else if (i == 0 && implicitThis) {
                 fputc('&', writer->out);
@@ -1086,7 +1147,9 @@ static void WriteTypedCall(struct CWriter* writer, struct KekExpr* expr) {
             if (function) {
                 WriteTypedKnownCallArgs(writer, expr, function, expr->callee->left, FindLocalIsPointer(writer, objectName));
             } else {
-                fputc('&', writer->out);
+                if (!(writer->thisIsPointer && ExprIsThisName(writer, expr->callee->left))) {
+                    fputc('&', writer->out);
+                }
                 WriteTypedExpr(writer, expr->callee->left);
                 if (expr->firstArg) {
                     fputc(',', writer->out);

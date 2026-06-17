@@ -5,6 +5,7 @@ BIN_DIR ?= bin
 CORE_SRCS ?= ast.c parser.c sema.c tokenizer.c ast_json.c source.c diagnostics.c compilation.c codegen_c.c
 SRCS ?= main.c $(CORE_SRCS)
 CFLAGS ?= -std=c11 -O2 -Wall -Wextra -pedantic
+GENERATED_CFLAGS ?= $(CFLAGS) -Werror
 CC := $(shell command -v gcc 2>/dev/null || command -v cc 2>/dev/null || true)
 INSTALL_DIR ?= /usr/local/bin
 SMOKE_BIN ?= out/tmp
@@ -45,7 +46,7 @@ test:
 	@cp out/out.c out/out.pretty.c
 	@$(PYTHON) tools/normalize_c.py < out/out.pretty.c > out/out.pretty.norm.c
 	@echo "Building generated C -> $(SMOKE_BIN)"
-	@$(CC) $(CFLAGS) -o $(SMOKE_BIN) out/out.c
+	@$(CC) $(GENERATED_CFLAGS) -o $(SMOKE_BIN) out/out.c
 	@echo "Running smoke binary"
 	@set +e; \
 	$(SMOKE_BIN); \
@@ -87,7 +88,7 @@ kekfmt:
 	trap 'cp $$tmp_backup tmp.kek; rm -f $$tmp_backup' EXIT; \
 	cp fmt.kek tmp.kek; \
 	$(BIN_DIR)/$(PROJECT); \
-	$(CC) $(CFLAGS) -o out/kekfmt out/out.c
+	$(CC) $(GENERATED_CFLAGS) -o out/kekfmt out/out.c
 	@echo "Wrote out/kekfmt"
 
 kekfmt-test: kekfmt
@@ -99,7 +100,7 @@ kekfmt-test: kekfmt
 	trap 'cp $$tmp_backup tmp.kek; rm -f $$tmp_backup' EXIT; \
 	cp out/fmt.formatted.kek tmp.kek; \
 	$(BIN_DIR)/$(PROJECT); \
-	$(CC) $(CFLAGS) -o out/kekfmt.formatted out/out.c
+	$(CC) $(GENERATED_CFLAGS) -o out/kekfmt.formatted out/out.c
 	@echo "Kek formatter self-test passed"
 
 fmt:

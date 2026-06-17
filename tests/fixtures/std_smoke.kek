@@ -7,7 +7,17 @@ i64:main() {
 	Slice<byte>:inputSlice = std::FixedSlice<byte>(input, len(input));
 	String:text = std::StringFromBytes(inputSlice);
 	assert(text.len == 5);
+	assert(text.data[0] == 'h');
 	assert(text.Equals(std::StringFromBytes(inputSlice)));
+	assert(text.ContainsByte('e'));
+	Result<usize>:foundByte = text.FindByte('l');
+	assert(foundByte.status == Status::Ok);
+	assert(foundByte.value == 2);
+	String:slicedText = text.Slice(1, 3);
+	assert(slicedText.EqualsCString("ell"));
+	String:cText = std::StringFromCString("compiler");
+	assert(cText.len == 8);
+	assert(cText.EqualsCString("compiler"));
 
 	byte:prefixBytes[2] = { 104, 101 };
 	String:prefix = std::StringFromBytes(std::FixedSlice<byte>(prefixBytes, len(prefixBytes)));
@@ -59,6 +69,24 @@ i64:main() {
 	assert(owned.Destroy() == Status::Ok);
 	assert(builder.Destroy() == Status::Ok);
 
+	StringBuilder:methodBuilder = std::StringBuilderNew(allocator);
+	assert(methodBuilder.WriteCString("hi") == Status::Ok);
+	assert(methodBuilder.WriteByte('!') == Status::Ok);
+	assert(methodBuilder.WriteRepeatByte('?', 2) == Status::Ok);
+	assert(methodBuilder.WriteIndent(1) == Status::Ok);
+	assert(methodBuilder.WriteString(text) == Status::Ok);
+	String:methodView = methodBuilder.View();
+	assert(methodView.len == 11);
+	assert(methodView.data[0] == 'h');
+	assert(methodView.data[2] == '!');
+	assert(methodView.data[5] == ' ');
+	Result<OwnedString>:detached = methodBuilder.Detach();
+	assert(detached.status == Status::Ok);
+	OwnedString:detachedText = detached.value;
+	assert(detachedText.len == 11);
+	assert(detachedText.Destroy() == Status::Ok);
+	assert(methodBuilder.Destroy() == Status::Ok);
+
 	Array<byte>:array = std::ArrayNew<byte>(allocator);
 	assert(array.Reserve(2) == Status::Ok);
 	assert(array.Push(7) == Status::Ok);
@@ -70,6 +98,16 @@ i64:main() {
 	Result<byte>:popped = array.Pop();
 	assert(popped.status == Status::Ok);
 	assert(popped.value == 11);
+	assert(array.Clear() == Status::Ok);
+	byte:more[2] = { 1, 2 };
+	assert(array.AppendSlice(std::FixedSlice<byte>(more, len(more))) == Status::Ok);
+	ptr<byte>:second = array.GetPtr(1);
+	assert(second != 0);
+	assert(second[0] == 2);
+	assert(array.PushZeroed() == Status::Ok);
+	ptr<byte>:last = array.LastPtr();
+	assert(last != 0);
+	assert(last[0] == 0);
 	assert(array.Destroy() == Status::Ok);
 
 	ptr<ListNode<byte>>:nodeForSpecialization = std::Alloc<ListNode<byte>>(allocator, 1);
@@ -88,15 +126,34 @@ i64:main() {
 	assert(back.value == 3);
 	assert(list.Destroy() == Status::Ok);
 
-	byte:filePath[17] = {
-		111, 117, 116, 47, 115, 116, 100, 108,
-		105, 98, 95, 116, 101, 115, 116, 0,
-	};
+	str:filePath = "out/stdlib_test";
 	Result<File>:opened = std::FileOpen(filePath, FileMode::Write);
 	assert(opened.status == Status::Ok);
 	File:file = opened.value;
 	assert(file.Write(inputSlice).status == Status::Ok);
 	assert(file.Close() == Status::Ok);
+	assert(std::WriteFile("out/stdlib_helper", text) == Status::Ok);
+	OwnedString:fileText;
+	assert(std::ReadFileToOwnedString("out/stdlib_helper", allocator, &fileText) == Status::Ok);
+	String:fileView = fileText.View();
+	assert(fileView.Equals(text));
+	assert(fileText.Destroy() == Status::Ok);
+
+	String:cursorInput = std::StringFromCString(" a\nb");
+	ByteCursor:cursor = std::ByteCursorNew(cursorInput);
+	assert(cursor.line == 1);
+	assert(cursor.column == 1);
+	assert(cursor.SkipAsciiWhitespace() == Status::Ok);
+	assert(cursor.pos == 1);
+	assert(cursor.column == 2);
+	assert(cursor.Peek() == 'a');
+	assert(cursor.MatchByte('a'));
+	assert(cursor.Advance() == '\n');
+	assert(cursor.line == 2);
+	assert(cursor.column == 1);
+	assert(cursor.Peek() == 'b');
+	assert(cursor.Advance() == 'b');
+	assert(cursor.AtEnd());
 
 	return(0);
 }

@@ -24,6 +24,11 @@ Status:Array<T>::Destroy() {
 	return(Status::Ok);
 }
 
+Status:Array<T>::Clear() {
+	this.len = 0;
+	return(Status::Ok);
+}
+
 Status:Array<T>::Reserve(usize:additional) {
 	usize:needed = this.len + additional;
 	if (needed <= this.cap) {
@@ -47,12 +52,34 @@ Status:Array<T>::Reserve(usize:additional) {
 	return(Status::Ok);
 }
 
+Status:Array<T>::AppendSlice(Slice<T>:items) {
+	Status:status = this.Reserve(items.len);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	for (usize:i = 0; i < items.len; i++) {
+		this.data[this.len + i] = items.data[i];
+	}
+	this.len += items.len;
+	return(Status::Ok);
+}
+
 Status:Array<T>::Push(T:value) {
 	Status:status = this.Reserve(1);
 	if (status != Status::Ok) {
 		return(status);
 	}
 	this.data[this.len] = value;
+	this.len += 1;
+	return(Status::Ok);
+}
+
+Status:Array<T>::PushZeroed() {
+	Status:status = this.Reserve(1);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	SetBytes(cast<ptr>(&this.data[this.len]), 0, sizeof(T));
 	this.len += 1;
 	return(Status::Ok);
 }
@@ -86,6 +113,20 @@ Status:Array<T>::Set(usize:index, T:value) {
 	}
 	this.data[index] = value;
 	return(Status::Ok);
+}
+
+ptr<T>:Array<T>::GetPtr(usize:index) {
+	if (index >= this.len) {
+		return(0);
+	}
+	return(&this.data[index]);
+}
+
+ptr<T>:Array<T>::LastPtr() {
+	if (this.len == 0) {
+		return(0);
+	}
+	return(&this.data[this.len - 1]);
 }
 
 Span<T>:Array<T>::Span() {
