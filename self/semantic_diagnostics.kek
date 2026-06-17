@@ -1,0 +1,32 @@
+#import(std);
+#import(self/sema);
+
+int:SemanticFail(str:text) {
+	File:stderr = std::Stderr();
+	std::WriteStringToFile(&stderr, std::StringFromCString(text));
+	return(1);
+}
+
+int:main(int:argc, ptr<str>:argv) {
+	if (argc < 2) {
+		return(SemanticFail("usage: semantic_diagnostics <input.kek>\n"));
+	}
+
+	Allocator:allocator = std::DefaultAllocator();
+	StringBuilder:diagnostics = std::StringBuilderNew(allocator);
+	Status:status = sema::SelfWriteSemanticDiagnostics(argv[1], allocator, &diagnostics);
+	if (status != Status::Ok) {
+		diagnostics.Destroy();
+		return(SemanticFail("semantic_diagnostics: could not collect diagnostics\n"));
+	}
+
+	File:stdout = std::Stdout();
+	String:view = diagnostics.View();
+	Slice<byte>:bytes = view.Bytes();
+	Result<usize>:write = stdout.Write(bytes);
+	diagnostics.Destroy();
+	if (write.status != Status::Ok) {
+		return(SemanticFail("semantic_diagnostics: could not write diagnostics\n"));
+	}
+	return(0);
+}

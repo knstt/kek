@@ -1,0 +1,724 @@
+enum:u8:TokenKind {
+	Eof,
+	Identifier,
+	Number,
+	String,
+	Char,
+	Comment,
+	DocComment,
+	Operator,
+	Keyword,
+	Punctuation,
+};
+
+enum:u8:OperatorKind {
+	Scope,
+	Equal,
+	NotEqual,
+	LessEqual,
+	GreaterEqual,
+	LogicalAnd,
+	LogicalOr,
+	PlusAssign,
+	MinusAssign,
+	Arrow,
+	Plus,
+	Minus,
+	Multiply,
+	Divide,
+	Modulo,
+	Assign,
+	Less,
+	Greater,
+	LogicalNot,
+	BitwiseAnd,
+	BitwiseOr,
+	BitwiseNot,
+};
+
+enum:u8:KeywordKind {
+	If,
+	Else,
+	While,
+	For,
+	Return,
+	Do,
+	Break,
+	Continue,
+	Using,
+	Alias,
+	Export,
+	Extern,
+	Enum,
+	Struct,
+	Union,
+	Switch,
+	Case,
+	Default,
+	Each,
+	Packed,
+	Aligned,
+	Comptime,
+	Defer,
+	Tagged,
+	True,
+	False,
+	Unreachable,
+	Panic,
+};
+
+enum:u8:PunctuationKind {
+	LeftParen,
+	RightParen,
+	LeftBrace,
+	RightBrace,
+	LeftBracket,
+	RightBracket,
+	Semicolon,
+	Comma,
+	Colon,
+	Dot,
+	Hash,
+};
+
+struct:Token {
+	TokenKind:kind;
+	u64:subkind;
+	usize:line;
+	usize:column;
+	usize:offset;
+	usize:length;
+};
+
+struct:Tokenizer {
+	ByteCursor:cursor;
+	bool:emitComments;
+};
+
+usize:TokenizerGenericFootprint() {
+	Slice<Token>:slice;
+	Span<Token>:span;
+	Result<Token>:result;
+	slice.len = 0;
+	span.len = slice.len;
+	result.status = Status::Ok;
+	return(span.len + cast<usize>(result.status));
+}
+
+Token:TokenNew(TokenKind:kind, u64:subkind, usize:line, usize:column, usize:offset, usize:length) {
+	Token:token;
+	token.kind = kind;
+	token.subkind = subkind;
+	token.line = line;
+	token.column = column;
+	token.offset = offset;
+	token.length = length;
+	return(token);
+}
+
+Tokenizer:TokenizerNew(String:source, bool:emitComments) {
+	Tokenizer:tokenizer;
+	tokenizer.cursor = std::ByteCursorNew(source);
+	tokenizer.emitComments = emitComments;
+	return(tokenizer);
+}
+
+bool:Tokenizer::AtEnd() {
+	return(this.cursor.pos >= this.cursor.input.len);
+}
+
+byte:Tokenizer::Peek() {
+	if (this.AtEnd()) {
+		return(0);
+	}
+	return(this.cursor.input.data[this.cursor.pos]);
+}
+
+byte:Tokenizer::PeekAt(usize:offset) {
+	usize:target = this.cursor.pos + offset;
+	if (target >= this.cursor.input.len) {
+		return(0);
+	}
+	return(this.cursor.input.data[target]);
+}
+
+byte:Tokenizer::Advance() {
+	byte:value = this.Peek();
+	if (this.AtEnd()) {
+		return(0);
+	}
+	this.cursor.pos += 1;
+	if (value == '\n') {
+		this.cursor.line += 1;
+		this.cursor.column = 1;
+	} else {
+		this.cursor.column += 1;
+	}
+	return(value);
+}
+
+bool:TextAtEquals(str:text, String:source, usize:start, usize:length) {
+	usize:textLength = 0;
+	while (text[textLength] != 0) {
+		textLength += 1;
+	}
+	if (textLength != length) {
+		return(false);
+	}
+	if (start + length > source.len) {
+		return(false);
+	}
+	for (usize:i = 0; i < length; i++) {
+		if (source.data[start + i] != text[i]) {
+			return(false);
+		}
+	}
+	return(true);
+}
+
+bool:Tokenizer::StartsWith(str:text) {
+	usize:i = 0;
+	while (text[i] != 0) {
+		if (this.PeekAt(i) != text[i]) {
+			return(false);
+		}
+		i += 1;
+	}
+	return(true);
+}
+
+void:Tokenizer::AdvanceMany(usize:count) {
+	for (usize:i = 0; i < count; i++) {
+		this.Advance();
+	}
+}
+
+void:Tokenizer::SkipWhitespace() {
+	while (!this.AtEnd() && std::IsAsciiSpace(this.Peek())) {
+		this.Advance();
+	}
+}
+
+void:Tokenizer::SkipWhitespaceAndComments() {
+	while (true) {
+		this.SkipWhitespace();
+		if (this.Peek() == '/' && this.PeekAt(1) == '/') {
+			while (!this.AtEnd() && this.Peek() != '\n') {
+				this.Advance();
+			}
+			continue;
+		}
+		if (this.Peek() == '/' && this.PeekAt(1) == '*') {
+			this.AdvanceMany(2);
+			while (!this.AtEnd()) {
+				if (this.Peek() == '*' && this.PeekAt(1) == '/') {
+					this.AdvanceMany(2);
+					break;
+				}
+				this.Advance();
+			}
+			continue;
+		}
+		break;
+	}
+}
+
+Token:Tokenizer::ReadLineComment() {
+	usize:start = this.cursor.pos;
+	usize:line = this.cursor.line;
+	usize:column = this.cursor.column;
+	TokenKind:kind = TokenKind::Comment;
+	if (this.PeekAt(2) == '/') {
+		kind = TokenKind::DocComment;
+	}
+	while (!this.AtEnd() && this.Peek() != '\n') {
+		this.Advance();
+	}
+	return(TokenNew(kind, 0, line, column, start, this.cursor.pos - start));
+}
+
+Token:Tokenizer::ReadBlockComment() {
+	usize:start = this.cursor.pos;
+	usize:line = this.cursor.line;
+	usize:column = this.cursor.column;
+	this.AdvanceMany(2);
+	while (!this.AtEnd()) {
+		if (this.Peek() == '*' && this.PeekAt(1) == '/') {
+			this.AdvanceMany(2);
+			break;
+		}
+		this.Advance();
+	}
+	return(TokenNew(TokenKind::Comment, 0, line, column, start, this.cursor.pos - start));
+}
+
+u64:KeywordSubkind(String:source, usize:start, usize:length) {
+	if (TextAtEquals("if", source, start, length)) {
+		return(cast<u64>(KeywordKind::If));
+	}
+	if (TextAtEquals("else", source, start, length)) {
+		return(cast<u64>(KeywordKind::Else));
+	}
+	if (TextAtEquals("while", source, start, length)) {
+		return(cast<u64>(KeywordKind::While));
+	}
+	if (TextAtEquals("for", source, start, length)) {
+		return(cast<u64>(KeywordKind::For));
+	}
+	if (TextAtEquals("return", source, start, length)) {
+		return(cast<u64>(KeywordKind::Return));
+	}
+	if (TextAtEquals("do", source, start, length)) {
+		return(cast<u64>(KeywordKind::Do));
+	}
+	if (TextAtEquals("break", source, start, length)) {
+		return(cast<u64>(KeywordKind::Break));
+	}
+	if (TextAtEquals("continue", source, start, length)) {
+		return(cast<u64>(KeywordKind::Continue));
+	}
+	if (TextAtEquals("using", source, start, length)) {
+		return(cast<u64>(KeywordKind::Using));
+	}
+	if (TextAtEquals("alias", source, start, length)) {
+		return(cast<u64>(KeywordKind::Alias));
+	}
+	if (TextAtEquals("export", source, start, length)) {
+		return(cast<u64>(KeywordKind::Export));
+	}
+	if (TextAtEquals("extern", source, start, length)) {
+		return(cast<u64>(KeywordKind::Extern));
+	}
+	if (TextAtEquals("enum", source, start, length)) {
+		return(cast<u64>(KeywordKind::Enum));
+	}
+	if (TextAtEquals("struct", source, start, length)) {
+		return(cast<u64>(KeywordKind::Struct));
+	}
+	if (TextAtEquals("union", source, start, length)) {
+		return(cast<u64>(KeywordKind::Union));
+	}
+	if (TextAtEquals("switch", source, start, length)) {
+		return(cast<u64>(KeywordKind::Switch));
+	}
+	if (TextAtEquals("case", source, start, length)) {
+		return(cast<u64>(KeywordKind::Case));
+	}
+	if (TextAtEquals("default", source, start, length)) {
+		return(cast<u64>(KeywordKind::Default));
+	}
+	if (TextAtEquals("each", source, start, length)) {
+		return(cast<u64>(KeywordKind::Each));
+	}
+	if (TextAtEquals("packed", source, start, length)) {
+		return(cast<u64>(KeywordKind::Packed));
+	}
+	if (TextAtEquals("aligned", source, start, length)) {
+		return(cast<u64>(KeywordKind::Aligned));
+	}
+	if (TextAtEquals("comptime", source, start, length)) {
+		return(cast<u64>(KeywordKind::Comptime));
+	}
+	if (TextAtEquals("defer", source, start, length)) {
+		return(cast<u64>(KeywordKind::Defer));
+	}
+	if (TextAtEquals("tagged", source, start, length)) {
+		return(cast<u64>(KeywordKind::Tagged));
+	}
+	if (TextAtEquals("true", source, start, length)) {
+		return(cast<u64>(KeywordKind::True));
+	}
+	if (TextAtEquals("false", source, start, length)) {
+		return(cast<u64>(KeywordKind::False));
+	}
+	if (TextAtEquals("unreachable", source, start, length)) {
+		return(cast<u64>(KeywordKind::Unreachable));
+	}
+	if (TextAtEquals("panic", source, start, length)) {
+		return(cast<u64>(KeywordKind::Panic));
+	}
+	return(1000);
+}
+
+Token:Tokenizer::ReadIdentifierOrKeyword() {
+	usize:start = this.cursor.pos;
+	usize:line = this.cursor.line;
+	usize:column = this.cursor.column;
+	while (std::IsAsciiWord(this.Peek())) {
+		this.Advance();
+	}
+	usize:length = this.cursor.pos - start;
+	u64:keyword = KeywordSubkind(this.cursor.input, start, length);
+	if (keyword != 1000) {
+		return(TokenNew(TokenKind::Keyword, keyword, line, column, start, length));
+	}
+	return(TokenNew(TokenKind::Identifier, 0, line, column, start, length));
+}
+
+Token:Tokenizer::ReadNumber() {
+	usize:start = this.cursor.pos;
+	usize:line = this.cursor.line;
+	usize:column = this.cursor.column;
+	while (std::IsAsciiWord(this.Peek()) || this.Peek() == '.' || this.Peek() == '_') {
+		this.Advance();
+	}
+	return(TokenNew(TokenKind::Number, 0, line, column, start, this.cursor.pos - start));
+}
+
+Token:Tokenizer::ReadDelimited(TokenKind:kind, byte:delimiter) {
+	usize:start = this.cursor.pos;
+	usize:line = this.cursor.line;
+	usize:column = this.cursor.column;
+	this.Advance();
+	while (!this.AtEnd()) {
+		if (this.Peek() == '\\') {
+			this.AdvanceMany(2);
+			continue;
+		}
+		if (this.Peek() == delimiter) {
+			this.Advance();
+			break;
+		}
+		this.Advance();
+	}
+	return(TokenNew(kind, 0, line, column, start, this.cursor.pos - start));
+}
+
+bool:Tokenizer::ReadOperator(ptr<Token>:out, usize:start, usize:line, usize:column) {
+	if (this.StartsWith("::")) {
+		this.AdvanceMany(2);
+		out[0] = TokenNew(TokenKind::Operator, cast<u64>(OperatorKind::Scope), line, column, start, 2);
+		return(true);
+	}
+	if (this.StartsWith("==")) {
+		this.AdvanceMany(2);
+		out[0] = TokenNew(TokenKind::Operator, cast<u64>(OperatorKind::Equal), line, column, start, 2);
+		return(true);
+	}
+	if (this.StartsWith("!=")) {
+		this.AdvanceMany(2);
+		out[0] = TokenNew(TokenKind::Operator, cast<u64>(OperatorKind::NotEqual), line, column, start, 2);
+		return(true);
+	}
+	if (this.StartsWith("<=")) {
+		this.AdvanceMany(2);
+		out[0] = TokenNew(TokenKind::Operator, cast<u64>(OperatorKind::LessEqual), line, column, start, 2);
+		return(true);
+	}
+	if (this.StartsWith(">=")) {
+		this.AdvanceMany(2);
+		out[0] = TokenNew(TokenKind::Operator, cast<u64>(OperatorKind::GreaterEqual), line, column, start, 2);
+		return(true);
+	}
+	if (this.StartsWith("&&")) {
+		this.AdvanceMany(2);
+		out[0] = TokenNew(TokenKind::Operator, cast<u64>(OperatorKind::LogicalAnd), line, column, start, 2);
+		return(true);
+	}
+	if (this.StartsWith("||")) {
+		this.AdvanceMany(2);
+		out[0] = TokenNew(TokenKind::Operator, cast<u64>(OperatorKind::LogicalOr), line, column, start, 2);
+		return(true);
+	}
+	if (this.StartsWith("+=")) {
+		this.AdvanceMany(2);
+		out[0] = TokenNew(TokenKind::Operator, cast<u64>(OperatorKind::PlusAssign), line, column, start, 2);
+		return(true);
+	}
+	if (this.StartsWith("-=")) {
+		this.AdvanceMany(2);
+		out[0] = TokenNew(TokenKind::Operator, cast<u64>(OperatorKind::MinusAssign), line, column, start, 2);
+		return(true);
+	}
+	if (this.StartsWith("->")) {
+		this.AdvanceMany(2);
+		out[0] = TokenNew(TokenKind::Operator, cast<u64>(OperatorKind::Arrow), line, column, start, 2);
+		return(true);
+	}
+	byte:c = this.Peek();
+	if (c == '+') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Operator, cast<u64>(OperatorKind::Plus), line, column, start, 1);
+		return(true);
+	}
+	if (c == '-') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Operator, cast<u64>(OperatorKind::Minus), line, column, start, 1);
+		return(true);
+	}
+	if (c == '*') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Operator, cast<u64>(OperatorKind::Multiply), line, column, start, 1);
+		return(true);
+	}
+	if (c == '/') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Operator, cast<u64>(OperatorKind::Divide), line, column, start, 1);
+		return(true);
+	}
+	if (c == '%') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Operator, cast<u64>(OperatorKind::Modulo), line, column, start, 1);
+		return(true);
+	}
+	if (c == '=') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Operator, cast<u64>(OperatorKind::Assign), line, column, start, 1);
+		return(true);
+	}
+	if (c == '<') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Operator, cast<u64>(OperatorKind::Less), line, column, start, 1);
+		return(true);
+	}
+	if (c == '>') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Operator, cast<u64>(OperatorKind::Greater), line, column, start, 1);
+		return(true);
+	}
+	if (c == '!') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Operator, cast<u64>(OperatorKind::LogicalNot), line, column, start, 1);
+		return(true);
+	}
+	if (c == '&') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Operator, cast<u64>(OperatorKind::BitwiseAnd), line, column, start, 1);
+		return(true);
+	}
+	if (c == '|') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Operator, cast<u64>(OperatorKind::BitwiseOr), line, column, start, 1);
+		return(true);
+	}
+	if (c == '~') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Operator, cast<u64>(OperatorKind::BitwiseNot), line, column, start, 1);
+		return(true);
+	}
+	return(false);
+}
+
+bool:Tokenizer::ReadPunctuation(ptr<Token>:out, usize:start, usize:line, usize:column) {
+	byte:c = this.Peek();
+	if (c == '(') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Punctuation, cast<u64>(PunctuationKind::LeftParen), line, column, start, 1);
+		return(true);
+	}
+	if (c == ')') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Punctuation, cast<u64>(PunctuationKind::RightParen), line, column, start, 1);
+		return(true);
+	}
+	if (c == '{') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Punctuation, cast<u64>(PunctuationKind::LeftBrace), line, column, start, 1);
+		return(true);
+	}
+	if (c == '}') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Punctuation, cast<u64>(PunctuationKind::RightBrace), line, column, start, 1);
+		return(true);
+	}
+	if (c == '[') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Punctuation, cast<u64>(PunctuationKind::LeftBracket), line, column, start, 1);
+		return(true);
+	}
+	if (c == ']') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Punctuation, cast<u64>(PunctuationKind::RightBracket), line, column, start, 1);
+		return(true);
+	}
+	if (c == ';') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Punctuation, cast<u64>(PunctuationKind::Semicolon), line, column, start, 1);
+		return(true);
+	}
+	if (c == ',') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Punctuation, cast<u64>(PunctuationKind::Comma), line, column, start, 1);
+		return(true);
+	}
+	if (c == ':') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Punctuation, cast<u64>(PunctuationKind::Colon), line, column, start, 1);
+		return(true);
+	}
+	if (c == '.') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Punctuation, cast<u64>(PunctuationKind::Dot), line, column, start, 1);
+		return(true);
+	}
+	if (c == '#') {
+		this.Advance();
+		out[0] = TokenNew(TokenKind::Punctuation, cast<u64>(PunctuationKind::Hash), line, column, start, 1);
+		return(true);
+	}
+	return(false);
+}
+
+Token:Tokenizer::Next() {
+	if (this.emitComments) {
+		this.SkipWhitespace();
+		if (this.Peek() == '/' && this.PeekAt(1) == '/') {
+			return(this.ReadLineComment());
+		}
+		if (this.Peek() == '/' && this.PeekAt(1) == '*') {
+			return(this.ReadBlockComment());
+		}
+	} else {
+		this.SkipWhitespaceAndComments();
+	}
+
+	if (this.AtEnd()) {
+		return(TokenNew(TokenKind::Eof, 0, this.cursor.line, this.cursor.column, this.cursor.pos, 0));
+	}
+
+	usize:start = this.cursor.pos;
+	usize:line = this.cursor.line;
+	usize:column = this.cursor.column;
+	byte:c = this.Peek();
+	if (std::IsAsciiAlpha(c)) {
+		return(this.ReadIdentifierOrKeyword());
+	}
+	if (std::IsAsciiDigit(c)) {
+		return(this.ReadNumber());
+	}
+	if (c == '"') {
+		return(this.ReadDelimited(TokenKind::String, '"'));
+	}
+	if (c == '\'') {
+		return(this.ReadDelimited(TokenKind::Char, '\''));
+	}
+
+	Token:token;
+	if (this.ReadOperator(&token, start, line, column)) {
+		return(token);
+	}
+	if (this.ReadPunctuation(&token, start, line, column)) {
+		return(token);
+	}
+
+	this.Advance();
+	return(TokenNew(TokenKind::Identifier, 0, line, column, start, 1));
+}
+
+Status:TokenArrayReserve(ptr<Array<Token>>:tokens, usize:additional) {
+	usize:needed = tokens.len + additional;
+	if (needed <= tokens.cap) {
+		return(Status::Ok);
+	}
+
+	usize:newCap = tokens.cap;
+	if (newCap == 0) {
+		newCap = 64;
+	}
+	while (newCap < needed) {
+		newCap = newCap * 2;
+	}
+
+	ptr<Token>:newData = std::Resize<Token>(tokens.allocator, tokens.data, tokens.cap, newCap);
+	if (newData == 0) {
+		return(Status::NoMemory);
+	}
+	tokens.data = newData;
+	tokens.cap = newCap;
+	return(Status::Ok);
+}
+
+Status:TokenArrayPush(ptr<Array<Token>>:tokens, Token:token) {
+	Status:status = TokenArrayReserve(tokens, 1);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	tokens.data[tokens.len] = token;
+	tokens.len += 1;
+	return(Status::Ok);
+}
+
+Status:TokenArrayDestroy(ptr<Array<Token>>:tokens) {
+	if (tokens.data != 0) {
+		std::Free<Token>(tokens.allocator, tokens.data, tokens.cap);
+	}
+	tokens.data = 0;
+	tokens.len = 0;
+	tokens.cap = 0;
+	return(Status::Ok);
+}
+
+Status:TokenizeToArray(String:source, bool:emitComments, Allocator:allocator, ptr<Array<Token>>:out) {
+	out.data = 0;
+	out.len = 0;
+	out.cap = 0;
+	out.allocator = allocator;
+
+	Tokenizer:tokenizer = TokenizerNew(source, emitComments);
+	while (true) {
+		Token:token = tokenizer.Next();
+		Status:status = TokenArrayPush(out, token);
+		if (status != Status::Ok) {
+			return(status);
+		}
+		if (token.kind == TokenKind::Eof) {
+			break;
+		}
+	}
+	return(Status::Ok);
+}
+
+Status:WriteTokenField(ptr<StringBuilder>:out, u64:value, bool:separator) {
+	Status:status = std::FormatU64ToBuilder(out, value, 10);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	if (separator) {
+		return(out.WriteByte('|'));
+	}
+	return(Status::Ok);
+}
+
+Status:WriteTokenDumpLine(Token:token, ptr<StringBuilder>:out) {
+	Status:status = WriteTokenField(out, cast<u64>(token.kind), true);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = WriteTokenField(out, token.subkind, true);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = WriteTokenField(out, cast<u64>(token.line), true);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = WriteTokenField(out, cast<u64>(token.column), true);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = WriteTokenField(out, cast<u64>(token.offset), true);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = WriteTokenField(out, cast<u64>(token.length), false);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	return(out.WriteByte('\n'));
+}
+
+Status:WriteTokenDump(String:source, bool:emitComments, ptr<StringBuilder>:out) {
+	Array<Token>:tokens;
+	Status:status = TokenizeToArray(source, emitComments, out.allocator, &tokens);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	for (usize:i = 0; i < tokens.len; i++) {
+		status = WriteTokenDumpLine(tokens.data[i], out);
+		if (status != Status::Ok) {
+			TokenArrayDestroy(&tokens);
+			return(status);
+		}
+	}
+	return(TokenArrayDestroy(&tokens));
+}

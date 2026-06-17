@@ -1,0 +1,11 @@
+extern "C" {
+#include <stdlib.h>
+
+static int kek_std_system(const char* command) {
+	return system(command);
+}
+}
+
+int:ProcessRun(str:command) {
+	return(::kek_std_system(command));
+}

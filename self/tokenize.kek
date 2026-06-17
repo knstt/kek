@@ -1,0 +1,50 @@
+#import(std);
+#import(self/tokenizer);
+
+int:TokenizeFail(str:text) {
+	File:stderr = std::Stderr();
+	std::WriteStringToFile(&stderr, std::StringFromCString(text));
+	return(1);
+}
+
+int:main(int:argc, ptr<str>:argv) {
+	if (argc < 2) {
+		return(TokenizeFail("usage: tokenize <input.kek> [--comments]\n"));
+	}
+
+	bool:emitComments = false;
+	for (int:i = 2; i < argc; i++) {
+		String:arg = std::StringFromCString(argv[i]);
+		if (arg.EqualsCString("--comments")) {
+			emitComments = true;
+		} else {
+			return(TokenizeFail("tokenize: unknown flag\n"));
+		}
+	}
+
+	Allocator:allocator = std::DefaultAllocator();
+	OwnedString:source;
+	Status:readStatus = std::ReadFileToOwnedString(argv[1], allocator, &source);
+	if (readStatus != Status::Ok) {
+		return(TokenizeFail("tokenize: could not read input\n"));
+	}
+
+	StringBuilder:dump = std::StringBuilderNew(allocator);
+	Status:dumpStatus = tokenizer::WriteTokenDump(source.View(), emitComments, &dump);
+	if (dumpStatus != Status::Ok) {
+		dump.Destroy();
+		source.Destroy();
+		return(TokenizeFail("tokenize: could not create dump\n"));
+	}
+
+	File:stdout = std::Stdout();
+	String:dumpView = dump.View();
+	Slice<byte>:dumpBytes = dumpView.Bytes();
+	Result<usize>:write = stdout.Write(dumpBytes);
+	dump.Destroy();
+	source.Destroy();
+	if (write.status != Status::Ok) {
+		return(TokenizeFail("tokenize: could not write dump\n"));
+	}
+	return(0);
+}

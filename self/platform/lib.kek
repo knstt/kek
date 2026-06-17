@@ -1,0 +1,36 @@
+enum:u8:PlatformBindingKind {
+	Alloc,
+	Free,
+	Resize,
+	MemoryCopy,
+	MemorySet,
+	FileOpen,
+	FileRead,
+	FileWrite,
+	FileClose,
+	Stdout,
+	Stderr,
+	ProcessRun,
+	DirectoryOpen,
+	DirectoryRead,
+	DirectoryClose,
+};
+
+struct:PlatformBinding {
+	PlatformBindingKind:kind;
+	String:name;
+	String:cName;
+};
+
+PlatformBinding:PlatformBindingNew(PlatformBindingKind:kind, str:name, str:cName) {
+	PlatformBinding:binding;
+	binding.kind = kind;
+	binding.name = std::StringFromCString(name);
+	binding.cName = std::StringFromCString(cName);
+	return(binding);
+}
+
+bool:PlatformBindingNameEquals(PlatformBinding:binding, str:name) {
+	String:bindingName = binding.name;
+	return(bindingName.EqualsCString(name));
+}

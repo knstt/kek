@@ -76,6 +76,28 @@ bool:String::EqualsCString(str:text) {
 	return(this.Equals(StringFromCString(text)));
 }
 
+int:String::Compare(String:other) {
+	usize:limit = this.len;
+	if (other.len < limit) {
+		limit = other.len;
+	}
+	for (usize:i = 0; i < limit; i++) {
+		if (this.data[i] < other.data[i]) {
+			return(-1);
+		}
+		if (this.data[i] > other.data[i]) {
+			return(1);
+		}
+	}
+	if (this.len < other.len) {
+		return(-1);
+	}
+	if (this.len > other.len) {
+		return(1);
+	}
+	return(0);
+}
+
 bool:String::EqualsBytes(ptr<byte>:data, usize:len) {
 	if (this.len != len) {
 		return(false);
@@ -162,6 +184,43 @@ String:OwnedString::View() {
 	out.data = this.data;
 	out.len = this.len;
 	return(out);
+}
+
+String:OwnedStringView(ptr<OwnedString>:owned) {
+	String:out;
+	out.data = owned.data;
+	out.len = owned.len;
+	return(out);
+}
+
+Status:DestroyOwnedString(ptr<OwnedString>:owned) {
+	if (owned.data != 0) {
+		Free<byte>(owned.allocator, owned.data, owned.cap);
+	}
+	owned.data = 0;
+	owned.len = 0;
+	owned.cap = 0;
+	return(Status::Ok);
+}
+
+Status:CloneString(String:text, Allocator:allocator, ptr<OwnedString>:out) {
+	ptr<byte>:data = Alloc<byte>(allocator, text.len + 1);
+	if (data == 0) {
+		return(Status::NoMemory);
+	}
+	for (usize:i = 0; i < text.len; i++) {
+		data[i] = text.data[i];
+	}
+	data[text.len] = 0;
+	out.data = data;
+	out.len = text.len;
+	out.cap = text.len + 1;
+	out.allocator = allocator;
+	return(Status::Ok);
+}
+
+Status:CloneCString(str:text, Allocator:allocator, ptr<OwnedString>:out) {
+	return(CloneString(StringFromCString(text), allocator, out));
 }
 
 Status:OwnedString::Destroy() {

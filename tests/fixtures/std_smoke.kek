@@ -147,6 +147,7 @@ i64:main() {
 	assert(cursor.pos == 1);
 	assert(cursor.column == 2);
 	assert(cursor.Peek() == 'a');
+	assert(cursor.PeekAt(1) == '\n');
 	assert(cursor.MatchByte('a'));
 	assert(cursor.Advance() == '\n');
 	assert(cursor.line == 2);

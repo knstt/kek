@@ -25,6 +25,14 @@ byte:ByteCursor::Peek() {
 	return(this.input.data[this.pos]);
 }
 
+byte:ByteCursor::PeekAt(usize:offset) {
+	usize:target = this.pos + offset;
+	if (target >= this.input.len) {
+		return(0);
+	}
+	return(this.input.data[target]);
+}
+
 byte:ByteCursor::Advance() {
 	byte:value = this.Peek();
 	if (this.AtEnd()) {

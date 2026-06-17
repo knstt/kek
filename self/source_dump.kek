@@ -1,0 +1,42 @@
+#import(std);
+#import(self/diagnostics);
+#import(self/source);
+
+int:SourceDumpFail(str:text) {
+	File:stderr = std::Stderr();
+	std::WriteStringToFile(&stderr, std::StringFromCString(text));
+	return(1);
+}
+
+int:main(int:argc, ptr<str>:argv) {
+	if (argc < 2) {
+		return(SourceDumpFail("usage: source_dump <input.kek>\n"));
+	}
+
+	Allocator:allocator = std::DefaultAllocator();
+	SelfDiagnosticBag:diagnostics;
+	diagnostics::SelfDiagnosticBagInit(&diagnostics, allocator);
+	SelfFileTable:table;
+	source::SelfLoadCompilationSources(argv[1], allocator, &table, &diagnostics);
+
+	StringBuilder:dump = std::StringBuilderNew(allocator);
+	Status:dumpStatus = source::SelfWriteSourceDump(&table, &diagnostics, &dump);
+	if (dumpStatus != Status::Ok) {
+		dump.Destroy();
+		source::SelfFileTableDestroy(&table);
+		diagnostics::SelfDiagnosticBagDestroy(&diagnostics);
+		return(SourceDumpFail("source_dump: could not create dump\n"));
+	}
+
+	File:stdout = std::Stdout();
+	String:dumpView = dump.View();
+	Slice<byte>:dumpBytes = dumpView.Bytes();
+	Result<usize>:write = stdout.Write(dumpBytes);
+	dump.Destroy();
+	source::SelfFileTableDestroy(&table);
+	diagnostics::SelfDiagnosticBagDestroy(&diagnostics);
+	if (write.status != Status::Ok) {
+		return(SourceDumpFail("source_dump: could not write dump\n"));
+	}
+	return(0);
+}

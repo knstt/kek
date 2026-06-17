@@ -1,0 +1,50 @@
+Status:SelfBuildSemanticCommand(str:inputPath, ptr<StringBuilder>:out) {
+	Status:status = out.WriteCString("bin/kek build ");
+	if (status == Status::Ok) {
+		status = out.WriteCString(inputPath);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(" -o out/self_semantic_tmp.c");
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(" --ast-json out/self_semantic_tmp.json");
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(" --summary out/self_semantic_tmp.txt");
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(" > out/self_semantic_tmp.stdout");
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(" 2> out/self_semantic_tmp.stderr");
+	}
+	return(status);
+}
+
+Status:SelfWriteSemanticDiagnostics(str:inputPath, Allocator:allocator, ptr<StringBuilder>:out) {
+	StringBuilder:command = std::StringBuilderNew(allocator);
+	Status:status = SelfBuildSemanticCommand(inputPath, &command);
+	if (status != Status::Ok) {
+		command.Destroy();
+		return(status);
+	}
+	status = command.WriteByte(0);
+	if (status != Status::Ok) {
+		command.Destroy();
+		return(status);
+	}
+
+	String:commandView = command.View();
+	std::ProcessRun(cast<str>(commandView.data));
+	command.Destroy();
+
+	OwnedString:diagnostics;
+	status = std::ReadFileToOwnedString("out/self_semantic_tmp.stderr", allocator, &diagnostics);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	String:diagnosticsView = diagnostics.View();
+	status = out.WriteString(diagnosticsView);
+	diagnostics.Destroy();
+	return(status);
+}

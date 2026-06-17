@@ -1,0 +1,32 @@
+#import(std);
+#import(self/codegen);
+
+int:CodegenFail(str:text) {
+	File:stderr = std::Stderr();
+	std::WriteStringToFile(&stderr, std::StringFromCString(text));
+	return(1);
+}
+
+int:main(int:argc, ptr<str>:argv) {
+	if (argc < 2) {
+		return(CodegenFail("usage: codegen_c <input.kek>\n"));
+	}
+
+	Allocator:allocator = std::DefaultAllocator();
+	StringBuilder:generated = std::StringBuilderNew(allocator);
+	Status:status = codegen::SelfWriteGeneratedC(argv[1], allocator, &generated);
+	if (status != Status::Ok) {
+		generated.Destroy();
+		return(CodegenFail("codegen_c: could not generate C\n"));
+	}
+
+	File:stdout = std::Stdout();
+	String:view = generated.View();
+	Slice<byte>:bytes = view.Bytes();
+	Result<usize>:write = stdout.Write(bytes);
+	generated.Destroy();
+	if (write.status != Status::Ok) {
+		return(CodegenFail("codegen_c: could not write C\n"));
+	}
+	return(0);
+}

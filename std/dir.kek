@@ -1,0 +1,64 @@
+extern "C" {
+#include <dirent.h>
+
+static DIR* kek_std_dir_open(const char* path) {
+	return opendir(path);
+}
+
+static const char* kek_std_dir_read_name(DIR* dir) {
+	struct dirent* entry = readdir(dir);
+	if (!entry) {
+		return 0;
+	}
+	return entry->d_name;
+}
+
+static int kek_std_dir_close(DIR* dir) {
+	return closedir(dir);
+}
+}
+
+struct:Directory {
+	RawHandle:handle;
+};
+
+Result<Directory>:DirectoryOpen(str:path) {
+	Result<Directory>:result;
+	RawHandle:handle = ::kek_std_dir_open(path);
+	if (handle == 0) {
+		result.status = Status::NotFound;
+		return(result);
+	}
+	Directory:directory;
+	directory.handle = handle;
+	result.status = Status::Ok;
+	result.value = directory;
+	return(result);
+}
+
+Result<String>:Directory::ReadName() {
+	Result<String>:result;
+	if (this.handle == 0) {
+		result.status = Status::Invalid;
+		return(result);
+	}
+	str:name = ::kek_std_dir_read_name(this.handle);
+	if (name == 0) {
+		result.status = Status::End;
+		return(result);
+	}
+	result.status = Status::Ok;
+	result.value = StringFromCString(name);
+	return(result);
+}
+
+Status:Directory::Close() {
+	if (this.handle == 0) {
+		return(Status::Invalid);
+	}
+	if (::kek_std_dir_close(this.handle) != 0) {
+		return(Status::IoError);
+	}
+	this.handle = 0;
+	return(Status::Ok);
+}

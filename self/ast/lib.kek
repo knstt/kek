@@ -1,0 +1,563 @@
+enum:u8:SelfAstKind {
+	File,
+	Statement,
+	Block,
+	Group,
+	Index,
+	Generic,
+	Token,
+};
+
+struct:SelfAstNode {
+	SelfAstKind:kind;
+	SelfSourceLocation:location;
+	Token:token;
+	usize:firstChild;
+	usize:lastChild;
+	usize:nextSibling;
+	usize:childCount;
+};
+
+struct:SelfAstTree {
+	ptr<SelfAstNode>:nodes;
+	usize:len;
+	usize:cap;
+	usize:root;
+	Allocator:allocator;
+};
+
+struct:SelfParser {
+	ptr<Token>:tokens;
+	usize:count;
+	usize:position;
+	String:source;
+	i64:fileIndex;
+	ptr<SelfDiagnosticBag>:diagnostics;
+	SelfAstTree:tree;
+	usize:errorCount;
+};
+
+SelfSourceLocation:TokenLocation(Token:token) {
+	return(diagnostics::SelfSourceLocationNew(token.line, token.column, token.offset, token.length));
+}
+
+Status:SelfAstTreeReserve(ptr<SelfAstTree>:tree, usize:additional) {
+	usize:needed = tree.len + additional;
+	if (needed <= tree.cap) {
+		return(Status::Ok);
+	}
+
+	usize:newCap = tree.cap;
+	if (newCap == 0) {
+		newCap = 128;
+	}
+	while (newCap < needed) {
+		newCap = newCap * 2;
+	}
+
+	ptr<SelfAstNode>:newData = std::Resize<SelfAstNode>(tree.allocator, tree.nodes, tree.cap, newCap);
+	if (newData == 0) {
+		return(Status::NoMemory);
+	}
+	tree.nodes = newData;
+	tree.cap = newCap;
+	return(Status::Ok);
+}
+
+Status:SelfAstTreeInit(ptr<SelfAstTree>:tree, Allocator:allocator) {
+	tree.nodes = 0;
+	tree.len = 0;
+	tree.cap = 0;
+	tree.root = 0;
+	tree.allocator = allocator;
+	Status:status = SelfAstTreeReserve(tree, 1);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	SelfAstNode:sentinel;
+	tree.nodes[0] = sentinel;
+	tree.len = 1;
+	return(Status::Ok);
+}
+
+Status:SelfAstTreeDestroy(ptr<SelfAstTree>:tree) {
+	if (tree.nodes != 0) {
+		std::Free<SelfAstNode>(tree.allocator, tree.nodes, tree.cap);
+	}
+	tree.nodes = 0;
+	tree.len = 0;
+	tree.cap = 0;
+	tree.root = 0;
+	return(Status::Ok);
+}
+
+bool:IsPunctuationToken(ptr<Token>:token, PunctuationKind:punctuation) {
+	return(token.kind == TokenKind::Punctuation && token.subkind == cast<u64>(punctuation));
+}
+
+bool:IsOperatorToken(ptr<Token>:token, OperatorKind:operatorKind) {
+	return(token.kind == TokenKind::Operator && token.subkind == cast<u64>(operatorKind));
+}
+
+bool:IsTriviaToken(ptr<Token>:token) {
+	return(token.kind == TokenKind::Comment || token.kind == TokenKind::DocComment);
+}
+
+bool:IsClosingPunctuation(ptr<Token>:token) {
+	return(IsPunctuationToken(token, PunctuationKind::RightParen)
+		|| IsPunctuationToken(token, PunctuationKind::RightBrace)
+		|| IsPunctuationToken(token, PunctuationKind::RightBracket));
+}
+
+bool:IsAstTerminator(ptr<Token>:token, u64:closePunctuation) {
+	if (token.kind == TokenKind::Eof) {
+		return(true);
+	}
+	if (closePunctuation < 11 && token.kind == TokenKind::Punctuation && token.subkind == closePunctuation) {
+		return(true);
+	}
+	if (IsClosingPunctuation(token)) {
+		return(true);
+	}
+	return(false);
+}
+
+bool:IsGenericTerminator(ptr<Token>:token) {
+	return(token.kind == TokenKind::Eof || IsOperatorToken(token, OperatorKind::Greater));
+}
+
+bool:SelfTokenTextEquals(ptr<SelfParser>:parser, ptr<Token>:token, str:text) {
+	usize:length = 0;
+	while (text[length] != 0) {
+		length += 1;
+	}
+	if (!(token.kind == TokenKind::Identifier || token.kind == TokenKind::Number || token.kind == TokenKind::String)) {
+		return(false);
+	}
+	if (token.length != length) {
+		return(false);
+	}
+	if (token.offset + length > parser.source.len) {
+		return(false);
+	}
+	for (usize:i = 0; i < length; i++) {
+		if (parser.source.data[token.offset + i] != text[i]) {
+			return(false);
+		}
+	}
+	return(true);
+}
+
+usize:SelfCreateAstNode(ptr<SelfParser>:parser, SelfAstKind:kind, SelfSourceLocation:location) {
+	Status:status = SelfAstTreeReserve(&parser.tree, 1);
+	if (status != Status::Ok) {
+		diagnostics::SelfDiagnosticAddCString(parser.diagnostics, SelfDiagnosticSeverity::Error, SelfDiagnosticPhase::Parse, parser.fileIndex, location, "AST node storage capacity exceeded");
+		parser.errorCount += 1;
+		if (parser.tree.len > 0) {
+			return(parser.tree.len - 1);
+		}
+		return(0);
+	}
+	usize:index = parser.tree.len;
+	SelfAstNode:node;
+	node.kind = kind;
+	node.location = location;
+	parser.tree.nodes[index] = node;
+	parser.tree.len += 1;
+	return(index);
+}
+
+void:SelfAddAstChild(ptr<SelfAstTree>:tree, usize:parentIndex, usize:childIndex) {
+	if (parentIndex == 0 || childIndex == 0) {
+		return;
+	}
+	tree.nodes[childIndex].nextSibling = 0;
+	if (tree.nodes[parentIndex].lastChild != 0) {
+		usize:last = tree.nodes[parentIndex].lastChild;
+		tree.nodes[last].nextSibling = childIndex;
+	} else {
+		tree.nodes[parentIndex].firstChild = childIndex;
+	}
+	tree.nodes[parentIndex].lastChild = childIndex;
+	tree.nodes[parentIndex].childCount += 1;
+}
+
+void:SelfFinishLocationFromChildren(ptr<SelfAstTree>:tree, usize:nodeIndex) {
+	if (nodeIndex == 0 || tree.nodes[nodeIndex].childCount == 0) {
+		return;
+	}
+	usize:firstIndex = tree.nodes[nodeIndex].firstChild;
+	usize:lastIndex = tree.nodes[nodeIndex].lastChild;
+	SelfSourceLocation:first = tree.nodes[firstIndex].location;
+	SelfSourceLocation:last = tree.nodes[lastIndex].location;
+	tree.nodes[nodeIndex].location = first;
+	if (last.offset + last.length >= first.offset) {
+		tree.nodes[nodeIndex].location.length = (last.offset + last.length) - first.offset;
+	}
+}
+
+usize:SelfParseTokenNode(ptr<SelfParser>:parser) {
+	Token:token = parser.tokens[parser.position];
+	parser.position += 1;
+	usize:nodeIndex = SelfCreateAstNode(parser, SelfAstKind::Token, TokenLocation(token));
+	parser.tree.nodes[nodeIndex].token = token;
+	return(nodeIndex);
+}
+
+void:SelfReportParseError(ptr<SelfParser>:parser, ptr<Token>:token, str:message) {
+	diagnostics::SelfDiagnosticAddCString(parser.diagnostics, SelfDiagnosticSeverity::Error, SelfDiagnosticPhase::Parse, parser.fileIndex, TokenLocation(token[0]), message);
+	parser.errorCount += 1;
+}
+
+str:SelfPunctuationName(u64:punctuation) {
+	if (punctuation == cast<u64>(PunctuationKind::RightParen)) {
+		return(")");
+	}
+	if (punctuation == cast<u64>(PunctuationKind::RightBrace)) {
+		return("}");
+	}
+	if (punctuation == cast<u64>(PunctuationKind::RightBracket)) {
+		return("]");
+	}
+	return("<end of file>");
+}
+
+void:SelfReportExpected(ptr<SelfParser>:parser, ptr<Token>:token, u64:punctuation) {
+	StringBuilder:builder = std::StringBuilderNew(parser.tree.allocator);
+	builder.WriteCString("expected '");
+	builder.WriteCString(SelfPunctuationName(punctuation));
+	builder.WriteByte('\'');
+	String:message = builder.View();
+	diagnostics::SelfDiagnosticAdd(parser.diagnostics, SelfDiagnosticSeverity::Error, SelfDiagnosticPhase::Parse, parser.fileIndex, TokenLocation(token[0]), message);
+	builder.Destroy();
+	parser.errorCount += 1;
+}
+
+bool:SelfShouldParseGenericList(ptr<SelfParser>:parser, usize:previousChildIndex) {
+	if (previousChildIndex == 0 || parser.tree.nodes[previousChildIndex].kind != SelfAstKind::Token) {
+		return(false);
+	}
+	ptr<Token>:previousToken = &parser.tree.nodes[previousChildIndex].token;
+	if (previousToken.kind != TokenKind::Identifier && previousToken.kind != TokenKind::Keyword) {
+		return(false);
+	}
+	if (SelfTokenTextEquals(parser, previousToken, "cast")) {
+		return(false);
+	}
+	if (parser.position >= parser.count || !IsOperatorToken(&parser.tokens[parser.position], OperatorKind::Less)) {
+		return(false);
+	}
+
+	int:depth = 0;
+	for (usize:i = parser.position; i < parser.count; i++) {
+		ptr<Token>:token = &parser.tokens[i];
+		if (IsOperatorToken(token, OperatorKind::Less)) {
+			depth += 1;
+			continue;
+		}
+		if (IsOperatorToken(token, OperatorKind::Greater)) {
+			depth -= 1;
+			if (depth == 0) {
+				return(true);
+			}
+			continue;
+		}
+		if (depth == 1 && token.kind == TokenKind::Punctuation && token.subkind == cast<u64>(PunctuationKind::Dot)) {
+			return(false);
+		}
+		if (token.kind == TokenKind::Eof
+			|| IsPunctuationToken(token, PunctuationKind::Semicolon)
+			|| IsPunctuationToken(token, PunctuationKind::RightParen)
+			|| IsPunctuationToken(token, PunctuationKind::LeftBrace)
+			|| IsPunctuationToken(token, PunctuationKind::RightBrace)) {
+			return(false);
+		}
+	}
+	return(false);
+}
+
+void:SelfParseChildrenInto(ptr<SelfParser>:parser, usize:parentIndex, u64:closePunctuation) {
+	while (parser.position < parser.count && !IsAstTerminator(&parser.tokens[parser.position], closePunctuation)) {
+		if (IsTriviaToken(&parser.tokens[parser.position])) {
+			parser.position += 1;
+			continue;
+		}
+		usize:previousPosition = parser.position;
+		usize:statement = SelfParseStatement(parser, closePunctuation);
+		if (parser.tree.nodes[statement].childCount > 0) {
+			SelfAddAstChild(&parser.tree, parentIndex, statement);
+		} else {
+			if (parser.position == previousPosition) {
+				break;
+			}
+		}
+	}
+}
+
+usize:SelfParseDelimited(ptr<SelfParser>:parser, SelfAstKind:kind, u64:closePunctuation) {
+	Token:open = parser.tokens[parser.position];
+	parser.position += 1;
+	usize:node = SelfCreateAstNode(parser, kind, TokenLocation(open));
+
+	SelfParseChildrenInto(parser, node, closePunctuation);
+
+	if (parser.position < parser.count && parser.tokens[parser.position].kind == TokenKind::Punctuation && parser.tokens[parser.position].subkind == closePunctuation) {
+		Token:close = parser.tokens[parser.position];
+		parser.position += 1;
+		parser.tree.nodes[node].location = TokenLocation(open);
+		parser.tree.nodes[node].location.length = (close.offset + close.length) - open.offset;
+	} else {
+		if (parser.position < parser.count) {
+			SelfReportExpected(parser, &parser.tokens[parser.position], closePunctuation);
+			if (IsClosingPunctuation(&parser.tokens[parser.position])) {
+				parser.position += 1;
+			}
+		} else {
+			SelfReportParseError(parser, &open, "unterminated delimiter");
+		}
+	}
+
+	if (parser.tree.nodes[node].childCount > 0 && parser.tree.nodes[node].location.length == open.length) {
+		SelfFinishLocationFromChildren(&parser.tree, node);
+		parser.tree.nodes[node].location.offset = open.offset;
+		parser.tree.nodes[node].location.line = open.line;
+		parser.tree.nodes[node].location.column = open.column;
+	}
+	return(node);
+}
+
+usize:SelfParseGenericDelimited(ptr<SelfParser>:parser) {
+	Token:open = parser.tokens[parser.position];
+	parser.position += 1;
+	usize:node = SelfCreateAstNode(parser, SelfAstKind::Generic, TokenLocation(open));
+
+	while (parser.position < parser.count && !IsGenericTerminator(&parser.tokens[parser.position])) {
+		if (IsTriviaToken(&parser.tokens[parser.position])) {
+			parser.position += 1;
+			continue;
+		}
+		usize:statement = SelfCreateAstNode(parser, SelfAstKind::Statement, TokenLocation(parser.tokens[parser.position]));
+		while (parser.position < parser.count && !IsGenericTerminator(&parser.tokens[parser.position])) {
+			ptr<Token>:token = &parser.tokens[parser.position];
+			if (IsTriviaToken(token)) {
+				parser.position += 1;
+				continue;
+			}
+			if (IsPunctuationToken(token, PunctuationKind::Comma)) {
+				parser.position += 1;
+				break;
+			}
+			if (IsPunctuationToken(token, PunctuationKind::LeftParen)) {
+				SelfAddAstChild(&parser.tree, statement, SelfParseDelimited(parser, SelfAstKind::Group, cast<u64>(PunctuationKind::RightParen)));
+				continue;
+			}
+			if (IsPunctuationToken(token, PunctuationKind::LeftBracket)) {
+				SelfAddAstChild(&parser.tree, statement, SelfParseDelimited(parser, SelfAstKind::Index, cast<u64>(PunctuationKind::RightBracket)));
+				continue;
+			}
+			if (SelfShouldParseGenericList(parser, parser.tree.nodes[statement].lastChild)) {
+				SelfAddAstChild(&parser.tree, statement, SelfParseGenericDelimited(parser));
+				continue;
+			}
+			SelfAddAstChild(&parser.tree, statement, SelfParseTokenNode(parser));
+		}
+		SelfFinishLocationFromChildren(&parser.tree, statement);
+		if (parser.tree.nodes[statement].childCount > 0) {
+			SelfAddAstChild(&parser.tree, node, statement);
+		}
+	}
+
+	if (parser.position < parser.count && IsOperatorToken(&parser.tokens[parser.position], OperatorKind::Greater)) {
+		Token:close = parser.tokens[parser.position];
+		parser.position += 1;
+		parser.tree.nodes[node].location = TokenLocation(open);
+		parser.tree.nodes[node].location.length = (close.offset + close.length) - open.offset;
+	} else {
+		if (parser.position < parser.count) {
+			SelfReportParseError(parser, &parser.tokens[parser.position], "expected '>'");
+		} else {
+			SelfReportParseError(parser, &open, "unterminated generic list");
+		}
+	}
+
+	if (parser.tree.nodes[node].childCount > 0 && parser.tree.nodes[node].location.length == open.length) {
+		SelfFinishLocationFromChildren(&parser.tree, node);
+		parser.tree.nodes[node].location.offset = open.offset;
+		parser.tree.nodes[node].location.line = open.line;
+		parser.tree.nodes[node].location.column = open.column;
+	}
+	return(node);
+}
+
+usize:SelfParseStatement(ptr<SelfParser>:parser, u64:closePunctuation) {
+	usize:statement = SelfCreateAstNode(parser, SelfAstKind::Statement, TokenLocation(parser.tokens[parser.position]));
+
+	while (parser.position < parser.count && !IsAstTerminator(&parser.tokens[parser.position], closePunctuation)) {
+		ptr<Token>:token = &parser.tokens[parser.position];
+		if (IsTriviaToken(token)) {
+			parser.position += 1;
+			continue;
+		}
+		if (IsPunctuationToken(token, PunctuationKind::Semicolon) || IsPunctuationToken(token, PunctuationKind::Comma)) {
+			parser.position += 1;
+			break;
+		}
+		if (IsClosingPunctuation(token)) {
+			break;
+		}
+		if (IsPunctuationToken(token, PunctuationKind::LeftBrace)) {
+			SelfAddAstChild(&parser.tree, statement, SelfParseDelimited(parser, SelfAstKind::Block, cast<u64>(PunctuationKind::RightBrace)));
+			break;
+		}
+		if (IsPunctuationToken(token, PunctuationKind::LeftParen)) {
+			SelfAddAstChild(&parser.tree, statement, SelfParseDelimited(parser, SelfAstKind::Group, cast<u64>(PunctuationKind::RightParen)));
+			continue;
+		}
+		if (IsPunctuationToken(token, PunctuationKind::LeftBracket)) {
+			SelfAddAstChild(&parser.tree, statement, SelfParseDelimited(parser, SelfAstKind::Index, cast<u64>(PunctuationKind::RightBracket)));
+			continue;
+		}
+		if (SelfShouldParseGenericList(parser, parser.tree.nodes[statement].lastChild)) {
+			SelfAddAstChild(&parser.tree, statement, SelfParseGenericDelimited(parser));
+			continue;
+		}
+		SelfAddAstChild(&parser.tree, statement, SelfParseTokenNode(parser));
+	}
+
+	SelfFinishLocationFromChildren(&parser.tree, statement);
+	return(statement);
+}
+
+usize:SelfParseList(ptr<SelfParser>:parser, SelfAstKind:listKind, u64:closePunctuation) {
+	usize:list = SelfCreateAstNode(parser, listKind, TokenLocation(parser.tokens[parser.position]));
+	SelfParseChildrenInto(parser, list, closePunctuation);
+	if (closePunctuation == 11 && parser.position < parser.count && IsClosingPunctuation(&parser.tokens[parser.position])) {
+		SelfReportParseError(parser, &parser.tokens[parser.position], "unexpected closing delimiter");
+		parser.position += 1;
+	}
+	SelfFinishLocationFromChildren(&parser.tree, list);
+	return(list);
+}
+
+Status:SelfParseTokens(ptr<Token>:tokens, usize:count, String:source, i64:fileIndex, Allocator:allocator, ptr<SelfDiagnosticBag>:diagnostics, ptr<SelfAstTree>:out) {
+	SelfParser:parser;
+	parser.tokens = tokens;
+	parser.count = count;
+	parser.position = 0;
+	parser.source = source;
+	parser.fileIndex = fileIndex;
+	parser.diagnostics = diagnostics;
+	parser.errorCount = 0;
+	Status:status = SelfAstTreeInit(&parser.tree, allocator);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	usize:root = SelfParseList(&parser, SelfAstKind::File, 11);
+	parser.tree.root = root;
+	parser.tree.nodes[root].location = diagnostics::SelfSourceLocationNew(1, 1, 0, source.len);
+	out.nodes = parser.tree.nodes;
+	out.len = parser.tree.len;
+	out.cap = parser.tree.cap;
+	out.root = parser.tree.root;
+	out.allocator = parser.tree.allocator;
+	return(Status::Ok);
+}
+
+Status:SelfWriteAstNodeDump(ptr<SelfAstTree>:tree, usize:nodeIndex, usize:depth, ptr<StringBuilder>:out) {
+	ptr<SelfAstNode>:node = &tree.nodes[nodeIndex];
+	Status:status = out.WriteCString("node|");
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = diagnostics::SelfWriteU64Field(out, cast<u64>(depth), true);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = diagnostics::SelfWriteU64Field(out, cast<u64>(node.kind), true);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = diagnostics::SelfWriteU64Field(out, cast<u64>(node.location.line), true);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = diagnostics::SelfWriteU64Field(out, cast<u64>(node.location.column), true);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = diagnostics::SelfWriteU64Field(out, cast<u64>(node.location.offset), true);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = diagnostics::SelfWriteU64Field(out, cast<u64>(node.location.length), true);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = diagnostics::SelfWriteU64Field(out, cast<u64>(node.childCount), true);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	u64:tokenKind = 0;
+	u64:tokenSubkind = 0;
+	u64:tokenOffset = 0;
+	u64:tokenLength = 0;
+	if (node.kind == SelfAstKind::Token) {
+		tokenKind = cast<u64>(node.token.kind);
+		tokenSubkind = node.token.subkind;
+		tokenOffset = cast<u64>(node.token.offset);
+		tokenLength = cast<u64>(node.token.length);
+	}
+	status = diagnostics::SelfWriteU64Field(out, tokenKind, true);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = diagnostics::SelfWriteU64Field(out, tokenSubkind, true);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = diagnostics::SelfWriteU64Field(out, tokenOffset, true);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = diagnostics::SelfWriteU64Field(out, tokenLength, false);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = out.WriteByte('\n');
+	if (status != Status::Ok) {
+		return(status);
+	}
+
+	usize:child = node.firstChild;
+	while (child != 0) {
+		status = SelfWriteAstNodeDump(tree, child, depth + 1, out);
+		if (status != Status::Ok) {
+			return(status);
+		}
+		child = tree.nodes[child].nextSibling;
+	}
+	return(Status::Ok);
+}
+
+Status:SelfWriteAstBridgeDump(String:source, ptr<StringBuilder>:out) {
+	Allocator:allocator = out.allocator;
+	Array<Token>:tokens;
+	Status:status = tokenizer::TokenizeToArray(source, false, allocator, &tokens);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	SelfDiagnosticBag:diagnostics;
+	diagnostics::SelfDiagnosticBagInit(&diagnostics, allocator);
+	SelfAstTree:tree;
+	status = SelfParseTokens(tokens.data, tokens.len, source, 0, allocator, &diagnostics, &tree);
+	if (status == Status::Ok) {
+		status = SelfWriteAstNodeDump(&tree, tree.root, 0, out);
+	}
+	if (status == Status::Ok) {
+		status = diagnostics::SelfWriteDiagnosticDump(&diagnostics, out);
+	}
+	SelfAstTreeDestroy(&tree);
+	diagnostics::SelfDiagnosticBagDestroy(&diagnostics);
+	tokenizer::TokenArrayDestroy(&tokens);
+	return(status);
+}

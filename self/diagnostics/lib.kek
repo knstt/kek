@@ -1,0 +1,170 @@
+enum:u8:SelfDiagnosticSeverity {
+	Note,
+	Warning,
+	Error,
+};
+
+enum:u8:SelfDiagnosticPhase {
+	Source,
+	Lex,
+	Parse,
+	TypedParse,
+	Semantic,
+	Codegen,
+};
+
+struct:SelfSourceLocation {
+	usize:line;
+	usize:column;
+	usize:offset;
+	usize:length;
+};
+
+struct:SelfDiagnostic {
+	SelfDiagnosticSeverity:severity;
+	SelfDiagnosticPhase:phase;
+	i64:fileIndex;
+	SelfSourceLocation:location;
+	OwnedString:message;
+};
+
+struct:SelfDiagnosticBag {
+	SelfDiagnostic:items[256];
+	usize:count;
+	usize:errorCount;
+	Allocator:allocator;
+};
+
+SelfSourceLocation:SelfSourceLocationNew(usize:line, usize:column, usize:offset, usize:length) {
+	SelfSourceLocation:location;
+	location.line = line;
+	location.column = column;
+	location.offset = offset;
+	location.length = length;
+	return(location);
+}
+
+void:SelfDiagnosticBagInit(ptr<SelfDiagnosticBag>:bag, Allocator:allocator) {
+	bag.count = 0;
+	bag.errorCount = 0;
+	bag.allocator = allocator;
+}
+
+Status:SelfDiagnosticBagDestroy(ptr<SelfDiagnosticBag>:bag) {
+	for (usize:i = 0; i < bag.count; i++) {
+		std::DestroyOwnedString(&bag.items[i].message);
+	}
+	bag.count = 0;
+	bag.errorCount = 0;
+	return(Status::Ok);
+}
+
+Status:SelfDiagnosticAdd(ptr<SelfDiagnosticBag>:bag, SelfDiagnosticSeverity:severity, SelfDiagnosticPhase:phase, i64:fileIndex, SelfSourceLocation:location, String:message) {
+	if (severity == SelfDiagnosticSeverity::Error) {
+		bag.errorCount += 1;
+	}
+	if (bag.count >= len(bag.items)) {
+		return(Status::NoMemory);
+	}
+	ptr<SelfDiagnostic>:diagnostic = &bag.items[bag.count];
+	diagnostic.severity = severity;
+	diagnostic.phase = phase;
+	diagnostic.fileIndex = fileIndex;
+	diagnostic.location = location;
+	Status:status = std::CloneString(message, bag.allocator, &diagnostic.message);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	bag.count += 1;
+	return(Status::Ok);
+}
+
+Status:SelfDiagnosticAddCString(ptr<SelfDiagnosticBag>:bag, SelfDiagnosticSeverity:severity, SelfDiagnosticPhase:phase, i64:fileIndex, SelfSourceLocation:location, str:message) {
+	return(SelfDiagnosticAdd(bag, severity, phase, fileIndex, location, std::StringFromCString(message)));
+}
+
+Status:SelfDiagnosticAddPathMessage(ptr<SelfDiagnosticBag>:bag, SelfDiagnosticSeverity:severity, SelfDiagnosticPhase:phase, i64:fileIndex, SelfSourceLocation:location, str:prefix, String:path) {
+	StringBuilder:builder = std::StringBuilderNew(bag.allocator);
+	Status:status = builder.WriteCString(prefix);
+	if (status == Status::Ok) {
+		status = builder.WriteString(path);
+	}
+	if (status != Status::Ok) {
+		builder.Destroy();
+		return(status);
+	}
+	String:message = builder.View();
+	status = SelfDiagnosticAdd(bag, severity, phase, fileIndex, location, message);
+	builder.Destroy();
+	return(status);
+}
+
+Status:SelfWriteU64Field(ptr<StringBuilder>:out, u64:value, bool:separator) {
+	Status:status = std::FormatU64ToBuilder(out, value, 10);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	if (separator) {
+		return(out.WriteByte('|'));
+	}
+	return(Status::Ok);
+}
+
+Status:SelfWriteI64Field(ptr<StringBuilder>:out, i64:value, bool:separator) {
+	Status:status = std::FormatI64ToBuilder(out, value);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	if (separator) {
+		return(out.WriteByte('|'));
+	}
+	return(Status::Ok);
+}
+
+Status:SelfWriteDiagnosticDump(ptr<SelfDiagnosticBag>:bag, ptr<StringBuilder>:out) {
+	for (usize:i = 0; i < bag.count; i++) {
+		ptr<SelfDiagnostic>:diagnostic = &bag.items[i];
+		Status:status = out.WriteCString("diag|");
+		if (status != Status::Ok) {
+			return(status);
+		}
+		status = SelfWriteU64Field(out, cast<u64>(diagnostic.severity), true);
+		if (status != Status::Ok) {
+			return(status);
+		}
+		status = SelfWriteU64Field(out, cast<u64>(diagnostic.phase), true);
+		if (status != Status::Ok) {
+			return(status);
+		}
+		status = SelfWriteI64Field(out, diagnostic.fileIndex, true);
+		if (status != Status::Ok) {
+			return(status);
+		}
+		status = SelfWriteU64Field(out, cast<u64>(diagnostic.location.line), true);
+		if (status != Status::Ok) {
+			return(status);
+		}
+		status = SelfWriteU64Field(out, cast<u64>(diagnostic.location.column), true);
+		if (status != Status::Ok) {
+			return(status);
+		}
+		status = SelfWriteU64Field(out, cast<u64>(diagnostic.location.offset), true);
+		if (status != Status::Ok) {
+			return(status);
+		}
+		status = SelfWriteU64Field(out, cast<u64>(diagnostic.location.length), true);
+		if (status != Status::Ok) {
+			return(status);
+		}
+		String:message = std::OwnedStringView(&diagnostic.message);
+		status = out.WriteString(message);
+		if (status != Status::Ok) {
+			return(status);
+		}
+		status = out.WriteByte('\n');
+		if (status != Status::Ok) {
+			return(status);
+		}
+	}
+	return(Status::Ok);
+}
