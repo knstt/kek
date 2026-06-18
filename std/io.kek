@@ -1,3 +1,5 @@
+#import(std/core.kek);
+
 struct:MemoryReader {
 	ptr<byte>:data;
 	usize:len;

@@ -4,7 +4,7 @@
 // All .kek files in the same directory are part of the same package namespace.
 // Code outside this directory can import the package with:
 //
-// #import(tests/fixtures/MyPackage);
+// #import(tests/fixtures/MyPackage/something.kek);
 //
 // and then call this function as:
 //

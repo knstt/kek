@@ -1,3 +1,8 @@
+#import(std/core.kek);
+#import(std/string.kek);
+#import(std/io.kek);
+#import(std/file.kek);
+
 Status:WriteByteToBuilder(ptr<StringBuilder>:writer, byte:value) {
 	byte:buffer[1] = { value };
 	Result<usize>:result = writer.Write(std::FixedSlice<byte>(buffer, 1));

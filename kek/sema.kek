@@ -1,5 +1,5 @@
-#import(self/diagnostics);
-#import(self/compiler);
+#import(kek/diagnostics.kek);
+#import(kek/compiler.kek);
 
 Status:SelfWriteSemanticDiagnostics(str:inputPath, Allocator:allocator, ptr<StringBuilder>:out) {
 	StringBuilder:generated = std::StringBuilderNew(allocator);

@@ -1,0 +1,13 @@
+#import(std/core.kek);
+#import(std/mem.kek);
+#import(std/string.kek);
+#import(std/scan.kek);
+#import(std/io.kek);
+#import(std/file.kek);
+#import(std/dir.kek);
+#import(std/array.kek);
+#import(std/list.kek);
+#import(std/hash.kek);
+#import(std/collections.kek);
+#import(std/format.kek);
+#import(std/process.kek);

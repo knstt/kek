@@ -1,4 +1,4 @@
-#import(std);
+#import(std/lib.kek);
 
 /// Tokenizer parity fixture.
 struct:TokenFixture {

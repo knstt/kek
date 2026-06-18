@@ -1,3 +1,10 @@
+#import(std/core.kek);
+#import(std/mem.kek);
+#import(std/string.kek);
+#import(std/array.kek);
+#import(kek/diagnostics.kek);
+#import(kek/tokenizer.kek);
+
 enum:u8:SelfAstKind {
 	File,
 	Statement,

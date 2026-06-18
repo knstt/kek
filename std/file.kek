@@ -1,3 +1,7 @@
+#import(std/core.kek);
+#import(std/mem.kek);
+#import(std/string.kek);
+
 extern "C" {
 #include <stdio.h>
 

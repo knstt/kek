@@ -1,8 +1,9 @@
-#import(std);
-#import(self/diagnostics);
-#import(self/source);
-#import(self/tokenizer);
-#import(self/ast);
+#import(std/lib.kek);
+#import(std/thread.kek);
+#import(kek/diagnostics.kek);
+#import(kek/source.kek);
+#import(kek/tokenizer.kek);
+#import(kek/ast.kek);
 
 enum:u8:SelfCDeclKind {
 	Unknown,
@@ -34,7 +35,20 @@ struct:SelfCTokenFile {
 	String:sourceText;
 	String:path;
 	OwnedString:packageName;
+	OwnedString:moduleName;
 	usize:fileIndex;
+};
+
+struct:SelfCTokenizeJob {
+	Allocator:allocator;
+	ptr<SelfSourceFile>:sourceFile;
+	ptr<SelfCTokenFile>:tokenFile;
+	SelfDiagnosticBag:diagnostics;
+	usize:threadHandle;
+	Status:status;
+	usize:fileIndex;
+	bool:isRoot;
+	bool:threaded;
 };
 
 struct:SelfCTypeUse {
@@ -111,6 +125,7 @@ struct:SelfCDecl {
 	usize:firstField;
 	usize:fieldCount;
 	OwnedString:packageName;
+	OwnedString:moduleName;
 	bool:emitted;
 };
 
@@ -310,9 +325,6 @@ Status:SelfCPackageNameFromPath(String:path, Allocator:allocator, ptr<OwnedStrin
 	if (lastSlash == path.len) {
 		return(std::CloneCString("", allocator, out));
 	}
-	if (path.StartsWith(std::StringFromCString("std/"))) {
-		return(std::CloneCString("std", allocator, out));
-	}
 	usize:segmentStart = 0;
 	for (usize:i = 0; i < lastSlash; i++) {
 		if (path.data[i] == '/') {
@@ -320,6 +332,97 @@ Status:SelfCPackageNameFromPath(String:path, Allocator:allocator, ptr<OwnedStrin
 		}
 	}
 	return(std::CloneString(path.Slice(segmentStart, lastSlash - segmentStart), allocator, out));
+}
+
+Status:SelfCModuleNameFromPath(String:path, Allocator:allocator, ptr<OwnedString>:out) {
+	usize:lastSlash = SelfCStringLastSlash(path);
+	if (lastSlash == path.len) {
+		return(std::CloneCString("", allocator, out));
+	}
+	String:name = path.Slice(lastSlash + 1, path.len - lastSlash - 1);
+	if (name.EndsWith(std::StringFromCString(".kek"))) {
+		return(std::CloneString(name.Slice(0, name.len - 4), allocator, out));
+	}
+	return(std::CloneString(name, allocator, out));
+}
+
+Status:SelfCInitTokenFileSlot(Allocator:allocator, ptr<SelfCTokenFile>:tokenFile, usize:fileIndex) {
+	tokenFile.tokens = 0;
+	tokenFile.tokenLen = 0;
+	tokenFile.tokenCap = 0;
+	tokenFile.sourceText = std::StringFromCString("");
+	tokenFile.path = std::StringFromCString("");
+	tokenFile.fileIndex = fileIndex;
+	Status:status = std::CloneCString("", allocator, &tokenFile.packageName);
+	if (status == Status::Ok) {
+		status = std::CloneCString("", allocator, &tokenFile.moduleName);
+	}
+	return(status);
+}
+
+Status:SelfCSetTokenFileNames(Allocator:allocator, ptr<SelfCTokenFile>:tokenFile, bool:isRoot) {
+	std::DestroyOwnedString(&tokenFile.packageName);
+	std::DestroyOwnedString(&tokenFile.moduleName);
+	if (isRoot) {
+		Status:status = std::CloneCString("", allocator, &tokenFile.packageName);
+		if (status == Status::Ok) {
+			status = std::CloneCString("", allocator, &tokenFile.moduleName);
+		}
+		return(status);
+	}
+	Status:status = SelfCPackageNameFromPath(tokenFile.path, allocator, &tokenFile.packageName);
+	if (status == Status::Ok) {
+		status = SelfCModuleNameFromPath(tokenFile.path, allocator, &tokenFile.moduleName);
+	}
+	return(status);
+}
+
+Status:SelfCTokenizeSourceFile(Allocator:allocator, ptr<SelfSourceFile>:sourceFile, ptr<SelfCTokenFile>:tokenFile, usize:fileIndex, bool:isRoot, ptr<SelfDiagnosticBag>:diagnostics) {
+	tokenFile.sourceText = std::OwnedStringView(&sourceFile.content);
+	tokenFile.path = std::OwnedStringView(&sourceFile.path);
+	tokenFile.fileIndex = fileIndex;
+	Status:status = SelfCSetTokenFileNames(allocator, tokenFile, isRoot);
+	if (status != Status::Ok) {
+		return(status);
+	}
+
+	Array<Token>:tokens;
+	status = tokenizer::TokenizeToArray(tokenFile.sourceText, false, allocator, &tokens);
+	if (status != Status::Ok) {
+		tokenizer::TokenArrayDestroy(&tokens);
+		return(status);
+	}
+	tokenFile.tokens = tokens.data;
+	tokenFile.tokenLen = tokens.len;
+	tokenFile.tokenCap = tokens.cap;
+
+	SelfAstTree:tree;
+	status = ast::SelfParseTokens(tokenFile.tokens, tokenFile.tokenLen, tokenFile.sourceText, cast<i64>(fileIndex), allocator, diagnostics, &tree);
+	if (status == Status::Ok) {
+		ast::SelfAstTreeDestroy(&tree);
+	}
+	return(status);
+}
+
+void:SelfCTokenizeJobRun(ptr<SelfCTokenizeJob>:job) {
+	job.status = SelfCTokenizeSourceFile(job.allocator, job.sourceFile, job.tokenFile, job.fileIndex, job.isRoot, &job.diagnostics);
+}
+
+ptr:SelfCTokenizeFileThreadEntry(ptr:arg) {
+	ptr<SelfCTokenizeJob>:job = cast<ptr<SelfCTokenizeJob>>(arg);
+	SelfCTokenizeJobRun(job);
+	return(0);
+}
+
+Status:SelfCMergeDiagnostics(ptr<SelfDiagnosticBag>:target, ptr<SelfDiagnosticBag>:source) {
+	for (usize:i = 0; i < source.count; i++) {
+		ptr<SelfDiagnostic>:item = &source.items[i];
+		Status:status = diagnostics::SelfDiagnosticAdd(target, item.severity, item.phase, item.fileIndex, item.location, std::OwnedStringView(&item.message));
+		if (status != Status::Ok) {
+			return(status);
+		}
+	}
+	return(Status::Ok);
 }
 
 Status:SelfCProgramInit(ptr<SelfCProgram>:program, Allocator:allocator) {
@@ -340,14 +443,16 @@ Status:SelfCProgramDestroy(ptr<SelfCProgram>:program) {
 		Array<Token>:tokens;
 		tokens.data = program.tokenFiles[i].tokens;
 		tokens.len = program.tokenFiles[i].tokenLen;
-		tokens.cap = program.tokenFiles[i].tokenCap;
-		tokens.allocator = program.allocator;
-		tokenizer::TokenArrayDestroy(&tokens);
-		std::DestroyOwnedString(&program.tokenFiles[i].packageName);
-	}
-	for (usize:i = 0; i < program.declCount; i++) {
-		std::DestroyOwnedString(&program.decls[i].packageName);
-	}
+			tokens.cap = program.tokenFiles[i].tokenCap;
+			tokens.allocator = program.allocator;
+			tokenizer::TokenArrayDestroy(&tokens);
+			std::DestroyOwnedString(&program.tokenFiles[i].packageName);
+			std::DestroyOwnedString(&program.tokenFiles[i].moduleName);
+		}
+		for (usize:i = 0; i < program.declCount; i++) {
+			std::DestroyOwnedString(&program.decls[i].packageName);
+			std::DestroyOwnedString(&program.decls[i].moduleName);
+		}
 	for (usize:i = 0; i < program.typeUseCount; i++) {
 		std::DestroyOwnedString(&program.typeUses[i].key);
 		std::DestroyOwnedString(&program.typeUses[i].cName);
@@ -377,45 +482,57 @@ Status:SelfCLoadAndTokenize(ptr<SelfCProgram>:program, str:entryPath) {
 	if (status != Status::Ok) {
 		return(status);
 	}
+	if (program.files.count > len(program.tokenFiles)) {
+		return(SelfCAddDiagnostic(program, "too many source files"));
+	}
+
 	for (usize:i = 0; i < program.files.count; i++) {
-		if (program.tokenFileCount >= len(program.tokenFiles)) {
-			return(SelfCAddDiagnostic(program, "too many source files"));
-		}
-		ptr<SelfSourceFile>:sourceFile = &program.files.files[i];
-		ptr<SelfCTokenFile>:tokenFile = &program.tokenFiles[program.tokenFileCount];
-		tokenFile.sourceText = std::OwnedStringView(&sourceFile.content);
-		tokenFile.path = std::OwnedStringView(&sourceFile.path);
-		tokenFile.fileIndex = program.tokenFileCount;
-		status = SelfCPackageNameFromPath(tokenFile.path, program.allocator, &tokenFile.packageName);
+		status = SelfCInitTokenFileSlot(program.allocator, &program.tokenFiles[i], i);
 		if (status != Status::Ok) {
+			program.tokenFileCount = i;
 			return(status);
 		}
-		if (i == 0) {
-			std::DestroyOwnedString(&tokenFile.packageName);
-			status = SelfCMakeOwnedEmpty(program, &tokenFile.packageName);
-			if (status != Status::Ok) {
-				return(status);
+	}
+	program.tokenFileCount = program.files.count;
+
+	SelfCTokenizeJob:jobs[96];
+	for (usize:i = 0; i < program.files.count; i++) {
+		ptr<SelfCTokenizeJob>:job = &jobs[i];
+		job.allocator = program.allocator;
+		job.sourceFile = &program.files.files[i];
+		job.tokenFile = &program.tokenFiles[i];
+		diagnostics::SelfDiagnosticBagInit(&job.diagnostics, program.allocator);
+		job.status = Status::Ok;
+		job.fileIndex = i;
+		job.isRoot = i == 0;
+		job.threaded = false;
+		Status:startStatus = std::ThreadHandleStart(&job.threadHandle, cast<ptr>(SelfCTokenizeFileThreadEntry), cast<ptr>(job));
+		if (startStatus == Status::Ok) {
+			job.threaded = true;
+		} else {
+			SelfCTokenizeJobRun(job);
+		}
+	}
+
+	Status:firstStatus = Status::Ok;
+	for (usize:i = 0; i < program.files.count; i++) {
+		ptr<SelfCTokenizeJob>:job = &jobs[i];
+		if (job.threaded) {
+			Status:joinStatus = std::ThreadHandleJoin(&job.threadHandle);
+			if (joinStatus != Status::Ok && job.status == Status::Ok) {
+				job.status = joinStatus;
 			}
 		}
-		Array<Token>:tokens;
-		status = tokenizer::TokenizeToArray(tokenFile.sourceText, false, program.allocator, &tokens);
-		if (status != Status::Ok) {
-			return(status);
+		Status:mergeStatus = SelfCMergeDiagnostics(&program.diagnostics, &job.diagnostics);
+		if (firstStatus == Status::Ok && mergeStatus != Status::Ok) {
+			firstStatus = mergeStatus;
 		}
-		tokenFile.tokens = tokens.data;
-		tokenFile.tokenLen = tokens.len;
-		tokenFile.tokenCap = tokens.cap;
-		SelfAstTree:tree;
-		status = ast::SelfParseTokens(tokenFile.tokens, tokenFile.tokenLen, tokenFile.sourceText, cast<i64>(program.tokenFileCount), program.allocator, &program.diagnostics, &tree);
-		if (status == Status::Ok) {
-			ast::SelfAstTreeDestroy(&tree);
+		if (firstStatus == Status::Ok && job.status != Status::Ok) {
+			firstStatus = job.status;
 		}
-		if (status != Status::Ok) {
-			return(status);
-		}
-		program.tokenFileCount += 1;
+		diagnostics::SelfDiagnosticBagDestroy(&job.diagnostics);
 	}
-	return(Status::Ok);
+	return(firstStatus);
 }
 
 int:SelfCompilerFail(str:text) {
@@ -875,6 +992,10 @@ Status:SelfCParseAliasDecl(ptr<SelfCProgram>:program, usize:fileIndex, usize:sta
 	if (clone != Status::Ok) {
 		return(clone);
 	}
+	clone = SelfCCloneString(program, std::OwnedStringView(&program.tokenFiles[fileIndex].moduleName), &decl.moduleName);
+	if (clone != Status::Ok) {
+		return(clone);
+	}
 	for (usize:i = start + 3; i < end; i++) {
 		if (SelfCIsOperator(program, fileIndex, i, OperatorKind::Assign)) {
 			decl.returnStart = i + 1;
@@ -937,6 +1058,10 @@ Status:SelfCParseTypeDecl(ptr<SelfCProgram>:program, usize:fileIndex, usize:star
 	if (clone != Status::Ok) {
 		return(clone);
 	}
+	clone = SelfCCloneString(program, std::OwnedStringView(&program.tokenFiles[fileIndex].moduleName), &decl.moduleName);
+	if (clone != Status::Ok) {
+		return(clone);
+	}
 	if (kind == SelfCDeclKind::Struct || kind == SelfCDeclKind::Union) {
 		Status:fields = SelfCParseFields(program, &decl, fileIndex, blockStart + 1, blockEnd);
 		if (fields != Status::Ok) {
@@ -982,6 +1107,10 @@ Status:SelfCParseExternDecl(ptr<SelfCProgram>:program, usize:fileIndex, usize:st
 	decl.fieldCount = 0;
 	decl.emitted = false;
 	Status:clone = SelfCCloneString(program, std::OwnedStringView(&program.tokenFiles[fileIndex].packageName), &decl.packageName);
+	if (clone != Status::Ok) {
+		return(clone);
+	}
+	clone = SelfCCloneString(program, std::OwnedStringView(&program.tokenFiles[fileIndex].moduleName), &decl.moduleName);
 	if (clone != Status::Ok) {
 		return(clone);
 	}
@@ -1037,6 +1166,10 @@ Status:SelfCParseFunctionDecl(ptr<SelfCProgram>:program, usize:fileIndex, usize:
 	decl.fieldCount = 0;
 	decl.emitted = false;
 	Status:clone = SelfCCloneString(program, std::OwnedStringView(&program.tokenFiles[fileIndex].packageName), &decl.packageName);
+	if (clone != Status::Ok) {
+		return(clone);
+	}
+	clone = SelfCCloneString(program, std::OwnedStringView(&program.tokenFiles[fileIndex].moduleName), &decl.moduleName);
 	if (clone != Status::Ok) {
 		return(clone);
 	}
@@ -1210,7 +1343,8 @@ Status:SelfCWriteOperatorName(ptr<StringBuilder>:out, u8:operatorCode) {
 
 bool:SelfCDeclPackageIsRoot(ptr<SelfCDecl>:decl) {
 	String:packageName = std::OwnedStringView(&decl.packageName);
-	return(packageName.len == 0);
+	String:moduleName = std::OwnedStringView(&decl.moduleName);
+	return(packageName.len == 0 && moduleName.len == 0);
 }
 
 Status:SelfCWriteDeclCName(ptr<SelfCProgram>:program, ptr<StringBuilder>:out, ptr<SelfCDecl>:decl) {
@@ -1238,8 +1372,20 @@ Status:SelfCWriteDeclCName(ptr<SelfCProgram>:program, ptr<StringBuilder>:out, pt
 		}
 		return(SelfCWriteToken(program, out, decl.fileIndex, decl.nameIndex));
 	}
-	if (!SelfCDeclPackageIsRoot(decl)) {
-		Status:status = out.WriteString(std::OwnedStringView(&decl.packageName));
+	String:packageName = std::OwnedStringView(&decl.packageName);
+	String:moduleName = std::OwnedStringView(&decl.moduleName);
+	if (packageName.len > 0) {
+		Status:status = out.WriteString(packageName);
+		if (status != Status::Ok) {
+			return(status);
+		}
+		status = out.WriteByte('_');
+		if (status != Status::Ok) {
+			return(status);
+		}
+	}
+	if (moduleName.len > 0) {
+		Status:status = out.WriteString(moduleName);
 		if (status != Status::Ok) {
 			return(status);
 		}
@@ -1690,7 +1836,19 @@ Status:SelfCCollectTypeUsesInRange(ptr<SelfCProgram>:program, usize:fileIndex, u
 	return(Status::Ok);
 }
 
-ptr<SelfCDecl>:SelfCFindFunctionDeclByName(ptr<SelfCProgram>:program, String:name, String:packageName) {
+bool:SelfCDeclScopeMatches(ptr<SelfCDecl>:decl, String:scopeName) {
+	if (scopeName.len == 0) {
+		return(true);
+	}
+	String:declPackage = std::OwnedStringView(&decl.packageName);
+	if (declPackage.Equals(scopeName)) {
+		return(true);
+	}
+	String:declModule = std::OwnedStringView(&decl.moduleName);
+	return(declModule.Equals(scopeName));
+}
+
+ptr<SelfCDecl>:SelfCFindFunctionDeclByName(ptr<SelfCProgram>:program, String:name, String:scopeName) {
 	for (usize:i = 0; i < program.declCount; i++) {
 		ptr<SelfCDecl>:decl = &program.decls[i];
 		if (decl.kind != SelfCDeclKind::Function) {
@@ -1702,8 +1860,7 @@ ptr<SelfCDecl>:SelfCFindFunctionDeclByName(ptr<SelfCProgram>:program, String:nam
 		if (!SelfCDeclNameMatches(program, decl, name)) {
 			continue;
 		}
-		String:declPackage = std::OwnedStringView(&decl.packageName);
-		if (packageName.len == 0 || declPackage.Equals(packageName)) {
+		if (SelfCDeclScopeMatches(decl, scopeName)) {
 			return(decl);
 		}
 	}
@@ -1865,11 +2022,11 @@ Status:SelfCCollectGenericFunctionUsesInRange(ptr<SelfCProgram>:program, usize:f
 			usize:genericEnd = SelfCFindMatching(program, fileIndex, i + 1);
 			if (genericEnd + 1 < end && SelfCIsPunctuation(program, fileIndex, genericEnd + 1, PunctuationKind::LeftParen)) {
 				String:name = SelfCTokenText(program, fileIndex, i);
-				String:packageName = std::StringFromCString("");
+				String:scopeName = std::StringFromCString("");
 				if (i >= 2 && SelfCIsOperator(program, fileIndex, i - 1, OperatorKind::Scope)) {
-					packageName = SelfCTokenText(program, fileIndex, i - 2);
+					scopeName = SelfCTokenText(program, fileIndex, i - 2);
 				}
-				ptr<SelfCDecl>:decl = SelfCFindFunctionDeclByName(program, name, packageName);
+				ptr<SelfCDecl>:decl = SelfCFindFunctionDeclByName(program, name, scopeName);
 				if (decl != 0 && decl.isGeneric) {
 					SelfCTypeInfo:arg0;
 					SelfCTypeInfo:arg1;
@@ -3185,16 +3342,18 @@ Status:SelfCCompilePrimary(ptr<SelfCExprParser>:parser, ptr<SelfCExpr>:out) {
 		StringBuilder:builder = std::StringBuilderNew(parser.program[0].allocator);
 		if (index + 2 < parser.end && SelfCIsOperator(parser.program, parser.fileIndex, index + 1, OperatorKind::Scope)) {
 			String:scopeName = SelfCTokenText(parser.program, parser.fileIndex, index);
-			if (scopeName.EqualsCString("std")) {
-				status = builder.WriteCString("std_");
+			String:name = SelfCTokenText(parser.program, parser.fileIndex, index + 2);
+			ptr<SelfCDecl>:scopedDecl = SelfCFindFunctionDeclByName(parser.program, name, scopeName);
+			if (scopedDecl != 0) {
+				status = SelfCWriteDeclCName(parser.program, &builder, scopedDecl);
 			} else {
 				status = SelfCWriteToken(parser.program, &builder, parser.fileIndex, index);
 				if (status == Status::Ok) {
 					status = builder.WriteByte('_');
 				}
-			}
-			if (status == Status::Ok) {
-				status = SelfCWriteToken(parser.program, &builder, parser.fileIndex, index + 2);
+				if (status == Status::Ok) {
+					status = SelfCWriteToken(parser.program, &builder, parser.fileIndex, index + 2);
+				}
 			}
 			parser.pos = index + 3;
 			if (parser.pos < parser.end && SelfCIsOperator(parser.program, parser.fileIndex, parser.pos, OperatorKind::Less)) {

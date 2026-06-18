@@ -1,5 +1,5 @@
-#import(tests/fixtures/MyPackage);
-#import(std);
+#import(tests/fixtures/MyPackage/something.kek);
+#import(std/lib.kek);
 
 extern "C" {
 

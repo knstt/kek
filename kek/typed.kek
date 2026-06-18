@@ -1,4 +1,4 @@
-#import(self/compiler);
+#import(kek/compiler.kek);
 
 Status:SelfWriteTypedModuleSummary(str:inputPath, Allocator:allocator, ptr<StringBuilder>:out) {
 	StringBuilder:generated = std::StringBuilderNew(allocator);

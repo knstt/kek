@@ -1,3 +1,6 @@
+#import(std/core.kek);
+#import(std/mem.kek);
+
 struct:Array<T> {
 	ptr<T>:data;
 	usize:len;

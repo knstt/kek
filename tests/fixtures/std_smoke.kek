@@ -1,4 +1,4 @@
-#import(std);
+#import(std/lib.kek);
 
 i64:main() {
 	Allocator:allocator = std::DefaultAllocator();
