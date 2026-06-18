@@ -1,16 +1,16 @@
 #import(kek/diagnostics.kek);
 #import(kek/compiler.kek);
 
-Status:SelfWriteGeneratedC(str:inputPath, Allocator:allocator, ptr<StringBuilder>:out) {
+Status:WriteGeneratedC(str:inputPath, Allocator:allocator, ptr<StringBuilder>:out) {
 	StringBuilder:generated = std::StringBuilderNew(allocator);
-	SelfDiagnosticBag:diagnostics;
-	diagnostics::SelfDiagnosticBagInit(&diagnostics, allocator);
-	Status:status = compiler::SelfCompileToCString(inputPath, allocator, &generated, &diagnostics);
+	DiagnosticBag:diagnostics;
+	diagnostics::DiagnosticBagInit(&diagnostics, allocator);
+	Status:status = compiler::CompileToCString(inputPath, allocator, &generated, &diagnostics);
 	if (status == Status::Ok) {
 		String:view = generated.View();
 		status = out.WriteString(view);
 	}
 	generated.Destroy();
-	diagnostics::SelfDiagnosticBagDestroy(&diagnostics);
+	diagnostics::DiagnosticBagDestroy(&diagnostics);
 	return(status);
 }

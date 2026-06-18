@@ -1,41 +1,41 @@
 #import(std/core.kek);
 #import(std/mem.kek);
 #import(std/string.kek);
+#import(std/array.kek);
 #import(std/file.kek);
 #import(kek/diagnostics.kek);
 
-struct:SelfSourceFile {
+struct:SourceFile {
 	OwnedString:path;
 	OwnedString:content;
 	usize:fileIndex;
 };
 
-struct:SelfFileTable {
-	SelfSourceFile:files[64];
-	usize:count;
-	Allocator:allocator;
+struct:FileTable {
+	Array<SourceFile>:files;
 };
 
-void:SelfFileTableInit(ptr<SelfFileTable>:table, Allocator:allocator) {
-	table.count = 0;
-	table.allocator = allocator;
+void:FileTableInit(ptr<FileTable>:table, Allocator:allocator) {
+	table.files = std::ArrayNew<SourceFile>(allocator);
 }
 
-Status:SelfFileTableDestroy(ptr<SelfFileTable>:table) {
-	for (usize:i = 0; i < table.count; i++) {
-		std::DestroyOwnedString(&table.files[i].path);
-		std::DestroyOwnedString(&table.files[i].content);
+Status:FileTableDestroy(ptr<FileTable>:table) {
+	for (usize:i = 0; i < table.files.len; i++) {
+		std::DestroyOwnedString(&table.files.data[i].path);
+		std::DestroyOwnedString(&table.files.data[i].content);
 	}
-	table.count = 0;
-	return(Status::Ok);
+	Array<SourceFile>:files = table.files;
+	Status:status = files.Destroy();
+	table.files = files;
+	return(status);
 }
 
-bool:SelfStringEndsWithCString(String:text, str:suffixText) {
+bool:StringEndsWithCString(String:text, str:suffixText) {
 	String:suffix = std::StringFromCString(suffixText);
 	return(text.EndsWith(suffix));
 }
 
-Status:SelfNormalizePath(String:path, Allocator:allocator, ptr<OwnedString>:out) {
+Status:NormalizePath(String:path, Allocator:allocator, ptr<OwnedString>:out) {
 	StringBuilder:builder = std::StringBuilderNew(allocator);
 	bool:previousSlash = false;
 	usize:i = 0;
@@ -77,9 +77,9 @@ Status:SelfNormalizePath(String:path, Allocator:allocator, ptr<OwnedString>:out)
 	return(Status::Ok);
 }
 
-bool:SelfFileAlreadyLoaded(ptr<SelfFileTable>:table, String:path) {
-	for (usize:i = 0; i < table.count; i++) {
-		String:filePath = std::OwnedStringView(&table.files[i].path);
+bool:FileAlreadyLoaded(ptr<FileTable>:table, String:path) {
+	for (usize:i = 0; i < table.files.len; i++) {
+		String:filePath = std::OwnedStringView(&table.files.data[i].path);
 		if (filePath.Equals(path)) {
 			return(true);
 		}
@@ -87,40 +87,48 @@ bool:SelfFileAlreadyLoaded(ptr<SelfFileTable>:table, String:path) {
 	return(false);
 }
 
-Status:SelfAddSourceDiagnostic(ptr<SelfDiagnosticBag>:diagnostics, str:message) {
-	return(diagnostics::SelfDiagnosticAddCString(diagnostics, SelfDiagnosticSeverity::Error, SelfDiagnosticPhase::Source, -1, diagnostics::SelfSourceLocationNew(0, 0, 0, 0), message));
+Status:FileTableReserve(ptr<FileTable>:table, usize:additional) {
+	Array<SourceFile>:files = table.files;
+	Status:status = files.Reserve(additional);
+	table.files = files;
+	return(status);
 }
 
-Status:SelfReadFile(String:path, ptr<SelfFileTable>:table, ptr<SelfDiagnosticBag>:diagnostics) {
+Status:AddSourceDiagnostic(ptr<DiagnosticBag>:diagnostics, str:message) {
+	return(diagnostics::DiagnosticAddCString(diagnostics, DiagnosticSeverity::Error, DiagnosticPhase::Source, -1, diagnostics::SourceLocationNew(0, 0, 0, 0), message));
+}
+
+Status:ReadFile(String:path, ptr<FileTable>:table, ptr<DiagnosticBag>:diagnostics) {
 	OwnedString:normalized;
-	Status:status = SelfNormalizePath(path, table.allocator, &normalized);
+	Status:status = NormalizePath(path, table.files.allocator, &normalized);
 	if (status != Status::Ok) {
 		return(status);
 	}
 
 	String:normalizedPath = std::OwnedStringView(&normalized);
-	if (SelfFileAlreadyLoaded(table, normalizedPath)) {
+	if (FileAlreadyLoaded(table, normalizedPath)) {
 		std::DestroyOwnedString(&normalized);
 		return(Status::Ok);
 	}
-	if (table.count >= len(table.files)) {
+	status = FileTableReserve(table, 1);
+	if (status != Status::Ok) {
 		std::DestroyOwnedString(&normalized);
-		return(SelfAddSourceDiagnostic(diagnostics, "file table is full"));
+		return(status);
 	}
 
 	Result<File>:opened = std::FileOpen(cast<str>(normalized.data), FileMode::Read);
 	if (opened.status != Status::Ok) {
-		status = diagnostics::SelfDiagnosticAddPathMessage(diagnostics, SelfDiagnosticSeverity::Error, SelfDiagnosticPhase::Source, -1, diagnostics::SelfSourceLocationNew(0, 0, 0, 0), "could not open file ", normalizedPath);
+		status = diagnostics::DiagnosticAddPathMessage(diagnostics, DiagnosticSeverity::Error, DiagnosticPhase::Source, -1, diagnostics::SourceLocationNew(0, 0, 0, 0), "could not open file ", normalizedPath);
 		std::DestroyOwnedString(&normalized);
 		return(status);
 	}
 
 	OwnedString:content;
 	File:file = opened.value;
-	status = std::ReadAllToOwnedString(file, table.allocator, &content);
+	status = std::ReadAllToOwnedString(file, table.files.allocator, &content);
 	Status:closeStatus = file.Close();
 	if (status != Status::Ok) {
-		diagnostics::SelfDiagnosticAddPathMessage(diagnostics, SelfDiagnosticSeverity::Error, SelfDiagnosticPhase::Source, -1, diagnostics::SelfSourceLocationNew(0, 0, 0, 0), "could not read file ", normalizedPath);
+		diagnostics::DiagnosticAddPathMessage(diagnostics, DiagnosticSeverity::Error, DiagnosticPhase::Source, -1, diagnostics::SourceLocationNew(0, 0, 0, 0), "could not read file ", normalizedPath);
 		std::DestroyOwnedString(&normalized);
 		return(status);
 	}
@@ -130,15 +138,15 @@ Status:SelfReadFile(String:path, ptr<SelfFileTable>:table, ptr<SelfDiagnosticBag
 		return(closeStatus);
 	}
 
-	ptr<SelfSourceFile>:source = &table.files[table.count];
+	ptr<SourceFile>:source = &table.files.data[table.files.len];
 	source.path = normalized;
 	source.content = content;
-	source.fileIndex = table.count;
-	table.count += 1;
+	source.fileIndex = table.files.len;
+	table.files.len += 1;
 	return(Status::Ok);
 }
 
-bool:SelfImportDirectiveAt(String:source, usize:cursor) {
+bool:ImportDirectiveAt(String:source, usize:cursor) {
 	usize:lineStart = cursor;
 	while (lineStart > 0 && source.data[lineStart - 1] != '\n' && source.data[lineStart - 1] != '\r') {
 		lineStart -= 1;
@@ -152,23 +160,24 @@ bool:SelfImportDirectiveAt(String:source, usize:cursor) {
 	return(true);
 }
 
-Status:SelfLoadImportFile(ptr<SelfFileTable>:table, String:path, ptr<SelfDiagnosticBag>:diagnostics, i64:fileIndex, SelfSourceLocation:location) {
-	if (!SelfStringEndsWithCString(path, ".kek")) {
-		return(diagnostics::SelfDiagnosticAddPathMessage(diagnostics, SelfDiagnosticSeverity::Error, SelfDiagnosticPhase::Source, fileIndex, location, "import path must name a .kek file ", path));
+Status:LoadImportFile(ptr<FileTable>:table, String:path, ptr<DiagnosticBag>:diagnostics, i64:fileIndex, SourceLocation:location) {
+	if (!StringEndsWithCString(path, ".kek")) {
+		return(diagnostics::DiagnosticAddPathMessage(diagnostics, DiagnosticSeverity::Error, DiagnosticPhase::Source, fileIndex, location, "import path must name a .kek file ", path));
 	}
-	usize:before = table.count;
-	Status:status = SelfReadFile(path, table, diagnostics);
+	usize:before = table.files.len;
+	Status:status = ReadFile(path, table, diagnostics);
 	if (status != Status::Ok) {
 		return(status);
 	}
-	if (table.count > before) {
-		return(SelfLoadImports(table, &table.files[before], diagnostics));
+	if (table.files.len > before) {
+		return(LoadImports(table, &table.files.data[before], diagnostics));
 	}
 	return(Status::Ok);
 }
 
-Status:SelfLoadImports(ptr<SelfFileTable>:table, ptr<SelfSourceFile>:file, ptr<SelfDiagnosticBag>:diagnostics) {
+Status:LoadImports(ptr<FileTable>:table, ptr<SourceFile>:file, ptr<DiagnosticBag>:diagnostics) {
 	String:source = std::OwnedStringView(&file.content);
+	usize:currentFileIndex = file.fileIndex;
 	String:prefix = std::StringFromCString("#import");
 	usize:cursor = 0;
 	while (cursor + prefix.len + 1 <= source.len) {
@@ -184,7 +193,7 @@ Status:SelfLoadImports(ptr<SelfFileTable>:table, ptr<SelfSourceFile>:file, ptr<S
 			continue;
 		}
 
-		if (!SelfImportDirectiveAt(source, cursor)) {
+		if (!ImportDirectiveAt(source, cursor)) {
 			cursor += 1;
 			continue;
 		}
@@ -199,16 +208,16 @@ Status:SelfLoadImports(ptr<SelfFileTable>:table, ptr<SelfSourceFile>:file, ptr<S
 		while (end < source.len && source.data[end] != ')') {
 			end += 1;
 		}
-		SelfSourceLocation:location = diagnostics::SelfSourceLocationNew(1, 1, cursor, prefix.len);
+		SourceLocation:location = diagnostics::SourceLocationNew(1, 1, cursor, prefix.len);
 		if (end >= source.len) {
-			return(diagnostics::SelfDiagnosticAddCString(diagnostics, SelfDiagnosticSeverity::Error, SelfDiagnosticPhase::Source, cast<i64>(file.fileIndex), location, "unterminated import"));
+			return(diagnostics::DiagnosticAddCString(diagnostics, DiagnosticSeverity::Error, DiagnosticPhase::Source, cast<i64>(currentFileIndex), location, "unterminated import"));
 		}
 		usize:length = end - start;
 		if (length == 0) {
-			return(diagnostics::SelfDiagnosticAddCString(diagnostics, SelfDiagnosticSeverity::Error, SelfDiagnosticPhase::Source, cast<i64>(file.fileIndex), location, "invalid import path"));
+			return(diagnostics::DiagnosticAddCString(diagnostics, DiagnosticSeverity::Error, DiagnosticPhase::Source, cast<i64>(currentFileIndex), location, "invalid import path"));
 		}
 		String:importPath = source.Slice(start, length);
-		Status:status = SelfLoadImportFile(table, importPath, diagnostics, cast<i64>(file.fileIndex), location);
+		Status:status = LoadImportFile(table, importPath, diagnostics, cast<i64>(currentFileIndex), location);
 		if (status != Status::Ok) {
 			return(status);
 		}
@@ -217,23 +226,23 @@ Status:SelfLoadImports(ptr<SelfFileTable>:table, ptr<SelfSourceFile>:file, ptr<S
 	return(Status::Ok);
 }
 
-Status:SelfLoadCompilationSources(str:entryPath, Allocator:allocator, ptr<SelfFileTable>:table, ptr<SelfDiagnosticBag>:diagnostics) {
-	SelfFileTableInit(table, allocator);
-	Status:status = SelfReadFile(std::StringFromCString(entryPath), table, diagnostics);
+Status:LoadCompilationSources(str:entryPath, Allocator:allocator, ptr<FileTable>:table, ptr<DiagnosticBag>:diagnostics) {
+	FileTableInit(table, allocator);
+	Status:status = ReadFile(std::StringFromCString(entryPath), table, diagnostics);
 	if (status != Status::Ok) {
 		return(status);
 	}
-	return(SelfLoadImports(table, &table.files[0], diagnostics));
+	return(LoadImports(table, &table.files.data[0], diagnostics));
 }
 
-Status:SelfWriteSourceDump(ptr<SelfFileTable>:table, ptr<SelfDiagnosticBag>:diagnostics, ptr<StringBuilder>:out) {
-	for (usize:i = 0; i < table.count; i++) {
-		ptr<SelfSourceFile>:file = &table.files[i];
+Status:WriteSourceDump(ptr<FileTable>:table, ptr<DiagnosticBag>:diagnostics, ptr<StringBuilder>:out) {
+	for (usize:i = 0; i < table.files.len; i++) {
+		ptr<SourceFile>:file = &table.files.data[i];
 		Status:status = out.WriteCString("file|");
 		if (status != Status::Ok) {
 			return(status);
 		}
-		status = diagnostics::SelfWriteU64Field(out, cast<u64>(file.fileIndex), true);
+		status = diagnostics::WriteU64Field(out, cast<u64>(file.fileIndex), true);
 		if (status != Status::Ok) {
 			return(status);
 		}
@@ -246,7 +255,7 @@ Status:SelfWriteSourceDump(ptr<SelfFileTable>:table, ptr<SelfDiagnosticBag>:diag
 		if (status != Status::Ok) {
 			return(status);
 		}
-		status = diagnostics::SelfWriteU64Field(out, cast<u64>(file.content.len), false);
+		status = diagnostics::WriteU64Field(out, cast<u64>(file.content.len), false);
 		if (status != Status::Ok) {
 			return(status);
 		}
@@ -255,5 +264,5 @@ Status:SelfWriteSourceDump(ptr<SelfFileTable>:table, ptr<SelfDiagnosticBag>:diag
 			return(status);
 		}
 	}
-	return(diagnostics::SelfWriteDiagnosticDump(diagnostics, out));
+	return(diagnostics::WriteDiagnosticDump(diagnostics, out));
 }

@@ -1,15 +1,16 @@
 #import(std/core.kek);
 #import(std/mem.kek);
 #import(std/string.kek);
+#import(std/array.kek);
 #import(std/format.kek);
 
-enum:u8:SelfDiagnosticSeverity {
+enum:u8:DiagnosticSeverity {
 	Note,
 	Warning,
 	Error,
 };
 
-enum:u8:SelfDiagnosticPhase {
+enum:u8:DiagnosticPhase {
 	Source,
 	Lex,
 	Parse,
@@ -18,30 +19,28 @@ enum:u8:SelfDiagnosticPhase {
 	Codegen,
 };
 
-struct:SelfSourceLocation {
+struct:SourceLocation {
 	usize:line;
 	usize:column;
 	usize:offset;
 	usize:length;
 };
 
-struct:SelfDiagnostic {
-	SelfDiagnosticSeverity:severity;
-	SelfDiagnosticPhase:phase;
+struct:Diagnostic {
+	DiagnosticSeverity:severity;
+	DiagnosticPhase:phase;
 	i64:fileIndex;
-	SelfSourceLocation:location;
+	SourceLocation:location;
 	OwnedString:message;
 };
 
-struct:SelfDiagnosticBag {
-	SelfDiagnostic:items[256];
-	usize:count;
+struct:DiagnosticBag {
+	Array<Diagnostic>:items;
 	usize:errorCount;
-	Allocator:allocator;
 };
 
-SelfSourceLocation:SelfSourceLocationNew(usize:line, usize:column, usize:offset, usize:length) {
-	SelfSourceLocation:location;
+SourceLocation:SourceLocationNew(usize:line, usize:column, usize:offset, usize:length) {
+	SourceLocation:location;
 	location.line = line;
 	location.column = column;
 	location.offset = offset;
@@ -49,47 +48,56 @@ SelfSourceLocation:SelfSourceLocationNew(usize:line, usize:column, usize:offset,
 	return(location);
 }
 
-void:SelfDiagnosticBagInit(ptr<SelfDiagnosticBag>:bag, Allocator:allocator) {
-	bag.count = 0;
+void:DiagnosticBagInit(ptr<DiagnosticBag>:bag, Allocator:allocator) {
+	bag.items = std::ArrayNew<Diagnostic>(allocator);
 	bag.errorCount = 0;
-	bag.allocator = allocator;
 }
 
-Status:SelfDiagnosticBagDestroy(ptr<SelfDiagnosticBag>:bag) {
-	for (usize:i = 0; i < bag.count; i++) {
-		std::DestroyOwnedString(&bag.items[i].message);
+Status:DiagnosticBagDestroy(ptr<DiagnosticBag>:bag) {
+	for (usize:i = 0; i < bag.items.len; i++) {
+		std::DestroyOwnedString(&bag.items.data[i].message);
 	}
-	bag.count = 0;
+	Array<Diagnostic>:items = bag.items;
+	Status:status = items.Destroy();
+	bag.items = items;
 	bag.errorCount = 0;
-	return(Status::Ok);
+	return(status);
 }
 
-Status:SelfDiagnosticAdd(ptr<SelfDiagnosticBag>:bag, SelfDiagnosticSeverity:severity, SelfDiagnosticPhase:phase, i64:fileIndex, SelfSourceLocation:location, String:message) {
-	if (severity == SelfDiagnosticSeverity::Error) {
-		bag.errorCount += 1;
+Status:DiagnosticBagReserve(ptr<DiagnosticBag>:bag, usize:additional) {
+	Array<Diagnostic>:items = bag.items;
+	Status:status = items.Reserve(additional);
+	bag.items = items;
+	return(status);
+}
+
+Status:DiagnosticAdd(ptr<DiagnosticBag>:bag, DiagnosticSeverity:severity, DiagnosticPhase:phase, i64:fileIndex, SourceLocation:location, String:message) {
+	Status:status = DiagnosticBagReserve(bag, 1);
+	if (status != Status::Ok) {
+		return(status);
 	}
-	if (bag.count >= len(bag.items)) {
-		return(Status::NoMemory);
-	}
-	ptr<SelfDiagnostic>:diagnostic = &bag.items[bag.count];
+	ptr<Diagnostic>:diagnostic = &bag.items.data[bag.items.len];
 	diagnostic.severity = severity;
 	diagnostic.phase = phase;
 	diagnostic.fileIndex = fileIndex;
 	diagnostic.location = location;
-	Status:status = std::CloneString(message, bag.allocator, &diagnostic.message);
+	status = std::CloneString(message, bag.items.allocator, &diagnostic.message);
 	if (status != Status::Ok) {
 		return(status);
 	}
-	bag.count += 1;
+	bag.items.len += 1;
+	if (severity == DiagnosticSeverity::Error) {
+		bag.errorCount += 1;
+	}
 	return(Status::Ok);
 }
 
-Status:SelfDiagnosticAddCString(ptr<SelfDiagnosticBag>:bag, SelfDiagnosticSeverity:severity, SelfDiagnosticPhase:phase, i64:fileIndex, SelfSourceLocation:location, str:message) {
-	return(SelfDiagnosticAdd(bag, severity, phase, fileIndex, location, std::StringFromCString(message)));
+Status:DiagnosticAddCString(ptr<DiagnosticBag>:bag, DiagnosticSeverity:severity, DiagnosticPhase:phase, i64:fileIndex, SourceLocation:location, str:message) {
+	return(DiagnosticAdd(bag, severity, phase, fileIndex, location, std::StringFromCString(message)));
 }
 
-Status:SelfDiagnosticAddPathMessage(ptr<SelfDiagnosticBag>:bag, SelfDiagnosticSeverity:severity, SelfDiagnosticPhase:phase, i64:fileIndex, SelfSourceLocation:location, str:prefix, String:path) {
-	StringBuilder:builder = std::StringBuilderNew(bag.allocator);
+Status:DiagnosticAddPathMessage(ptr<DiagnosticBag>:bag, DiagnosticSeverity:severity, DiagnosticPhase:phase, i64:fileIndex, SourceLocation:location, str:prefix, String:path) {
+	StringBuilder:builder = std::StringBuilderNew(bag.items.allocator);
 	Status:status = builder.WriteCString(prefix);
 	if (status == Status::Ok) {
 		status = builder.WriteString(path);
@@ -99,12 +107,12 @@ Status:SelfDiagnosticAddPathMessage(ptr<SelfDiagnosticBag>:bag, SelfDiagnosticSe
 		return(status);
 	}
 	String:message = builder.View();
-	status = SelfDiagnosticAdd(bag, severity, phase, fileIndex, location, message);
+	status = DiagnosticAdd(bag, severity, phase, fileIndex, location, message);
 	builder.Destroy();
 	return(status);
 }
 
-Status:SelfWriteU64Field(ptr<StringBuilder>:out, u64:value, bool:separator) {
+Status:WriteU64Field(ptr<StringBuilder>:out, u64:value, bool:separator) {
 	Status:status = std::FormatU64ToBuilder(out, value, 10);
 	if (status != Status::Ok) {
 		return(status);
@@ -115,7 +123,7 @@ Status:SelfWriteU64Field(ptr<StringBuilder>:out, u64:value, bool:separator) {
 	return(Status::Ok);
 }
 
-Status:SelfWriteI64Field(ptr<StringBuilder>:out, i64:value, bool:separator) {
+Status:WriteI64Field(ptr<StringBuilder>:out, i64:value, bool:separator) {
 	Status:status = std::FormatI64ToBuilder(out, value);
 	if (status != Status::Ok) {
 		return(status);
@@ -126,38 +134,38 @@ Status:SelfWriteI64Field(ptr<StringBuilder>:out, i64:value, bool:separator) {
 	return(Status::Ok);
 }
 
-Status:SelfWriteDiagnosticDump(ptr<SelfDiagnosticBag>:bag, ptr<StringBuilder>:out) {
-	for (usize:i = 0; i < bag.count; i++) {
-		ptr<SelfDiagnostic>:diagnostic = &bag.items[i];
+Status:WriteDiagnosticDump(ptr<DiagnosticBag>:bag, ptr<StringBuilder>:out) {
+	for (usize:i = 0; i < bag.items.len; i++) {
+		ptr<Diagnostic>:diagnostic = &bag.items.data[i];
 		Status:status = out.WriteCString("diag|");
 		if (status != Status::Ok) {
 			return(status);
 		}
-		status = SelfWriteU64Field(out, cast<u64>(diagnostic.severity), true);
+		status = WriteU64Field(out, cast<u64>(diagnostic.severity), true);
 		if (status != Status::Ok) {
 			return(status);
 		}
-		status = SelfWriteU64Field(out, cast<u64>(diagnostic.phase), true);
+		status = WriteU64Field(out, cast<u64>(diagnostic.phase), true);
 		if (status != Status::Ok) {
 			return(status);
 		}
-		status = SelfWriteI64Field(out, diagnostic.fileIndex, true);
+		status = WriteI64Field(out, diagnostic.fileIndex, true);
 		if (status != Status::Ok) {
 			return(status);
 		}
-		status = SelfWriteU64Field(out, cast<u64>(diagnostic.location.line), true);
+		status = WriteU64Field(out, cast<u64>(diagnostic.location.line), true);
 		if (status != Status::Ok) {
 			return(status);
 		}
-		status = SelfWriteU64Field(out, cast<u64>(diagnostic.location.column), true);
+		status = WriteU64Field(out, cast<u64>(diagnostic.location.column), true);
 		if (status != Status::Ok) {
 			return(status);
 		}
-		status = SelfWriteU64Field(out, cast<u64>(diagnostic.location.offset), true);
+		status = WriteU64Field(out, cast<u64>(diagnostic.location.offset), true);
 		if (status != Status::Ok) {
 			return(status);
 		}
-		status = SelfWriteU64Field(out, cast<u64>(diagnostic.location.length), true);
+		status = WriteU64Field(out, cast<u64>(diagnostic.location.length), true);
 		if (status != Status::Ok) {
 			return(status);
 		}

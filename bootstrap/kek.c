@@ -18,7 +18,6 @@ typedef const char* str;
 
 typedef u8 byte;
 typedef u64 usize;
-typedef i64 isize;
 typedef ptr RawHandle;
 typedef enum Status {
     Status_Ok,
@@ -74,6 +73,10 @@ struct OwnedString {
     usize len;
     usize cap;
     struct Allocator allocator;
+};
+struct Result__OwnedString {
+    Status status;
+    struct OwnedString value;
 };
 struct StringBuilder {
     byte* data;
@@ -149,6 +152,10 @@ struct File {
     RawHandle handle;
     bool owned;
 };
+struct Result__File {
+    Status status;
+    struct File value;
+};
 #if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-function"
@@ -192,47 +199,63 @@ static int kek_std_system(const char* command) {
 #if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic pop
 #endif
-typedef enum SelfDiagnosticSeverity {
-    SelfDiagnosticSeverity_Note,
-    SelfDiagnosticSeverity_Warning,
-    SelfDiagnosticSeverity_Error,
-} SelfDiagnosticSeverity;
-typedef enum SelfDiagnosticPhase {
-    SelfDiagnosticPhase_Source,
-    SelfDiagnosticPhase_Lex,
-    SelfDiagnosticPhase_Parse,
-    SelfDiagnosticPhase_TypedParse,
-    SelfDiagnosticPhase_Semantic,
-    SelfDiagnosticPhase_Codegen,
-} SelfDiagnosticPhase;
-struct SelfSourceLocation {
+typedef enum DiagnosticSeverity {
+    DiagnosticSeverity_Note,
+    DiagnosticSeverity_Warning,
+    DiagnosticSeverity_Error,
+} DiagnosticSeverity;
+typedef enum DiagnosticPhase {
+    DiagnosticPhase_Source,
+    DiagnosticPhase_Lex,
+    DiagnosticPhase_Parse,
+    DiagnosticPhase_TypedParse,
+    DiagnosticPhase_Semantic,
+    DiagnosticPhase_Codegen,
+} DiagnosticPhase;
+struct SourceLocation {
     usize line;
     usize column;
     usize offset;
     usize length;
 };
-struct SelfDiagnostic {
-    SelfDiagnosticSeverity severity;
-    SelfDiagnosticPhase phase;
+struct Diagnostic {
+    DiagnosticSeverity severity;
+    DiagnosticPhase phase;
     i64 fileIndex;
-    struct SelfSourceLocation location;
+    struct SourceLocation location;
     struct OwnedString message;
 };
-struct SelfDiagnosticBag {
-    struct SelfDiagnostic items[256];
-    usize count;
-    usize errorCount;
+struct Array__Diagnostic {
+    struct Diagnostic* data;
+    usize len;
+    usize cap;
     struct Allocator allocator;
 };
-struct SelfSourceFile {
+struct Slice__Diagnostic {
+    struct Diagnostic* data;
+    usize len;
+};
+struct DiagnosticBag {
+    struct Array__Diagnostic items;
+    usize errorCount;
+};
+struct SourceFile {
     struct OwnedString path;
     struct OwnedString content;
     usize fileIndex;
 };
-struct SelfFileTable {
-    struct SelfSourceFile files[64];
-    usize count;
+struct Array__SourceFile {
+    struct SourceFile* data;
+    usize len;
+    usize cap;
     struct Allocator allocator;
+};
+struct Slice__SourceFile {
+    struct SourceFile* data;
+    usize len;
+};
+struct FileTable {
+    struct Array__SourceFile files;
 };
 typedef enum TokenKind {
     TokenKind_Eof,
@@ -321,67 +344,72 @@ struct Token {
     usize offset;
     usize length;
 };
+struct Array__Token {
+    struct Token* data;
+    usize len;
+    usize cap;
+    struct Allocator allocator;
+};
+struct Slice__Token {
+    struct Token* data;
+    usize len;
+};
 struct Tokenizer {
     struct ByteCursor cursor;
     bool emitComments;
 };
-typedef enum SelfAstKind {
-    SelfAstKind_File,
-    SelfAstKind_Statement,
-    SelfAstKind_Block,
-    SelfAstKind_Group,
-    SelfAstKind_Index,
-    SelfAstKind_Generic,
-    SelfAstKind_Token,
-} SelfAstKind;
-struct SelfAstNode {
-    SelfAstKind kind;
-    struct SelfSourceLocation location;
+typedef enum AstKind {
+    AstKind_File,
+    AstKind_Statement,
+    AstKind_Block,
+    AstKind_Group,
+    AstKind_Index,
+    AstKind_Generic,
+    AstKind_Token,
+} AstKind;
+struct AstNode {
+    AstKind kind;
+    struct SourceLocation location;
     struct Token token;
     usize firstChild;
     usize lastChild;
     usize nextSibling;
     usize childCount;
 };
-struct SelfAstTree {
-    struct SelfAstNode* nodes;
+struct Array__AstNode {
+    struct AstNode* data;
     usize len;
     usize cap;
-    usize root;
     struct Allocator allocator;
 };
-struct SelfParser {
+struct Slice__AstNode {
+    struct AstNode* data;
+    usize len;
+};
+struct AstTree {
+    struct Array__AstNode nodes;
+    usize root;
+};
+struct Parser {
     struct Token* tokens;
     usize count;
     usize position;
     struct String source;
     i64 fileIndex;
-    struct SelfDiagnosticBag* diagnostics;
-    struct SelfAstTree tree;
+    struct DiagnosticBag* diagnostics;
+    struct AstTree tree;
     usize errorCount;
 };
-typedef enum SelfCDeclKind {
-    SelfCDeclKind_Unknown,
-    SelfCDeclKind_Alias,
-    SelfCDeclKind_Struct,
-    SelfCDeclKind_Union,
-    SelfCDeclKind_Enum,
-    SelfCDeclKind_Function,
-    SelfCDeclKind_ExternC,
-} SelfCDeclKind;
-typedef enum SelfCTypeKind {
-    SelfCTypeKind_Unknown,
-    SelfCTypeKind_Void,
-    SelfCTypeKind_Bool,
-    SelfCTypeKind_Integer,
-    SelfCTypeKind_Float,
-    SelfCTypeKind_Pointer,
-    SelfCTypeKind_Struct,
-    SelfCTypeKind_Union,
-    SelfCTypeKind_Enum,
-    SelfCTypeKind_Alias,
-} SelfCTypeKind;
-struct SelfCTokenFile {
+typedef enum CDeclKind {
+    CDeclKind_Unknown,
+    CDeclKind_Alias,
+    CDeclKind_Struct,
+    CDeclKind_Union,
+    CDeclKind_Enum,
+    CDeclKind_Function,
+    CDeclKind_ExternC,
+} CDeclKind;
+struct CTokenFile {
     struct Token* tokens;
     usize tokenLen;
     usize tokenCap;
@@ -391,18 +419,38 @@ struct SelfCTokenFile {
     struct OwnedString moduleName;
     usize fileIndex;
 };
-struct SelfCTokenizeJob {
+struct Array__CTokenFile {
+    struct CTokenFile* data;
+    usize len;
+    usize cap;
     struct Allocator allocator;
-    struct SelfSourceFile* sourceFile;
-    struct SelfCTokenFile* tokenFile;
-    struct SelfDiagnosticBag diagnostics;
+};
+struct Slice__CTokenFile {
+    struct CTokenFile* data;
+    usize len;
+};
+struct CTokenizeJob {
+    struct Allocator allocator;
+    struct SourceFile* sourceFile;
+    struct CTokenFile* tokenFile;
+    struct DiagnosticBag diagnostics;
     usize threadHandle;
     Status status;
     usize fileIndex;
     bool isRoot;
     bool threaded;
 };
-struct SelfCTypeUse {
+struct Array__CTokenizeJob {
+    struct CTokenizeJob* data;
+    usize len;
+    usize cap;
+    struct Allocator allocator;
+};
+struct Slice__CTokenizeJob {
+    struct CTokenizeJob* data;
+    usize len;
+};
+struct CTypeUse {
     struct OwnedString key;
     struct OwnedString cName;
     struct OwnedString baseName;
@@ -412,7 +460,17 @@ struct SelfCTypeUse {
     usize argCount;
     bool emitted;
 };
-struct SelfCFuncUse {
+struct Array__CTypeUse {
+    struct CTypeUse* data;
+    usize len;
+    usize cap;
+    struct Allocator allocator;
+};
+struct Slice__CTypeUse {
+    struct CTypeUse* data;
+    usize len;
+};
+struct CFuncUse {
     usize declIndex;
     struct OwnedString key;
     struct OwnedString cName;
@@ -422,7 +480,17 @@ struct SelfCFuncUse {
     usize argCount;
     bool emitted;
 };
-struct SelfCParam {
+struct Array__CFuncUse {
+    struct CFuncUse* data;
+    usize len;
+    usize cap;
+    struct Allocator allocator;
+};
+struct Slice__CFuncUse {
+    struct CFuncUse* data;
+    usize len;
+};
+struct CParam {
     usize fileIndex;
     usize typeStart;
     usize typeEnd;
@@ -431,7 +499,17 @@ struct SelfCParam {
     usize defaultEnd;
     bool hasDefault;
 };
-struct SelfCField {
+struct Array__CParam {
+    struct CParam* data;
+    usize len;
+    usize cap;
+    struct Allocator allocator;
+};
+struct Slice__CParam {
+    struct CParam* data;
+    usize len;
+};
+struct CField {
     usize fileIndex;
     usize typeStart;
     usize typeEnd;
@@ -446,8 +524,18 @@ struct SelfCField {
     usize nestedBodyStart;
     usize nestedBodyEnd;
 };
-struct SelfCDecl {
-    SelfCDeclKind kind;
+struct Array__CField {
+    struct CField* data;
+    usize len;
+    usize cap;
+    struct Allocator allocator;
+};
+struct Slice__CField {
+    struct CField* data;
+    usize len;
+};
+struct CDecl {
+    CDeclKind kind;
     usize fileIndex;
     usize start;
     usize end;
@@ -474,8 +562,19 @@ struct SelfCDecl {
     struct OwnedString packageName;
     struct OwnedString moduleName;
     bool emitted;
+    bool reachable;
 };
-struct SelfCLocal {
+struct Array__CDecl {
+    struct CDecl* data;
+    usize len;
+    usize cap;
+    struct Allocator allocator;
+};
+struct Slice__CDecl {
+    struct CDecl* data;
+    usize len;
+};
+struct CLocal {
     struct OwnedString name;
     struct OwnedString typeKey;
     struct OwnedString cType;
@@ -483,9 +582,18 @@ struct SelfCLocal {
     bool isArray;
     bool isPointer;
 };
-struct SelfCEnv {
-    struct SelfCLocal locals[512];
-    usize localCount;
+struct Array__CLocal {
+    struct CLocal* data;
+    usize len;
+    usize cap;
+    struct Allocator allocator;
+};
+struct Slice__CLocal {
+    struct CLocal* data;
+    usize len;
+};
+struct CEnv {
+    struct Array__CLocal locals;
     struct OwnedString returnTypeKey;
     struct OwnedString returnCType;
     struct OwnedString thisTypeKey;
@@ -494,7 +602,7 @@ struct SelfCEnv {
     usize deferCounter;
     usize eachCounter;
 };
-struct SelfCExpr {
+struct CExpr {
     struct OwnedString text;
     struct OwnedString typeKey;
     struct OwnedString cType;
@@ -503,9 +611,9 @@ struct SelfCExpr {
     bool isLvalue;
     bool isPointer;
 };
-struct SelfCExprParser {
-    struct SelfCProgram* program;
-    struct SelfCEnv* env;
+struct CExprParser {
+    struct CProgram* program;
+    struct CEnv* env;
     usize fileIndex;
     usize pos;
     usize end;
@@ -513,7 +621,7 @@ struct SelfCExprParser {
     struct OwnedString expectedCType;
     bool expectedIsArray;
 };
-struct SelfCTypeInfo {
+struct CTypeInfo {
     struct OwnedString key;
     struct OwnedString cType;
     struct OwnedString baseName;
@@ -523,22 +631,16 @@ struct SelfCTypeInfo {
     usize argCount;
     bool isPointer;
 };
-struct SelfCProgram {
+struct CProgram {
     struct Allocator allocator;
-    struct SelfDiagnosticBag diagnostics;
-    struct SelfFileTable files;
-    struct SelfCTokenFile tokenFiles[96];
-    usize tokenFileCount;
-    struct SelfCDecl decls[4096];
-    usize declCount;
-    struct SelfCParam params[4096];
-    usize paramCount;
-    struct SelfCField fields[8192];
-    usize fieldCount;
-    struct SelfCTypeUse typeUses[2048];
-    usize typeUseCount;
-    struct SelfCFuncUse funcUses[2048];
-    usize funcUseCount;
+    struct DiagnosticBag diagnostics;
+    struct FileTable files;
+    struct Array__CTokenFile tokenFiles;
+    struct Array__CDecl decls;
+    struct Array__CParam params;
+    struct Array__CField fields;
+    struct Array__CTypeUse typeUses;
+    struct Array__CFuncUse funcUses;
 };
 #if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic push
@@ -565,9 +667,6 @@ static int kek_std_thread_join(uint64_t handle) {
 #if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic pop
 #endif
-struct Thread {
-    usize handle;
-};
 struct Slice__byte {
     byte* data;
     usize len;
@@ -576,56 +675,18 @@ struct Result__usize {
     Status status;
     usize value;
 };
-struct Result__OwnedString {
-    Status status;
-    struct OwnedString value;
-};
 struct Span__byte {
     byte* data;
     usize len;
 };
-struct Result__File {
-    Status status;
-    struct File value;
-};
-struct Result__Directory {
-    Status status;
-    struct Directory value;
-};
-struct Result__String {
-    Status status;
-    struct String value;
-};
-struct Slice__Token {
-    struct Token* data;
-    usize len;
-};
-struct Span__Token {
-    struct Token* data;
-    usize len;
-};
-struct Result__Token {
-    Status status;
-    struct Token value;
-};
-struct Array__Token {
-    struct Token* data;
-    usize len;
-    usize cap;
-    struct Allocator allocator;
-};
 
 int main(int argc,str* argv);
 struct Allocator std_mem_DefaultAllocator(void);
-void std_mem_SetBytes(byte* dest,byte value,usize count);
-struct String std_string_StringFromBytes(struct Slice__byte bytes);
 struct String std_string_StringFromCString(str text);
 struct Slice__byte String_Bytes(struct String* this);
 struct String String_Slice(struct String* this,usize start,usize length);
 bool String_Equals(struct String* this,struct String other);
 bool String_EqualsCString(struct String* this,str text);
-int String_Compare(struct String* this,struct String other);
-bool String_EqualsBytes(struct String* this,byte* data,usize len);
 struct Result__usize String_FindByte(struct String* this,byte value);
 bool String_ContainsByte(struct String* this,byte value);
 bool String_StartsWith(struct String* this,struct String prefix);
@@ -634,7 +695,6 @@ bool std_string_IsAsciiSpace(byte c);
 bool std_string_IsAsciiAlpha(byte c);
 bool std_string_IsAsciiDigit(byte c);
 bool std_string_IsAsciiWord(byte c);
-bool std_string_IsAsciiOperator(byte c);
 struct String OwnedString_View(struct OwnedString* this);
 struct String std_string_OwnedStringView(struct OwnedString* owned);
 Status std_string_DestroyOwnedString(struct OwnedString* owned);
@@ -643,80 +703,54 @@ Status std_string_CloneCString(str text,struct Allocator allocator,struct OwnedS
 Status OwnedString_Destroy(struct OwnedString* this);
 struct StringBuilder std_string_StringBuilderNew(struct Allocator allocator);
 Status StringBuilder_Destroy(struct StringBuilder* this);
-Status StringBuilder_Clear(struct StringBuilder* this);
 Status StringBuilder_Reserve(struct StringBuilder* this,usize additional);
 struct Result__usize StringBuilder_Write(struct StringBuilder* this,struct Slice__byte data);
 Status StringBuilder_WriteByte(struct StringBuilder* this,byte value);
 Status StringBuilder_WriteString(struct StringBuilder* this,struct String text);
 Status StringBuilder_WriteCString(struct StringBuilder* this,str text);
-Status StringBuilder_WriteRepeatByte(struct StringBuilder* this,byte value,usize count);
-Status StringBuilder_WriteIndent(struct StringBuilder* this,usize count);
 struct String StringBuilder_View(struct StringBuilder* this);
 struct Result__OwnedString StringBuilder_Detach(struct StringBuilder* this);
-struct Result__OwnedString StringBuilder_ToOwnedString(struct StringBuilder* this);
-Status std_string_WriteStringToBuilder(struct StringBuilder* builder,struct String text);
-Status std_string_WriteSliceToBuilder(struct StringBuilder* builder,struct Slice__byte data);
-Status std_string_DestroyStringBuilder(struct StringBuilder* builder);
 struct ByteCursor std_scan_ByteCursorNew(struct String input);
 bool ByteCursor_AtEnd(struct ByteCursor* this);
 byte ByteCursor_Peek(struct ByteCursor* this);
 byte ByteCursor_PeekAt(struct ByteCursor* this,usize offset);
 byte ByteCursor_Advance(struct ByteCursor* this);
-bool ByteCursor_MatchByte(struct ByteCursor* this,byte value);
-Status ByteCursor_SkipAsciiWhitespace(struct ByteCursor* this);
-struct MemoryReader std_io_MemoryReaderNew(struct Slice__byte data);
-struct MemoryWriter std_io_MemoryWriterNew(struct Span__byte data);
 struct Result__usize MemoryReader_Read(struct MemoryReader* this,struct Span__byte out);
 struct Result__usize MemoryWriter_Write(struct MemoryWriter* this,struct Slice__byte data);
-usize MemoryWriter_Written(struct MemoryWriter* this);
-Status std_io_WriteByteToMemory(struct MemoryWriter* writer,byte value);
 struct Result__File std_file_FileOpen(str path,FileMode mode);
 struct Result__usize File_Read(struct File* this,struct Span__byte out);
 struct Result__usize File_Write(struct File* this,struct Slice__byte data);
-Status File_Flush(struct File* this);
-Status std_file_ReadFileToOwnedString(str path,struct Allocator allocator,struct OwnedString* out);
 Status std_file_WriteFile(str path,struct String text);
 Status File_Close(struct File* this);
-struct File std_file_Stdin(void);
 struct File std_file_Stdout(void);
 struct File std_file_Stderr(void);
 Status std_file_ReadAllToOwnedString(struct File file,struct Allocator allocator,struct OwnedString* out);
-struct Result__Directory std_dir_DirectoryOpen(str path);
-struct Result__String Directory_ReadName(struct Directory* this);
 Status Directory_Close(struct Directory* this);
 Status std_format_WriteByteToBuilder(struct StringBuilder* writer,byte value);
-Status std_format_WriteByteToFile(struct File* writer,byte value);
-Status std_format_WriteStringToMemory(struct MemoryWriter* writer,struct String text);
 Status std_format_WriteStringToFile(struct File* writer,struct String text);
-Status std_format_WriteBoolToBuilder(struct StringBuilder* writer,bool value);
-Status std_format_WriteBoolToMemory(struct MemoryWriter* writer,bool value);
-Status std_format_WriteBoolToFile(struct File* writer,bool value);
 Status std_format_FormatU64ToBuilder(struct StringBuilder* writer,u64 value,u8 base);
 Status std_format_FormatI64ToBuilder(struct StringBuilder* writer,i64 value);
-Status std_format_FormatBoolToBuilder(struct StringBuilder* writer,bool value);
-int std_process_ProcessRun(str command);
-struct SelfSourceLocation kek_diagnostics_SelfSourceLocationNew(usize line,usize column,usize offset,usize length);
-void kek_diagnostics_SelfDiagnosticBagInit(struct SelfDiagnosticBag* bag,struct Allocator allocator);
-Status kek_diagnostics_SelfDiagnosticBagDestroy(struct SelfDiagnosticBag* bag);
-Status kek_diagnostics_SelfDiagnosticAdd(struct SelfDiagnosticBag* bag,SelfDiagnosticSeverity severity,SelfDiagnosticPhase phase,i64 fileIndex,struct SelfSourceLocation location,struct String message);
-Status kek_diagnostics_SelfDiagnosticAddCString(struct SelfDiagnosticBag* bag,SelfDiagnosticSeverity severity,SelfDiagnosticPhase phase,i64 fileIndex,struct SelfSourceLocation location,str message);
-Status kek_diagnostics_SelfDiagnosticAddPathMessage(struct SelfDiagnosticBag* bag,SelfDiagnosticSeverity severity,SelfDiagnosticPhase phase,i64 fileIndex,struct SelfSourceLocation location,str prefix,struct String path);
-Status kek_diagnostics_SelfWriteU64Field(struct StringBuilder* out,u64 value,bool separator);
-Status kek_diagnostics_SelfWriteI64Field(struct StringBuilder* out,i64 value,bool separator);
-Status kek_diagnostics_SelfWriteDiagnosticDump(struct SelfDiagnosticBag* bag,struct StringBuilder* out);
-void kek_source_SelfFileTableInit(struct SelfFileTable* table,struct Allocator allocator);
-Status kek_source_SelfFileTableDestroy(struct SelfFileTable* table);
-bool kek_source_SelfStringEndsWithCString(struct String text,str suffixText);
-Status kek_source_SelfNormalizePath(struct String path,struct Allocator allocator,struct OwnedString* out);
-bool kek_source_SelfFileAlreadyLoaded(struct SelfFileTable* table,struct String path);
-Status kek_source_SelfAddSourceDiagnostic(struct SelfDiagnosticBag* diagnostics,str message);
-Status kek_source_SelfReadFile(struct String path,struct SelfFileTable* table,struct SelfDiagnosticBag* diagnostics);
-bool kek_source_SelfImportDirectiveAt(struct String source,usize cursor);
-Status kek_source_SelfLoadImportFile(struct SelfFileTable* table,struct String path,struct SelfDiagnosticBag* diagnostics,i64 fileIndex,struct SelfSourceLocation location);
-Status kek_source_SelfLoadImports(struct SelfFileTable* table,struct SelfSourceFile* file,struct SelfDiagnosticBag* diagnostics);
-Status kek_source_SelfLoadCompilationSources(str entryPath,struct Allocator allocator,struct SelfFileTable* table,struct SelfDiagnosticBag* diagnostics);
-Status kek_source_SelfWriteSourceDump(struct SelfFileTable* table,struct SelfDiagnosticBag* diagnostics,struct StringBuilder* out);
-usize kek_tokenizer_TokenizerGenericFootprint(void);
+struct SourceLocation kek_diagnostics_SourceLocationNew(usize line,usize column,usize offset,usize length);
+void kek_diagnostics_DiagnosticBagInit(struct DiagnosticBag* bag,struct Allocator allocator);
+Status kek_diagnostics_DiagnosticBagDestroy(struct DiagnosticBag* bag);
+Status kek_diagnostics_DiagnosticBagReserve(struct DiagnosticBag* bag,usize additional);
+Status kek_diagnostics_DiagnosticAdd(struct DiagnosticBag* bag,DiagnosticSeverity severity,DiagnosticPhase phase,i64 fileIndex,struct SourceLocation location,struct String message);
+Status kek_diagnostics_DiagnosticAddCString(struct DiagnosticBag* bag,DiagnosticSeverity severity,DiagnosticPhase phase,i64 fileIndex,struct SourceLocation location,str message);
+Status kek_diagnostics_DiagnosticAddPathMessage(struct DiagnosticBag* bag,DiagnosticSeverity severity,DiagnosticPhase phase,i64 fileIndex,struct SourceLocation location,str prefix,struct String path);
+Status kek_diagnostics_WriteU64Field(struct StringBuilder* out,u64 value,bool separator);
+Status kek_diagnostics_WriteI64Field(struct StringBuilder* out,i64 value,bool separator);
+Status kek_diagnostics_WriteDiagnosticDump(struct DiagnosticBag* bag,struct StringBuilder* out);
+void kek_source_FileTableInit(struct FileTable* table,struct Allocator allocator);
+Status kek_source_FileTableDestroy(struct FileTable* table);
+bool kek_source_StringEndsWithCString(struct String text,str suffixText);
+Status kek_source_NormalizePath(struct String path,struct Allocator allocator,struct OwnedString* out);
+bool kek_source_FileAlreadyLoaded(struct FileTable* table,struct String path);
+Status kek_source_FileTableReserve(struct FileTable* table,usize additional);
+Status kek_source_ReadFile(struct String path,struct FileTable* table,struct DiagnosticBag* diagnostics);
+bool kek_source_ImportDirectiveAt(struct String source,usize cursor);
+Status kek_source_LoadImportFile(struct FileTable* table,struct String path,struct DiagnosticBag* diagnostics,i64 fileIndex,struct SourceLocation location);
+Status kek_source_LoadImports(struct FileTable* table,struct SourceFile* file,struct DiagnosticBag* diagnostics);
+Status kek_source_LoadCompilationSources(str entryPath,struct Allocator allocator,struct FileTable* table,struct DiagnosticBag* diagnostics);
 struct Token kek_tokenizer_TokenNew(TokenKind kind,u64 subkind,usize line,usize column,usize offset,usize length);
 struct Tokenizer kek_tokenizer_TokenizerNew(struct String source,bool emitComments);
 bool Tokenizer_AtEnd(struct Tokenizer* this);
@@ -737,242 +771,282 @@ struct Token Tokenizer_ReadDelimited(struct Tokenizer* this,TokenKind kind,byte 
 bool Tokenizer_ReadOperator(struct Tokenizer* this,struct Token* out,usize start,usize line,usize column);
 bool Tokenizer_ReadPunctuation(struct Tokenizer* this,struct Token* out,usize start,usize line,usize column);
 struct Token Tokenizer_Next(struct Tokenizer* this);
-Status kek_tokenizer_TokenArrayReserve(struct Array__Token* tokens,usize additional);
-Status kek_tokenizer_TokenArrayPush(struct Array__Token* tokens,struct Token token);
-Status kek_tokenizer_TokenArrayDestroy(struct Array__Token* tokens);
 Status kek_tokenizer_TokenizeToArray(struct String source,bool emitComments,struct Allocator allocator,struct Array__Token* out);
-Status kek_tokenizer_WriteTokenField(struct StringBuilder* out,u64 value,bool separator);
-Status kek_tokenizer_WriteTokenDumpLine(struct Token token,struct StringBuilder* out);
-Status kek_tokenizer_WriteTokenDump(struct String source,bool emitComments,struct StringBuilder* out);
-struct SelfSourceLocation kek_ast_TokenLocation(struct Token token);
-Status kek_ast_SelfAstTreeReserve(struct SelfAstTree* tree,usize additional);
-Status kek_ast_SelfAstTreeInit(struct SelfAstTree* tree,struct Allocator allocator);
-Status kek_ast_SelfAstTreeDestroy(struct SelfAstTree* tree);
+struct SourceLocation kek_ast_TokenLocation(struct Token token);
+Status kek_ast_AstTreeReserve(struct AstTree* tree,usize additional);
+Status kek_ast_AstTreeInit(struct AstTree* tree,struct Allocator allocator);
+Status kek_ast_AstTreeDestroy(struct AstTree* tree);
 bool kek_ast_IsPunctuationToken(struct Token* token,PunctuationKind punctuation);
 bool kek_ast_IsOperatorToken(struct Token* token,OperatorKind operatorKind);
 bool kek_ast_IsTriviaToken(struct Token* token);
 bool kek_ast_IsClosingPunctuation(struct Token* token);
 bool kek_ast_IsAstTerminator(struct Token* token,u64 closePunctuation);
 bool kek_ast_IsGenericTerminator(struct Token* token);
-bool kek_ast_SelfTokenTextEquals(struct SelfParser* parser,struct Token* token,str text);
-usize kek_ast_SelfCreateAstNode(struct SelfParser* parser,SelfAstKind kind,struct SelfSourceLocation location);
-void kek_ast_SelfAddAstChild(struct SelfAstTree* tree,usize parentIndex,usize childIndex);
-void kek_ast_SelfFinishLocationFromChildren(struct SelfAstTree* tree,usize nodeIndex);
-usize kek_ast_SelfParseTokenNode(struct SelfParser* parser);
-void kek_ast_SelfReportParseError(struct SelfParser* parser,struct Token* token,str message);
-str kek_ast_SelfPunctuationName(u64 punctuation);
-void kek_ast_SelfReportExpected(struct SelfParser* parser,struct Token* token,u64 punctuation);
-bool kek_ast_SelfShouldParseGenericList(struct SelfParser* parser,usize previousChildIndex);
-void kek_ast_SelfParseChildrenInto(struct SelfParser* parser,usize parentIndex,u64 closePunctuation);
-usize kek_ast_SelfParseDelimited(struct SelfParser* parser,SelfAstKind kind,u64 closePunctuation);
-usize kek_ast_SelfParseGenericDelimited(struct SelfParser* parser);
-usize kek_ast_SelfParseStatement(struct SelfParser* parser,u64 closePunctuation);
-usize kek_ast_SelfParseList(struct SelfParser* parser,SelfAstKind listKind,u64 closePunctuation);
-Status kek_ast_SelfParseTokens(struct Token* tokens,usize count,struct String source,i64 fileIndex,struct Allocator allocator,struct SelfDiagnosticBag* diagnostics,struct SelfAstTree* out);
-Status kek_ast_SelfWriteAstNodeDump(struct SelfAstTree* tree,usize nodeIndex,usize depth,struct StringBuilder* out);
-Status kek_ast_SelfWriteAstBridgeDump(struct String source,struct StringBuilder* out);
-bool kek_compiler_SelfCIsOk(Status status);
-struct String kek_compiler_SelfCTokenText(struct SelfCProgram* program,usize fileIndex,usize tokenIndex);
-bool kek_compiler_SelfCTokenEquals(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,str text);
-bool kek_compiler_SelfCStringEquals(struct String value,str text);
-bool kek_compiler_SelfCIsTokenKind(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,TokenKind kind);
-bool kek_compiler_SelfCIsPunctuation(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,PunctuationKind kind);
-bool kek_compiler_SelfCIsOperator(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,OperatorKind kind);
-bool kek_compiler_SelfCIsKeyword(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,KeywordKind kind);
-bool kek_compiler_SelfCIsIdentifierText(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,str text);
-bool kek_compiler_SelfCIsEof(struct SelfCProgram* program,usize fileIndex,usize tokenIndex);
-usize kek_compiler_SelfCFileTokenCount(struct SelfCProgram* program,usize fileIndex);
-Status kek_compiler_SelfCWrite(struct StringBuilder* out,str text);
-Status kek_compiler_SelfCWriteString(struct StringBuilder* out,struct String text);
-Status kek_compiler_SelfCWriteToken(struct SelfCProgram* program,struct StringBuilder* out,usize fileIndex,usize tokenIndex);
-Status kek_compiler_SelfCCloneCString(struct SelfCProgram* program,str text,struct OwnedString* out);
-Status kek_compiler_SelfCCloneString(struct SelfCProgram* program,struct String text,struct OwnedString* out);
-struct String kek_compiler_SelfCOwnedView(struct OwnedString* value);
-bool kek_compiler_SelfCOwnedEqualsCString(struct OwnedString* value,str text);
-bool kek_compiler_SelfCOwnedEquals(struct OwnedString* left,struct OwnedString* right);
-Status kek_compiler_SelfCDetachBuilder(struct StringBuilder* builder,struct OwnedString* out);
-Status kek_compiler_SelfCMakeOwnedEmpty(struct SelfCProgram* program,struct OwnedString* out);
-Status kek_compiler_SelfCWriteOwned(struct StringBuilder* out,struct OwnedString* text);
-usize kek_compiler_SelfCStringLastSlash(struct String path);
-Status kek_compiler_SelfCPackageNameFromPath(struct String path,struct Allocator allocator,struct OwnedString* out);
-Status kek_compiler_SelfCModuleNameFromPath(struct String path,struct Allocator allocator,struct OwnedString* out);
-Status kek_compiler_SelfCInitTokenFileSlot(struct Allocator allocator,struct SelfCTokenFile* tokenFile,usize fileIndex);
-Status kek_compiler_SelfCSetTokenFileNames(struct Allocator allocator,struct SelfCTokenFile* tokenFile,bool isRoot);
-Status kek_compiler_SelfCTokenizeSourceFile(struct Allocator allocator,struct SelfSourceFile* sourceFile,struct SelfCTokenFile* tokenFile,usize fileIndex,bool isRoot,struct SelfDiagnosticBag* diagnostics);
-void kek_compiler_SelfCTokenizeJobRun(struct SelfCTokenizeJob* job);
-ptr kek_compiler_SelfCTokenizeFileThreadEntry(ptr arg);
-Status kek_compiler_SelfCMergeDiagnostics(struct SelfDiagnosticBag* target,struct SelfDiagnosticBag* source);
-Status kek_compiler_SelfCProgramInit(struct SelfCProgram* program,struct Allocator allocator);
-Status kek_compiler_SelfCProgramDestroy(struct SelfCProgram* program);
-Status kek_compiler_SelfCAddDiagnostic(struct SelfCProgram* program,str message);
-Status kek_compiler_SelfCLoadAndTokenize(struct SelfCProgram* program,str entryPath);
-int kek_compiler_SelfCompilerFail(str text);
-int kek_compiler_SelfCompilerPrintHelp(void);
-Status kek_compiler_SelfCWriteDiagnostics(struct SelfCProgram* program);
-bool kek_compiler_SelfCIsOpenDelimiter(struct SelfCProgram* program,usize fileIndex,usize index);
-bool kek_compiler_SelfCDelimiterMatches(struct SelfCProgram* program,usize fileIndex,usize openIndex,usize closeIndex);
-usize kek_compiler_SelfCFindMatching(struct SelfCProgram* program,usize fileIndex,usize openIndex);
-usize kek_compiler_SelfCSkipDelimited(struct SelfCProgram* program,usize fileIndex,usize index);
-usize kek_compiler_SelfCSkipAttributes(struct SelfCProgram* program,usize fileIndex,usize index);
-usize kek_compiler_SelfCFindTopLevelColon(struct SelfCProgram* program,usize fileIndex,usize start,usize end);
-usize kek_compiler_SelfCFindTokenAtDepthZero(struct SelfCProgram* program,usize fileIndex,usize start,usize end,PunctuationKind punctuation);
-usize kek_compiler_SelfCFindOperatorScope(struct SelfCProgram* program,usize fileIndex,usize start,usize end);
-usize kek_compiler_SelfCFindNextGroup(struct SelfCProgram* program,usize fileIndex,usize start,usize end);
-usize kek_compiler_SelfCFindNextBlock(struct SelfCProgram* program,usize fileIndex,usize start,usize end);
-u8 kek_compiler_SelfCOperatorCode(struct SelfCProgram* program,usize fileIndex,usize index);
-Status kek_compiler_SelfCAddDecl(struct SelfCProgram* program,struct SelfCDecl* decl);
-Status kek_compiler_SelfCAddParam(struct SelfCProgram* program,struct SelfCParam* param);
-Status kek_compiler_SelfCAddField(struct SelfCProgram* program,struct SelfCField* field);
-Status kek_compiler_SelfCParseParams(struct SelfCProgram* program,struct SelfCDecl* decl,usize fileIndex,usize start,usize end);
-Status kek_compiler_SelfCParseFields(struct SelfCProgram* program,struct SelfCDecl* decl,usize fileIndex,usize start,usize end);
-bool kek_compiler_SelfCDeclNameMatches(struct SelfCProgram* program,struct SelfCDecl* decl,struct String name);
-struct SelfCDecl* kek_compiler_SelfCFindTypeDecl(struct SelfCProgram* program,struct String name);
-Status kek_compiler_SelfCParseAliasDecl(struct SelfCProgram* program,usize fileIndex,usize start,usize* outEnd);
-Status kek_compiler_SelfCParseTypeDecl(struct SelfCProgram* program,usize fileIndex,usize start,SelfCDeclKind kind,usize* outEnd);
-Status kek_compiler_SelfCParseExternDecl(struct SelfCProgram* program,usize fileIndex,usize start,usize* outEnd);
-Status kek_compiler_SelfCParseFunctionDecl(struct SelfCProgram* program,usize fileIndex,usize start,usize* outEnd);
-Status kek_compiler_SelfCParseDeclarations(struct SelfCProgram* program);
-Status kek_compiler_SelfCWriteTokenRangeRaw(struct SelfCProgram* program,struct StringBuilder* out,usize fileIndex,usize start,usize end);
-bool kek_compiler_SelfCIsBuiltinTypeName(struct String name);
-Status kek_compiler_SelfCWriteSanitized(struct StringBuilder* out,struct String text);
-Status kek_compiler_SelfCWriteOperatorName(struct StringBuilder* out,u8 operatorCode);
-bool kek_compiler_SelfCDeclPackageIsRoot(struct SelfCDecl* decl);
-Status kek_compiler_SelfCWriteDeclCName(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl);
-Status kek_compiler_SelfCWriteTypeSuffixFromRange(struct SelfCProgram* program,struct StringBuilder* out,usize fileIndex,usize start,usize end);
-Status kek_compiler_SelfCTypeInfoDestroy(struct SelfCTypeInfo* info);
-Status kek_compiler_SelfCTypeInfoInitEmpty(struct SelfCProgram* program,struct SelfCTypeInfo* info);
-Status kek_compiler_SelfCReplaceOwned(struct OwnedString* target,struct OwnedString value);
-Status kek_compiler_SelfCBuildTypeKey(struct SelfCProgram* program,usize fileIndex,usize start,usize end,struct OwnedString* out);
-Status kek_compiler_SelfCWriteCTypeFromKey(struct SelfCProgram* program,struct StringBuilder* out,struct String key);
-Status kek_compiler_SelfCMakeCTypeFromKey(struct SelfCProgram* program,struct String key,struct OwnedString* out);
-Status kek_compiler_SelfCTypeInfoFromKey(struct SelfCProgram* program,struct String key,struct SelfCTypeInfo* info);
-Status kek_compiler_SelfCRenderTypeInfo(struct SelfCProgram* program,usize fileIndex,usize start,usize end,struct SelfCTypeInfo* info);
-bool kek_compiler_SelfCTypeUseExists(struct SelfCProgram* program,struct String key);
-Status kek_compiler_SelfCAddTypeUse(struct SelfCProgram* program,struct SelfCTypeInfo* info);
-Status kek_compiler_SelfCAddTypeUseFromBaseArg(struct SelfCProgram* program,str baseName,struct String arg0);
-bool kek_compiler_SelfCConcreteTypeKey(struct SelfCProgram* program,struct String key);
-bool kek_compiler_SelfCTypeInfoConcrete(struct SelfCProgram* program,struct SelfCTypeInfo* info);
-Status kek_compiler_SelfCCollectTypeUsesInRange(struct SelfCProgram* program,usize fileIndex,usize start,usize end);
-bool kek_compiler_SelfCDeclScopeMatches(struct SelfCDecl* decl,struct String scopeName);
-struct SelfCDecl* kek_compiler_SelfCFindFunctionDeclByName(struct SelfCProgram* program,struct String name,struct String scopeName);
-bool kek_compiler_SelfCFuncUseExists(struct SelfCProgram* program,usize declIndex,struct String key);
-usize kek_compiler_SelfCDeclIndex(struct SelfCProgram* program,struct SelfCDecl* decl);
-Status kek_compiler_SelfCBuildGenericFuncCName(struct SelfCProgram* program,struct SelfCDecl* decl,struct SelfCTypeInfo* arg0,struct SelfCTypeInfo* arg1,struct SelfCTypeInfo* arg2,usize argCount,struct OwnedString* out);
-Status kek_compiler_SelfCAddFuncUse(struct SelfCProgram* program,struct SelfCDecl* decl,struct SelfCTypeInfo* arg0,struct SelfCTypeInfo* arg1,struct SelfCTypeInfo* arg2,usize argCount);
-Status kek_compiler_SelfCCollectGenericFunctionUsesInRange(struct SelfCProgram* program,usize fileIndex,usize start,usize end);
-struct SelfCDecl* kek_compiler_SelfCFindGenericMethodDecl(struct SelfCProgram* program,struct String receiverBase,str methodName);
-Status kek_compiler_SelfCAddGenericMethodUseByName(struct SelfCProgram* program,struct SelfCTypeUse* typeUse,str methodName);
-Status kek_compiler_SelfCCollectGenericCollectionMethods(struct SelfCProgram* program);
-Status kek_compiler_SelfCCollectGenericFunctionUses(struct SelfCProgram* program);
-Status kek_compiler_SelfCCollectTypeUses(struct SelfCProgram* program);
-Status kek_compiler_SelfCWritePrelude(struct StringBuilder* out);
-Status kek_compiler_SelfCWriteDeclarator(struct SelfCProgram* program,struct StringBuilder* out,usize fileIndex,usize typeStart,usize typeEnd,usize nameIndex,bool isArray,usize arrayStart,usize arrayEnd);
-Status kek_compiler_SelfCWriteFields(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl);
-bool kek_compiler_SelfCGenericParamEquals(struct SelfCProgram* program,struct SelfCDecl* decl,usize paramIndex,struct String name);
-Status kek_compiler_SelfCWriteTypeSuffixSubst(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCTypeUse* use,usize fileIndex,usize start,usize end);
-Status kek_compiler_SelfCMakeSubstTypeKey(struct SelfCProgram* program,struct SelfCDecl* decl,struct SelfCTypeUse* use,usize fileIndex,usize start,usize end,struct OwnedString* out);
-Status kek_compiler_SelfCWriteDeclaratorSubst(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCTypeUse* use,usize fileIndex,usize typeStart,usize typeEnd,usize nameIndex,bool isArray,usize arrayStart,usize arrayEnd);
-Status kek_compiler_SelfCWriteFieldsSubst(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCTypeUse* use);
-Status kek_compiler_SelfCWriteStructDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct String specializedName);
-Status kek_compiler_SelfCWriteUnionDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl);
-Status kek_compiler_SelfCWriteEnumDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl);
-Status kek_compiler_SelfCWriteAliasDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl);
-Status kek_compiler_SelfCWriteExternDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl);
-Status kek_compiler_SelfCWriteTypeDeclarations(struct SelfCProgram* program,struct StringBuilder* out);
-Status kek_compiler_SelfCEnvInit(struct SelfCProgram* program,struct SelfCEnv* env);
-Status kek_compiler_SelfCEnvDestroy(struct SelfCEnv* env);
-struct SelfCLocal* kek_compiler_SelfCEnvFind(struct SelfCEnv* env,struct String name);
-Status kek_compiler_SelfCEnvAdd(struct SelfCProgram* program,struct SelfCEnv* env,struct String name,struct String typeKey,struct String cType,bool isArray,struct String arrayLen,bool isPointer);
-Status kek_compiler_SelfCExprInitEmpty(struct SelfCProgram* program,struct SelfCExpr* expr);
-Status kek_compiler_SelfCExprDestroy(struct SelfCExpr* expr);
-Status kek_compiler_SelfCExprSetText(struct SelfCProgram* program,struct SelfCExpr* expr,struct String text);
-Status kek_compiler_SelfCExprSetCString(struct SelfCProgram* program,struct SelfCExpr* expr,str text);
-Status kek_compiler_SelfCExprSetType(struct SelfCProgram* program,struct SelfCExpr* expr,struct String key,struct String cType,bool isPointer);
-Status kek_compiler_SelfCExprFromBuilder(struct SelfCExpr* expr,struct StringBuilder* builder);
-u8 kek_compiler_SelfCOperatorPrecedence(struct SelfCProgram* program,usize fileIndex,usize index);
-bool kek_compiler_SelfCOperatorRightAssociative(struct SelfCProgram* program,usize fileIndex,usize index);
-Status kek_compiler_SelfCWriteNumberToken(struct SelfCProgram* program,struct StringBuilder* out,usize fileIndex,usize index);
-struct SelfCDecl* kek_compiler_SelfCFindFieldDecl(struct SelfCProgram* program,struct String typeKey);
-Status kek_compiler_SelfCFieldType(struct SelfCProgram* program,struct String typeKey,struct String fieldName,struct SelfCTypeInfo* outInfo);
-struct SelfCDecl* kek_compiler_SelfCFindMethod(struct SelfCProgram* program,struct String receiverType,struct String name,bool isOperator,u8 operatorCode,usize argCount);
-Status kek_compiler_SelfCParserInit(struct SelfCProgram* program,struct SelfCEnv* env,usize fileIndex,usize start,usize end,struct String expectedKey,struct String expectedCType,bool expectedIsArray,struct SelfCExprParser* parser);
-Status kek_compiler_SelfCParserDestroy(struct SelfCExprParser* parser);
-Status kek_compiler_SelfCCompileExpressionRange(struct SelfCProgram* program,struct SelfCEnv* env,usize fileIndex,usize start,usize end,struct String expectedKey,struct String expectedCType,bool expectedIsArray,struct SelfCExpr* out);
-Status kek_compiler_SelfCWriteInitializerList(struct SelfCExprParser* parser,usize start,usize end,struct StringBuilder* out);
-Status kek_compiler_SelfCExprFromLiteralBlock(struct SelfCExprParser* parser,usize blockStart,usize blockEnd,struct SelfCExpr* out);
-Status kek_compiler_SelfCCompilePrimary(struct SelfCExprParser* parser,struct SelfCExpr* out);
-Status kek_compiler_SelfCWriteCallArgs(struct SelfCExprParser* parser,usize start,usize end,struct StringBuilder* out);
-usize kek_compiler_SelfCCountCallArgs(struct SelfCProgram* program,usize fileIndex,usize start,usize end);
-Status kek_compiler_SelfCApplyPostfix(struct SelfCExprParser* parser,struct SelfCExpr* expr);
-Status kek_compiler_SelfCCompileUnary(struct SelfCExprParser* parser,struct SelfCExpr* out);
-Status kek_compiler_SelfCCompileBinaryOperation(struct SelfCExprParser* parser,struct SelfCExpr* left,usize operatorIndex,struct SelfCExpr* right,struct SelfCExpr* out);
-Status kek_compiler_SelfCCompileExpression(struct SelfCExprParser* parser,u8 minPrecedence,struct SelfCExpr* out);
-Status kek_compiler_SelfCWriteIndent(struct StringBuilder* out,usize indent);
-usize kek_compiler_SelfCFindStatementSemicolon(struct SelfCProgram* program,usize fileIndex,usize start,usize end);
-Status kek_compiler_SelfCArrayLenString(struct SelfCProgram* program,usize fileIndex,usize start,usize end,struct OwnedString* out);
-bool kek_compiler_SelfCFieldDefaultIsZero(struct SelfCProgram* program,struct SelfCField* field);
-Status kek_compiler_SelfCWriteDefaultInitializer(struct SelfCProgram* program,struct StringBuilder* out,struct String typeKey);
-Status kek_compiler_SelfCWriteVarDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize semicolon,usize indent);
-Status kek_compiler_SelfCWriteExprStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize semicolon,usize indent);
-Status kek_compiler_SelfCWriteIfStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent);
-Status kek_compiler_SelfCWriteWhileStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent);
-Status kek_compiler_SelfCWriteDoStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent);
-Status kek_compiler_SelfCWriteForStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent);
-Status kek_compiler_SelfCWriteEachStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent);
-Status kek_compiler_SelfCWriteSwitchStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent);
-Status kek_compiler_SelfCWriteReturnStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize semicolon,usize indent);
-Status kek_compiler_SelfCWriteSingleStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent);
-Status kek_compiler_SelfCWriteDeferred(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize end,usize indent);
-Status kek_compiler_SelfCWriteBlock(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize end,usize indent);
-Status kek_compiler_SelfCFuncUseTempTypeUse(struct SelfCFuncUse* funcUse,struct SelfCTypeUse* out);
-Status kek_compiler_SelfCWriteSubstTypeForFunc(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCFuncUse* funcUse,usize fileIndex,usize start,usize end);
-Status kek_compiler_SelfCWriteFunctionSignature(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct String nameOverride,struct SelfCFuncUse* funcUse);
-Status kek_compiler_SelfCWriteFunctionPrototype(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl);
-Status kek_compiler_SelfCWriteFunctionBody(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl);
-Status kek_compiler_SelfCWriteManualLine(struct StringBuilder* out,str text);
-Status kek_compiler_SelfCWriteArrayMethodRef(struct StringBuilder* out,struct SelfCFuncUse* use,str name);
-Status kek_compiler_SelfCWriteLinkedListMethodRef(struct StringBuilder* out,struct SelfCFuncUse* use,str name);
-Status kek_compiler_SelfCWriteResultTypeRef(struct StringBuilder* out,struct SelfCFuncUse* use);
-Status kek_compiler_SelfCWriteListNodeTypeRef(struct StringBuilder* out,struct SelfCFuncUse* use);
-Status kek_compiler_SelfCWriteManualArrayGenericBody(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCFuncUse* use,struct String argC);
-Status kek_compiler_SelfCWriteManualLinkedListGenericBody(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCFuncUse* use);
-Status kek_compiler_SelfCWriteManualGenericBody(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCFuncUse* use);
-Status kek_compiler_SelfCWriteFunctionDeclarations(struct SelfCProgram* program,struct StringBuilder* out);
-Status kek_compiler_SelfCWriteFunctionDefinitions(struct SelfCProgram* program,struct StringBuilder* out);
-Status kek_compiler_SelfCWriteProgram(struct SelfCProgram* program,struct StringBuilder* out);
-Status kek_compiler_SelfCompileToCString(str inputPath,struct Allocator allocator,struct StringBuilder* out,struct SelfDiagnosticBag* diagnostics);
-Status kek_compiler_SelfCompileToC(str inputPath,str outputPath,struct Allocator allocator,struct SelfDiagnosticBag* diagnostics);
-Status kek_compiler_SelfCompileToCStringWithoutDiagnostics(str inputPath,struct Allocator allocator,struct StringBuilder* out);
-Status kek_compiler_SelfWriteCompileDiagnostics(str inputPath,struct Allocator allocator,struct StringBuilder* out);
-Status kek_compiler_SelfCompilerRunBuild(str inputPath,str outputPath);
-int kek_compiler_SelfCompilerMain(int argc,str* argv);
+bool kek_ast_TokenTextEquals(struct Parser* parser,struct Token* token,str text);
+usize kek_ast_CreateAstNode(struct Parser* parser,AstKind kind,struct SourceLocation location);
+void kek_ast_AddAstChild(struct AstTree* tree,usize parentIndex,usize childIndex);
+void kek_ast_FinishLocationFromChildren(struct AstTree* tree,usize nodeIndex);
+usize kek_ast_ParseTokenNode(struct Parser* parser);
+void kek_ast_ReportParseError(struct Parser* parser,struct Token* token,str message);
+str kek_ast_PunctuationName(u64 punctuation);
+void kek_ast_ReportExpected(struct Parser* parser,struct Token* token,u64 punctuation);
+bool kek_ast_ShouldParseGenericList(struct Parser* parser,usize previousChildIndex);
+void kek_ast_ParseChildrenInto(struct Parser* parser,usize parentIndex,u64 closePunctuation);
+usize kek_ast_ParseDelimited(struct Parser* parser,AstKind kind,u64 closePunctuation);
+usize kek_ast_ParseGenericDelimited(struct Parser* parser);
+usize kek_ast_ParseStatement(struct Parser* parser,u64 closePunctuation);
+usize kek_ast_ParseList(struct Parser* parser,AstKind listKind,u64 closePunctuation);
+Status kek_ast_ParseTokens(struct Token* tokens,usize count,struct String source,i64 fileIndex,struct Allocator allocator,struct DiagnosticBag* diagnostics,struct AstTree* out);
+struct String kek_compiler_CTokenText(struct CProgram* program,usize fileIndex,usize tokenIndex);
+bool kek_compiler_CTokenEquals(struct CProgram* program,usize fileIndex,usize tokenIndex,str text);
+bool kek_compiler_CIsTokenKind(struct CProgram* program,usize fileIndex,usize tokenIndex,TokenKind kind);
+bool kek_compiler_CIsPunctuation(struct CProgram* program,usize fileIndex,usize tokenIndex,PunctuationKind kind);
+bool kek_compiler_CIsOperator(struct CProgram* program,usize fileIndex,usize tokenIndex,OperatorKind kind);
+bool kek_compiler_CIsKeyword(struct CProgram* program,usize fileIndex,usize tokenIndex,KeywordKind kind);
+bool kek_compiler_CIsIdentifierText(struct CProgram* program,usize fileIndex,usize tokenIndex,str text);
+bool kek_compiler_CIsEof(struct CProgram* program,usize fileIndex,usize tokenIndex);
+usize kek_compiler_CFileTokenCount(struct CProgram* program,usize fileIndex);
+Status kek_compiler_CWriteToken(struct CProgram* program,struct StringBuilder* out,usize fileIndex,usize tokenIndex);
+Status kek_compiler_CCloneCString(struct CProgram* program,str text,struct OwnedString* out);
+Status kek_compiler_CCloneString(struct CProgram* program,struct String text,struct OwnedString* out);
+Status kek_compiler_CDetachBuilder(struct StringBuilder* builder,struct OwnedString* out);
+Status kek_compiler_CMakeOwnedEmpty(struct CProgram* program,struct OwnedString* out);
+usize kek_compiler_CStringLastSlash(struct String path);
+Status kek_compiler_CPackageNameFromPath(struct String path,struct Allocator allocator,struct OwnedString* out);
+Status kek_compiler_CModuleNameFromPath(struct String path,struct Allocator allocator,struct OwnedString* out);
+Status kek_compiler_CInitTokenFileSlot(struct Allocator allocator,struct CTokenFile* tokenFile,usize fileIndex);
+Status kek_compiler_CSetTokenFileNames(struct Allocator allocator,struct CTokenFile* tokenFile,bool isRoot);
+Status kek_compiler_CTokenizeSourceFile(struct Allocator allocator,struct SourceFile* sourceFile,struct CTokenFile* tokenFile,usize fileIndex,bool isRoot,struct DiagnosticBag* diagnostics);
+void kek_compiler_CTokenizeJobRun(struct CTokenizeJob* job);
+ptr kek_compiler_CTokenizeFileThreadEntry(ptr arg);
+Status kek_compiler_CMergeDiagnostics(struct DiagnosticBag* target,struct DiagnosticBag* source);
+Status kek_compiler_CProgramInit(struct CProgram* program,struct Allocator allocator);
+Status kek_compiler_CProgramDestroy(struct CProgram* program);
+Status kek_compiler_CReserveTokenFiles(struct CProgram* program,usize additional);
+Status kek_compiler_CReserveDecls(struct CProgram* program,usize additional);
+Status kek_compiler_CReserveParams(struct CProgram* program,usize additional);
+Status kek_compiler_CReserveFields(struct CProgram* program,usize additional);
+Status kek_compiler_CReserveTypeUses(struct CProgram* program,usize additional);
+Status kek_compiler_CReserveFuncUses(struct CProgram* program,usize additional);
+Status kek_compiler_CReserveLocals(struct CEnv* env,usize additional);
+Status kek_compiler_CLoadAndTokenize(struct CProgram* program,str entryPath);
+int kek_compiler_CompilerFail(str text);
+int kek_compiler_CompilerPrintHelp(void);
+usize kek_compiler_CFindMatching(struct CProgram* program,usize fileIndex,usize openIndex);
+usize kek_compiler_CSkipDelimited(struct CProgram* program,usize fileIndex,usize index);
+usize kek_compiler_CSkipAttributes(struct CProgram* program,usize fileIndex,usize index);
+usize kek_compiler_CFindTopLevelColon(struct CProgram* program,usize fileIndex,usize start,usize end);
+usize kek_compiler_CFindTokenAtDepthZero(struct CProgram* program,usize fileIndex,usize start,usize end,PunctuationKind punctuation);
+usize kek_compiler_CFindOperatorScope(struct CProgram* program,usize fileIndex,usize start,usize end);
+usize kek_compiler_CFindNextGroup(struct CProgram* program,usize fileIndex,usize start,usize end);
+usize kek_compiler_CFindNextBlock(struct CProgram* program,usize fileIndex,usize start,usize end);
+u8 kek_compiler_COperatorCode(struct CProgram* program,usize fileIndex,usize index);
+Status kek_compiler_CAddDecl(struct CProgram* program,struct CDecl* decl);
+Status kek_compiler_CAddParam(struct CProgram* program,struct CParam* param);
+Status kek_compiler_CAddField(struct CProgram* program,struct CField* field);
+Status kek_compiler_CParseParams(struct CProgram* program,struct CDecl* decl,usize fileIndex,usize start,usize end);
+Status kek_compiler_CParseFields(struct CProgram* program,struct CDecl* decl,usize fileIndex,usize start,usize end);
+bool kek_compiler_CDeclNameMatches(struct CProgram* program,struct CDecl* decl,struct String name);
+struct CDecl* kek_compiler_CFindTypeDecl(struct CProgram* program,struct String name);
+Status kek_compiler_CParseAliasDecl(struct CProgram* program,usize fileIndex,usize start,usize* outEnd);
+Status kek_compiler_CParseTypeDecl(struct CProgram* program,usize fileIndex,usize start,CDeclKind kind,usize* outEnd);
+Status kek_compiler_CParseExternDecl(struct CProgram* program,usize fileIndex,usize start,usize* outEnd);
+Status kek_compiler_CParseFunctionDecl(struct CProgram* program,usize fileIndex,usize start,usize* outEnd);
+Status kek_compiler_CParseDeclarations(struct CProgram* program);
+bool kek_compiler_CMarkDeclReachable(struct CDecl* decl);
+bool kek_compiler_CMarkReachableRoots(struct CProgram* program);
+bool kek_compiler_CMarkNamedDeclsReachable(struct CProgram* program,struct String name);
+bool kek_compiler_CMarkOperatorDeclsReachable(struct CProgram* program,u8 operatorCode);
+bool kek_compiler_CMarkReferencesInRange(struct CProgram* program,usize fileIndex,usize start,usize end);
+Status kek_compiler_CMarkReachableDecls(struct CProgram* program);
+Status kek_compiler_CWriteTokenRangeRaw(struct CProgram* program,struct StringBuilder* out,usize fileIndex,usize start,usize end);
+bool kek_compiler_CIsBuiltinTypeName(struct String name);
+Status kek_compiler_CWriteSanitized(struct StringBuilder* out,struct String text);
+Status kek_compiler_CWriteOperatorName(struct StringBuilder* out,u8 operatorCode);
+bool kek_compiler_CDeclPackageIsRoot(struct CDecl* decl);
+Status kek_compiler_CWriteDeclCName(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl);
+Status kek_compiler_CWriteTypeSuffixFromRange(struct CProgram* program,struct StringBuilder* out,usize fileIndex,usize start,usize end);
+Status kek_compiler_CTypeInfoDestroy(struct CTypeInfo* info);
+Status kek_compiler_CTypeInfoInitEmpty(struct CProgram* program,struct CTypeInfo* info);
+Status kek_compiler_CReplaceOwned(struct OwnedString* target,struct OwnedString value);
+Status kek_compiler_CBuildTypeKey(struct CProgram* program,usize fileIndex,usize start,usize end,struct OwnedString* out);
+Status kek_compiler_CWriteCTypeFromKey(struct CProgram* program,struct StringBuilder* out,struct String key);
+Status kek_compiler_CMakeCTypeFromKey(struct CProgram* program,struct String key,struct OwnedString* out);
+Status kek_compiler_CTypeInfoFromKey(struct CProgram* program,struct String key,struct CTypeInfo* info);
+Status kek_compiler_CRenderTypeInfo(struct CProgram* program,usize fileIndex,usize start,usize end,struct CTypeInfo* info);
+bool kek_compiler_CTypeUseExists(struct CProgram* program,struct String key);
+Status kek_compiler_CAddTypeUse(struct CProgram* program,struct CTypeInfo* info);
+Status kek_compiler_CAddTypeUseFromBaseArg(struct CProgram* program,str baseName,struct String arg0);
+bool kek_compiler_CConcreteTypeKey(struct CProgram* program,struct String key);
+bool kek_compiler_CTypeInfoConcrete(struct CProgram* program,struct CTypeInfo* info);
+Status kek_compiler_CCollectTypeUsesInRange(struct CProgram* program,usize fileIndex,usize start,usize end);
+bool kek_compiler_CDeclScopeMatches(struct CDecl* decl,struct String scopeName);
+struct CDecl* kek_compiler_CFindFunctionDeclByName(struct CProgram* program,struct String name,struct String scopeName);
+bool kek_compiler_CFuncUseExists(struct CProgram* program,usize declIndex,struct String key);
+usize kek_compiler_CDeclIndex(struct CProgram* program,struct CDecl* decl);
+Status kek_compiler_CBuildGenericFuncCName(struct CProgram* program,struct CDecl* decl,struct CTypeInfo* arg0,struct CTypeInfo* arg1,struct CTypeInfo* arg2,usize argCount,struct OwnedString* out);
+Status kek_compiler_CAddFuncUse(struct CProgram* program,struct CDecl* decl,struct CTypeInfo* arg0,struct CTypeInfo* arg1,struct CTypeInfo* arg2,usize argCount);
+Status kek_compiler_CCollectGenericFunctionUsesInRange(struct CProgram* program,usize fileIndex,usize start,usize end);
+struct CDecl* kek_compiler_CFindGenericMethodDecl(struct CProgram* program,struct String receiverBase,str methodName);
+Status kek_compiler_CAddGenericMethodUseByName(struct CProgram* program,struct CTypeUse* typeUse,str methodName);
+bool kek_compiler_CMethodCallNameUsed(struct CProgram* program,str methodName);
+Status kek_compiler_CCollectGenericCollectionMethods(struct CProgram* program);
+Status kek_compiler_CCollectGenericFunctionUses(struct CProgram* program);
+Status kek_compiler_CCollectTypeUses(struct CProgram* program);
+Status kek_compiler_CWritePrelude(struct StringBuilder* out);
+Status kek_compiler_CWriteDeclarator(struct CProgram* program,struct StringBuilder* out,usize fileIndex,usize typeStart,usize typeEnd,usize nameIndex,bool isArray,usize arrayStart,usize arrayEnd);
+Status kek_compiler_CWriteFields(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl);
+bool kek_compiler_CGenericParamEquals(struct CProgram* program,struct CDecl* decl,usize paramIndex,struct String name);
+Status kek_compiler_CWriteTypeSuffixSubst(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl,struct CTypeUse* use,usize fileIndex,usize start,usize end);
+Status kek_compiler_CMakeSubstTypeKey(struct CProgram* program,struct CDecl* decl,struct CTypeUse* use,usize fileIndex,usize start,usize end,struct OwnedString* out);
+Status kek_compiler_CWriteDeclaratorSubst(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl,struct CTypeUse* use,usize fileIndex,usize typeStart,usize typeEnd,usize nameIndex,bool isArray,usize arrayStart,usize arrayEnd);
+Status kek_compiler_CWriteFieldsSubst(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl,struct CTypeUse* use);
+Status kek_compiler_CWriteStructDecl(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl,struct String specializedName);
+Status kek_compiler_CWriteUnionDecl(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl);
+Status kek_compiler_CWriteEnumDecl(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl);
+Status kek_compiler_CWriteAliasDecl(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl);
+Status kek_compiler_CWriteExternDecl(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl);
+Status kek_compiler_CWriteTypeUseDeclaration(struct CProgram* program,struct StringBuilder* out,struct CTypeUse* use);
+bool kek_compiler_CShouldWritePlainTypeDecl(struct CDecl* decl);
+bool kek_compiler_CTypeKeyReady(struct CProgram* program,struct String key);
+bool kek_compiler_CTypeRangeReady(struct CProgram* program,usize fileIndex,usize start,usize end);
+bool kek_compiler_CTypeUseRangeReady(struct CProgram* program,struct CDecl* decl,struct CTypeUse* use,usize fileIndex,usize start,usize end);
+bool kek_compiler_CTypeDeclDependenciesReady(struct CProgram* program,struct CDecl* decl);
+bool kek_compiler_CTypeUseDependenciesReady(struct CProgram* program,struct CTypeUse* use);
+Status kek_compiler_CWritePlainTypeDeclaration(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl);
+Status kek_compiler_CWriteTypeDeclarations(struct CProgram* program,struct StringBuilder* out);
+Status kek_compiler_CEnvInit(struct CProgram* program,struct CEnv* env);
+Status kek_compiler_CEnvDestroy(struct CEnv* env);
+struct CLocal* kek_compiler_CEnvFind(struct CEnv* env,struct String name);
+Status kek_compiler_CEnvAdd(struct CProgram* program,struct CEnv* env,struct String name,struct String typeKey,struct String cType,bool isArray,struct String arrayLen,bool isPointer);
+Status kek_compiler_CExprInitEmpty(struct CProgram* program,struct CExpr* expr);
+Status kek_compiler_CExprDestroy(struct CExpr* expr);
+Status kek_compiler_CExprSetText(struct CProgram* program,struct CExpr* expr,struct String text);
+Status kek_compiler_CExprSetCString(struct CProgram* program,struct CExpr* expr,str text);
+Status kek_compiler_CExprSetType(struct CProgram* program,struct CExpr* expr,struct String key,struct String cType,bool isPointer);
+Status kek_compiler_CExprFromBuilder(struct CExpr* expr,struct StringBuilder* builder);
+u8 kek_compiler_COperatorPrecedence(struct CProgram* program,usize fileIndex,usize index);
+bool kek_compiler_COperatorRightAssociative(struct CProgram* program,usize fileIndex,usize index);
+Status kek_compiler_CWriteNumberToken(struct CProgram* program,struct StringBuilder* out,usize fileIndex,usize index);
+struct CDecl* kek_compiler_CFindFieldDecl(struct CProgram* program,struct String typeKey);
+Status kek_compiler_CFieldType(struct CProgram* program,struct String typeKey,struct String fieldName,struct CTypeInfo* outInfo);
+struct CDecl* kek_compiler_CFindMethod(struct CProgram* program,struct String receiverType,struct String name,bool isOperator,u8 operatorCode,usize argCount);
+Status kek_compiler_CParserInit(struct CProgram* program,struct CEnv* env,usize fileIndex,usize start,usize end,struct String expectedKey,struct String expectedCType,bool expectedIsArray,struct CExprParser* parser);
+Status kek_compiler_CParserDestroy(struct CExprParser* parser);
+Status kek_compiler_CCompileExpressionRange(struct CProgram* program,struct CEnv* env,usize fileIndex,usize start,usize end,struct String expectedKey,struct String expectedCType,bool expectedIsArray,struct CExpr* out);
+Status kek_compiler_CWriteInitializerList(struct CExprParser* parser,usize start,usize end,struct StringBuilder* out);
+Status kek_compiler_CExprFromLiteralBlock(struct CExprParser* parser,usize blockStart,usize blockEnd,struct CExpr* out);
+Status kek_compiler_CCompilePrimary(struct CExprParser* parser,struct CExpr* out);
+Status kek_compiler_CWriteCallArgs(struct CExprParser* parser,usize start,usize end,struct StringBuilder* out);
+usize kek_compiler_CCountCallArgs(struct CProgram* program,usize fileIndex,usize start,usize end);
+Status kek_compiler_CApplyPostfix(struct CExprParser* parser,struct CExpr* expr);
+Status kek_compiler_CCompileUnary(struct CExprParser* parser,struct CExpr* out);
+Status kek_compiler_CCompileBinaryOperation(struct CExprParser* parser,struct CExpr* left,usize operatorIndex,struct CExpr* right,struct CExpr* out);
+Status kek_compiler_CCompileExpression(struct CExprParser* parser,u8 minPrecedence,struct CExpr* out);
+Status kek_compiler_CWriteIndent(struct StringBuilder* out,usize indent);
+usize kek_compiler_CFindStatementSemicolon(struct CProgram* program,usize fileIndex,usize start,usize end);
+Status kek_compiler_CArrayLenString(struct CProgram* program,usize fileIndex,usize start,usize end,struct OwnedString* out);
+bool kek_compiler_CFieldDefaultIsZero(struct CProgram* program,struct CField* field);
+Status kek_compiler_CWriteDefaultInitializer(struct CProgram* program,struct StringBuilder* out,struct String typeKey);
+Status kek_compiler_CWriteVarDecl(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize semicolon,usize indent);
+Status kek_compiler_CWriteExprStatement(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize semicolon,usize indent);
+Status kek_compiler_CWriteIfStatement(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize* outNext,usize indent);
+Status kek_compiler_CWriteWhileStatement(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize* outNext,usize indent);
+Status kek_compiler_CWriteDoStatement(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize* outNext,usize indent);
+Status kek_compiler_CWriteForStatement(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize* outNext,usize indent);
+Status kek_compiler_CWriteEachStatement(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize* outNext,usize indent);
+Status kek_compiler_CWriteSwitchStatement(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize* outNext,usize indent);
+Status kek_compiler_CWriteReturnStatement(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize semicolon,usize indent);
+Status kek_compiler_CWriteSingleStatement(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize* outNext,usize indent);
+Status kek_compiler_CWriteDeferred(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize end,usize indent);
+Status kek_compiler_CWriteBlock(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize end,usize indent);
+Status kek_compiler_CFuncUseTempTypeUse(struct CFuncUse* funcUse,struct CTypeUse* out);
+Status kek_compiler_CWriteSubstTypeForFunc(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl,struct CFuncUse* funcUse,usize fileIndex,usize start,usize end);
+Status kek_compiler_CWriteFunctionSignature(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl,struct String nameOverride,struct CFuncUse* funcUse);
+Status kek_compiler_CWriteFunctionPrototype(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl);
+Status kek_compiler_CWriteFunctionBody(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl);
+Status kek_compiler_CWriteManualLine(struct StringBuilder* out,str text);
+Status kek_compiler_CWriteArrayMethodRef(struct StringBuilder* out,struct CFuncUse* use,str name);
+Status kek_compiler_CWriteLinkedListMethodRef(struct StringBuilder* out,struct CFuncUse* use,str name);
+Status kek_compiler_CWriteResultTypeRef(struct StringBuilder* out,struct CFuncUse* use);
+Status kek_compiler_CWriteListNodeTypeRef(struct StringBuilder* out,struct CFuncUse* use);
+Status kek_compiler_CWriteManualArrayGenericBody(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl,struct CFuncUse* use,struct String argC);
+Status kek_compiler_CWriteManualLinkedListGenericBody(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl,struct CFuncUse* use);
+Status kek_compiler_CWriteManualGenericBody(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl,struct CFuncUse* use);
+Status kek_compiler_CWriteFunctionDeclarations(struct CProgram* program,struct StringBuilder* out);
+Status kek_compiler_CWriteFunctionDefinitions(struct CProgram* program,struct StringBuilder* out);
+Status kek_compiler_CWriteProgram(struct CProgram* program,struct StringBuilder* out);
+Status kek_compiler_CompileToCString(str inputPath,struct Allocator allocator,struct StringBuilder* out,struct DiagnosticBag* diagnostics);
+Status kek_compiler_CompileToC(str inputPath,str outputPath,struct Allocator allocator,struct DiagnosticBag* diagnostics);
+Status kek_compiler_CompilerRunBuild(str inputPath,str outputPath);
+int kek_compiler_CompilerMain(int argc,str* argv);
 Status std_thread_ThreadHandleStart(usize* handle,ptr entry,ptr arg);
 Status std_thread_ThreadHandleJoin(usize* handle);
-Status std_thread_ThreadStart(struct Thread* thread,ptr entry,ptr arg);
-Status std_thread_ThreadJoin(struct Thread* thread);
-Status Thread_Join(struct Thread* this);
 void std_mem_Free__byte(struct Allocator allocator,byte* data,usize count);
 byte* std_mem_Alloc__byte(struct Allocator allocator,usize count);
 byte* std_mem_Resize__byte(struct Allocator allocator,byte* oldData,usize oldCount,usize newCount);
 struct Slice__byte std_core_FixedSlice__byte(byte* data,usize len);
 struct Span__byte std_core_FixedSpan__byte(byte* data,usize len);
-struct Token* std_mem_Resize__Token(struct Allocator allocator,struct Token* oldData,usize oldCount,usize newCount);
-void std_mem_Free__Token(struct Allocator allocator,struct Token* data,usize count);
-struct SelfAstNode* std_mem_Resize__SelfAstNode(struct Allocator allocator,struct SelfAstNode* oldData,usize oldCount,usize newCount);
-void std_mem_Free__SelfAstNode(struct Allocator allocator,struct SelfAstNode* data,usize count);
+struct Array__Diagnostic std_array_ArrayNew__Diagnostic(struct Allocator allocator);
+struct Array__SourceFile std_array_ArrayNew__SourceFile(struct Allocator allocator);
+struct Array__Token std_array_ArrayNew__Token(struct Allocator allocator);
+struct Array__AstNode std_array_ArrayNew__AstNode(struct Allocator allocator);
+struct Array__CTokenFile std_array_ArrayNew__CTokenFile(struct Allocator allocator);
+struct Array__CDecl std_array_ArrayNew__CDecl(struct Allocator allocator);
+struct Array__CParam std_array_ArrayNew__CParam(struct Allocator allocator);
+struct Array__CField std_array_ArrayNew__CField(struct Allocator allocator);
+struct Array__CTypeUse std_array_ArrayNew__CTypeUse(struct Allocator allocator);
+struct Array__CFuncUse std_array_ArrayNew__CFuncUse(struct Allocator allocator);
+struct Array__CTokenizeJob std_array_ArrayNew__CTokenizeJob(struct Allocator allocator);
+struct Array__CLocal std_array_ArrayNew__CLocal(struct Allocator allocator);
+Status Array__Diagnostic_Destroy(struct Array__Diagnostic* this);
+Status Array__Diagnostic_Reserve(struct Array__Diagnostic* this,usize additional);
+Status Array__Diagnostic_Push(struct Array__Diagnostic* this,struct Diagnostic value);
+struct Slice__Diagnostic Array__Diagnostic_Slice(struct Array__Diagnostic* this);
+Status Array__SourceFile_Destroy(struct Array__SourceFile* this);
+Status Array__SourceFile_Reserve(struct Array__SourceFile* this,usize additional);
+Status Array__SourceFile_Push(struct Array__SourceFile* this,struct SourceFile value);
+struct Slice__SourceFile Array__SourceFile_Slice(struct Array__SourceFile* this);
 Status Array__Token_Destroy(struct Array__Token* this);
-Status Array__Token_Clear(struct Array__Token* this);
 Status Array__Token_Reserve(struct Array__Token* this,usize additional);
-Status Array__Token_AppendSlice(struct Array__Token* this,struct Slice__Token items);
 Status Array__Token_Push(struct Array__Token* this,struct Token value);
-Status Array__Token_PushZeroed(struct Array__Token* this);
-struct Result__Token Array__Token_Pop(struct Array__Token* this);
-struct Result__Token Array__Token_Get(struct Array__Token* this,usize index);
-Status Array__Token_Set(struct Array__Token* this,usize index,struct Token value);
-struct Token* Array__Token_GetPtr(struct Array__Token* this,usize index);
-struct Token* Array__Token_LastPtr(struct Array__Token* this);
-struct Span__Token Array__Token_Span(struct Array__Token* this);
 struct Slice__Token Array__Token_Slice(struct Array__Token* this);
+Status Array__AstNode_Destroy(struct Array__AstNode* this);
+Status Array__AstNode_Reserve(struct Array__AstNode* this,usize additional);
+Status Array__AstNode_Push(struct Array__AstNode* this,struct AstNode value);
+struct Slice__AstNode Array__AstNode_Slice(struct Array__AstNode* this);
+Status Array__CLocal_Destroy(struct Array__CLocal* this);
+Status Array__CLocal_Reserve(struct Array__CLocal* this,usize additional);
+Status Array__CLocal_Push(struct Array__CLocal* this,struct CLocal value);
+struct Slice__CLocal Array__CLocal_Slice(struct Array__CLocal* this);
+Status Array__CTokenFile_Destroy(struct Array__CTokenFile* this);
+Status Array__CTokenFile_Reserve(struct Array__CTokenFile* this,usize additional);
+Status Array__CTokenFile_Push(struct Array__CTokenFile* this,struct CTokenFile value);
+struct Slice__CTokenFile Array__CTokenFile_Slice(struct Array__CTokenFile* this);
+Status Array__CDecl_Destroy(struct Array__CDecl* this);
+Status Array__CDecl_Reserve(struct Array__CDecl* this,usize additional);
+Status Array__CDecl_Push(struct Array__CDecl* this,struct CDecl value);
+struct Slice__CDecl Array__CDecl_Slice(struct Array__CDecl* this);
+Status Array__CParam_Destroy(struct Array__CParam* this);
+Status Array__CParam_Reserve(struct Array__CParam* this,usize additional);
+Status Array__CParam_Push(struct Array__CParam* this,struct CParam value);
+struct Slice__CParam Array__CParam_Slice(struct Array__CParam* this);
+Status Array__CField_Destroy(struct Array__CField* this);
+Status Array__CField_Reserve(struct Array__CField* this,usize additional);
+Status Array__CField_Push(struct Array__CField* this,struct CField value);
+struct Slice__CField Array__CField_Slice(struct Array__CField* this);
+Status Array__CTypeUse_Destroy(struct Array__CTypeUse* this);
+Status Array__CTypeUse_Reserve(struct Array__CTypeUse* this,usize additional);
+Status Array__CTypeUse_Push(struct Array__CTypeUse* this,struct CTypeUse value);
+struct Slice__CTypeUse Array__CTypeUse_Slice(struct Array__CTypeUse* this);
+Status Array__CFuncUse_Destroy(struct Array__CFuncUse* this);
+Status Array__CFuncUse_Reserve(struct Array__CFuncUse* this,usize additional);
+Status Array__CFuncUse_Push(struct Array__CFuncUse* this,struct CFuncUse value);
+struct Slice__CFuncUse Array__CFuncUse_Slice(struct Array__CFuncUse* this);
+Status Array__CTokenizeJob_Destroy(struct Array__CTokenizeJob* this);
+Status Array__CTokenizeJob_Reserve(struct Array__CTokenizeJob* this,usize additional);
+Status Array__CTokenizeJob_Push(struct Array__CTokenizeJob* this,struct CTokenizeJob value);
+struct Slice__CTokenizeJob Array__CTokenizeJob_Slice(struct Array__CTokenizeJob* this);
 
 void std_mem_Free__byte(struct Allocator allocator,byte* data,usize count) {
     (void)allocator;
@@ -1000,27 +1074,67 @@ struct Span__byte std_core_FixedSpan__byte(byte* data,usize len) {
     out.len=len;
     return out;
 }
-struct Token* std_mem_Resize__Token(struct Allocator allocator,struct Token* oldData,usize oldCount,usize newCount) {
-    (void)allocator;
-    (void)oldCount;
-    return (struct Token*)kek_std_resize(oldData,newCount*sizeof(struct Token));
+struct Array__Diagnostic std_array_ArrayNew__Diagnostic(struct Allocator allocator) {
+    struct Array__Diagnostic array={0};
+    array.allocator=allocator;
+    return array;
 }
-void std_mem_Free__Token(struct Allocator allocator,struct Token* data,usize count) {
-    (void)allocator;
-    (void)count;
-    kek_std_free(data);
+struct Array__SourceFile std_array_ArrayNew__SourceFile(struct Allocator allocator) {
+    struct Array__SourceFile array={0};
+    array.allocator=allocator;
+    return array;
 }
-struct SelfAstNode* std_mem_Resize__SelfAstNode(struct Allocator allocator,struct SelfAstNode* oldData,usize oldCount,usize newCount) {
-    (void)allocator;
-    (void)oldCount;
-    return (struct SelfAstNode*)kek_std_resize(oldData,newCount*sizeof(struct SelfAstNode));
+struct Array__Token std_array_ArrayNew__Token(struct Allocator allocator) {
+    struct Array__Token array={0};
+    array.allocator=allocator;
+    return array;
 }
-void std_mem_Free__SelfAstNode(struct Allocator allocator,struct SelfAstNode* data,usize count) {
-    (void)allocator;
-    (void)count;
-    kek_std_free(data);
+struct Array__AstNode std_array_ArrayNew__AstNode(struct Allocator allocator) {
+    struct Array__AstNode array={0};
+    array.allocator=allocator;
+    return array;
 }
-Status Array__Token_Destroy(struct Array__Token* this) {
+struct Array__CTokenFile std_array_ArrayNew__CTokenFile(struct Allocator allocator) {
+    struct Array__CTokenFile array={0};
+    array.allocator=allocator;
+    return array;
+}
+struct Array__CDecl std_array_ArrayNew__CDecl(struct Allocator allocator) {
+    struct Array__CDecl array={0};
+    array.allocator=allocator;
+    return array;
+}
+struct Array__CParam std_array_ArrayNew__CParam(struct Allocator allocator) {
+    struct Array__CParam array={0};
+    array.allocator=allocator;
+    return array;
+}
+struct Array__CField std_array_ArrayNew__CField(struct Allocator allocator) {
+    struct Array__CField array={0};
+    array.allocator=allocator;
+    return array;
+}
+struct Array__CTypeUse std_array_ArrayNew__CTypeUse(struct Allocator allocator) {
+    struct Array__CTypeUse array={0};
+    array.allocator=allocator;
+    return array;
+}
+struct Array__CFuncUse std_array_ArrayNew__CFuncUse(struct Allocator allocator) {
+    struct Array__CFuncUse array={0};
+    array.allocator=allocator;
+    return array;
+}
+struct Array__CTokenizeJob std_array_ArrayNew__CTokenizeJob(struct Allocator allocator) {
+    struct Array__CTokenizeJob array={0};
+    array.allocator=allocator;
+    return array;
+}
+struct Array__CLocal std_array_ArrayNew__CLocal(struct Allocator allocator) {
+    struct Array__CLocal array={0};
+    array.allocator=allocator;
+    return array;
+}
+Status Array__Diagnostic_Destroy(struct Array__Diagnostic* this) {
     if(this->data!=0){
         kek_std_free(this->data);
     }
@@ -1029,8 +1143,74 @@ Status Array__Token_Destroy(struct Array__Token* this) {
     this->cap=0;
     return Status_Ok;
 }
-Status Array__Token_Clear(struct Array__Token* this) {
+Status Array__Diagnostic_Reserve(struct Array__Diagnostic* this,usize additional) {
+    usize needed=this->len+additional;
+    if(needed<=this->cap){return Status_Ok;}
+    usize newCap=this->cap;
+    if(newCap==0){newCap=8;}
+    while(newCap<needed){newCap=newCap*2;}
+    struct Diagnostic* newData=(struct Diagnostic*)kek_std_resize(
+        this->data,newCap*sizeof(struct Diagnostic));
+    if(newData==0){return Status_NoMemory;}
+    this->data=newData;
+    this->cap=newCap;
+    return Status_Ok;
+}
+Status Array__Diagnostic_Push(struct Array__Diagnostic* this,struct Diagnostic value) {
+    Status status=Array__Diagnostic_Reserve(this,1);
+    if(status!=Status_Ok){return status;}
+    this->data[this->len]=value;
+    this->len+=1;
+    return Status_Ok;
+}
+struct Slice__Diagnostic Array__Diagnostic_Slice(struct Array__Diagnostic* this) {
+    struct Slice__Diagnostic out={0};
+    out.data=this->data;
+    out.len=this->len;
+    return out;
+}
+Status Array__SourceFile_Destroy(struct Array__SourceFile* this) {
+    if(this->data!=0){
+        kek_std_free(this->data);
+    }
+    this->data=0;
     this->len=0;
+    this->cap=0;
+    return Status_Ok;
+}
+Status Array__SourceFile_Reserve(struct Array__SourceFile* this,usize additional) {
+    usize needed=this->len+additional;
+    if(needed<=this->cap){return Status_Ok;}
+    usize newCap=this->cap;
+    if(newCap==0){newCap=8;}
+    while(newCap<needed){newCap=newCap*2;}
+    struct SourceFile* newData=(struct SourceFile*)kek_std_resize(
+        this->data,newCap*sizeof(struct SourceFile));
+    if(newData==0){return Status_NoMemory;}
+    this->data=newData;
+    this->cap=newCap;
+    return Status_Ok;
+}
+Status Array__SourceFile_Push(struct Array__SourceFile* this,struct SourceFile value) {
+    Status status=Array__SourceFile_Reserve(this,1);
+    if(status!=Status_Ok){return status;}
+    this->data[this->len]=value;
+    this->len+=1;
+    return Status_Ok;
+}
+struct Slice__SourceFile Array__SourceFile_Slice(struct Array__SourceFile* this) {
+    struct Slice__SourceFile out={0};
+    out.data=this->data;
+    out.len=this->len;
+    return out;
+}
+Status Array__Token_Destroy(struct Array__Token* this) {
+    if(this->data!=0){
+        kek_std_free(this->data);
+    }
+    this->data=0;
+    this->len=0;
+    this->cap=0;
     return Status_Ok;
 }
 Status Array__Token_Reserve(struct Array__Token* this,usize additional) {
@@ -1046,15 +1226,6 @@ Status Array__Token_Reserve(struct Array__Token* this,usize additional) {
     this->cap=newCap;
     return Status_Ok;
 }
-Status Array__Token_AppendSlice(struct Array__Token* this,struct Slice__Token items) {
-    Status status=Array__Token_Reserve(this,items.len);
-    if(status!=Status_Ok){return status;}
-    for(usize i=0;i<items.len;i++){
-        this->data[this->len+i]=items.data[i];
-    }
-    this->len+=items.len;
-    return Status_Ok;
-}
 Status Array__Token_Push(struct Array__Token* this,struct Token value) {
     Status status=Array__Token_Reserve(this,1);
     if(status!=Status_Ok){return status;}
@@ -1062,67 +1233,332 @@ Status Array__Token_Push(struct Array__Token* this,struct Token value) {
     this->len+=1;
     return Status_Ok;
 }
-Status Array__Token_PushZeroed(struct Array__Token* this) {
-    Status status=Array__Token_Reserve(this,1);
-    if(status!=Status_Ok){return status;}
-    kek_std_mem_set((void*)(&this->data[this->len]),0,sizeof(struct Token));
-    this->len+=1;
-    return Status_Ok;
-}
-struct Result__Token Array__Token_Pop(struct Array__Token* this) {
-    struct Result__Token result={0};
-    if(this->len==0){result.status=Status_End;return result;}
-    this->len-=1;
-    result.status=Status_Ok;
-    result.value=this->data[this->len];
-    return result;
-}
-struct Result__Token Array__Token_Get(struct Array__Token* this,usize index) {
-    struct Result__Token result={0};
-    if(index>=this->len){result.status=Status_Invalid;return result;}
-    result.status=Status_Ok;
-    result.value=this->data[index];
-    return result;
-}
-Status Array__Token_Set(struct Array__Token* this,usize index,struct Token value) {
-    if(index>=this->len){return Status_Invalid;}
-    this->data[index]=value;
-    return Status_Ok;
-}
-struct Token* Array__Token_GetPtr(struct Array__Token* this,usize index) {
-    if(index>=this->len){return 0;}
-    return &this->data[index];
-}
-struct Token* Array__Token_LastPtr(struct Array__Token* this) {
-    if(this->len==0){return 0;}
-    return &this->data[this->len-1];
-}
-struct Span__Token Array__Token_Span(struct Array__Token* this) {
-    struct Span__Token out={0};
-    out.data=this->data;
-    out.len=this->len;
-    return out;
-}
 struct Slice__Token Array__Token_Slice(struct Array__Token* this) {
     struct Slice__Token out={0};
     out.data=this->data;
     out.len=this->len;
     return out;
 }
+Status Array__AstNode_Destroy(struct Array__AstNode* this) {
+    if(this->data!=0){
+        kek_std_free(this->data);
+    }
+    this->data=0;
+    this->len=0;
+    this->cap=0;
+    return Status_Ok;
+}
+Status Array__AstNode_Reserve(struct Array__AstNode* this,usize additional) {
+    usize needed=this->len+additional;
+    if(needed<=this->cap){return Status_Ok;}
+    usize newCap=this->cap;
+    if(newCap==0){newCap=8;}
+    while(newCap<needed){newCap=newCap*2;}
+    struct AstNode* newData=(struct AstNode*)kek_std_resize(
+        this->data,newCap*sizeof(struct AstNode));
+    if(newData==0){return Status_NoMemory;}
+    this->data=newData;
+    this->cap=newCap;
+    return Status_Ok;
+}
+Status Array__AstNode_Push(struct Array__AstNode* this,struct AstNode value) {
+    Status status=Array__AstNode_Reserve(this,1);
+    if(status!=Status_Ok){return status;}
+    this->data[this->len]=value;
+    this->len+=1;
+    return Status_Ok;
+}
+struct Slice__AstNode Array__AstNode_Slice(struct Array__AstNode* this) {
+    struct Slice__AstNode out={0};
+    out.data=this->data;
+    out.len=this->len;
+    return out;
+}
+Status Array__CLocal_Destroy(struct Array__CLocal* this) {
+    if(this->data!=0){
+        kek_std_free(this->data);
+    }
+    this->data=0;
+    this->len=0;
+    this->cap=0;
+    return Status_Ok;
+}
+Status Array__CLocal_Reserve(struct Array__CLocal* this,usize additional) {
+    usize needed=this->len+additional;
+    if(needed<=this->cap){return Status_Ok;}
+    usize newCap=this->cap;
+    if(newCap==0){newCap=8;}
+    while(newCap<needed){newCap=newCap*2;}
+    struct CLocal* newData=(struct CLocal*)kek_std_resize(
+        this->data,newCap*sizeof(struct CLocal));
+    if(newData==0){return Status_NoMemory;}
+    this->data=newData;
+    this->cap=newCap;
+    return Status_Ok;
+}
+Status Array__CLocal_Push(struct Array__CLocal* this,struct CLocal value) {
+    Status status=Array__CLocal_Reserve(this,1);
+    if(status!=Status_Ok){return status;}
+    this->data[this->len]=value;
+    this->len+=1;
+    return Status_Ok;
+}
+struct Slice__CLocal Array__CLocal_Slice(struct Array__CLocal* this) {
+    struct Slice__CLocal out={0};
+    out.data=this->data;
+    out.len=this->len;
+    return out;
+}
+Status Array__CTokenFile_Destroy(struct Array__CTokenFile* this) {
+    if(this->data!=0){
+        kek_std_free(this->data);
+    }
+    this->data=0;
+    this->len=0;
+    this->cap=0;
+    return Status_Ok;
+}
+Status Array__CTokenFile_Reserve(struct Array__CTokenFile* this,usize additional) {
+    usize needed=this->len+additional;
+    if(needed<=this->cap){return Status_Ok;}
+    usize newCap=this->cap;
+    if(newCap==0){newCap=8;}
+    while(newCap<needed){newCap=newCap*2;}
+    struct CTokenFile* newData=(struct CTokenFile*)kek_std_resize(
+        this->data,newCap*sizeof(struct CTokenFile));
+    if(newData==0){return Status_NoMemory;}
+    this->data=newData;
+    this->cap=newCap;
+    return Status_Ok;
+}
+Status Array__CTokenFile_Push(struct Array__CTokenFile* this,struct CTokenFile value) {
+    Status status=Array__CTokenFile_Reserve(this,1);
+    if(status!=Status_Ok){return status;}
+    this->data[this->len]=value;
+    this->len+=1;
+    return Status_Ok;
+}
+struct Slice__CTokenFile Array__CTokenFile_Slice(struct Array__CTokenFile* this) {
+    struct Slice__CTokenFile out={0};
+    out.data=this->data;
+    out.len=this->len;
+    return out;
+}
+Status Array__CDecl_Destroy(struct Array__CDecl* this) {
+    if(this->data!=0){
+        kek_std_free(this->data);
+    }
+    this->data=0;
+    this->len=0;
+    this->cap=0;
+    return Status_Ok;
+}
+Status Array__CDecl_Reserve(struct Array__CDecl* this,usize additional) {
+    usize needed=this->len+additional;
+    if(needed<=this->cap){return Status_Ok;}
+    usize newCap=this->cap;
+    if(newCap==0){newCap=8;}
+    while(newCap<needed){newCap=newCap*2;}
+    struct CDecl* newData=(struct CDecl*)kek_std_resize(
+        this->data,newCap*sizeof(struct CDecl));
+    if(newData==0){return Status_NoMemory;}
+    this->data=newData;
+    this->cap=newCap;
+    return Status_Ok;
+}
+Status Array__CDecl_Push(struct Array__CDecl* this,struct CDecl value) {
+    Status status=Array__CDecl_Reserve(this,1);
+    if(status!=Status_Ok){return status;}
+    this->data[this->len]=value;
+    this->len+=1;
+    return Status_Ok;
+}
+struct Slice__CDecl Array__CDecl_Slice(struct Array__CDecl* this) {
+    struct Slice__CDecl out={0};
+    out.data=this->data;
+    out.len=this->len;
+    return out;
+}
+Status Array__CParam_Destroy(struct Array__CParam* this) {
+    if(this->data!=0){
+        kek_std_free(this->data);
+    }
+    this->data=0;
+    this->len=0;
+    this->cap=0;
+    return Status_Ok;
+}
+Status Array__CParam_Reserve(struct Array__CParam* this,usize additional) {
+    usize needed=this->len+additional;
+    if(needed<=this->cap){return Status_Ok;}
+    usize newCap=this->cap;
+    if(newCap==0){newCap=8;}
+    while(newCap<needed){newCap=newCap*2;}
+    struct CParam* newData=(struct CParam*)kek_std_resize(
+        this->data,newCap*sizeof(struct CParam));
+    if(newData==0){return Status_NoMemory;}
+    this->data=newData;
+    this->cap=newCap;
+    return Status_Ok;
+}
+Status Array__CParam_Push(struct Array__CParam* this,struct CParam value) {
+    Status status=Array__CParam_Reserve(this,1);
+    if(status!=Status_Ok){return status;}
+    this->data[this->len]=value;
+    this->len+=1;
+    return Status_Ok;
+}
+struct Slice__CParam Array__CParam_Slice(struct Array__CParam* this) {
+    struct Slice__CParam out={0};
+    out.data=this->data;
+    out.len=this->len;
+    return out;
+}
+Status Array__CField_Destroy(struct Array__CField* this) {
+    if(this->data!=0){
+        kek_std_free(this->data);
+    }
+    this->data=0;
+    this->len=0;
+    this->cap=0;
+    return Status_Ok;
+}
+Status Array__CField_Reserve(struct Array__CField* this,usize additional) {
+    usize needed=this->len+additional;
+    if(needed<=this->cap){return Status_Ok;}
+    usize newCap=this->cap;
+    if(newCap==0){newCap=8;}
+    while(newCap<needed){newCap=newCap*2;}
+    struct CField* newData=(struct CField*)kek_std_resize(
+        this->data,newCap*sizeof(struct CField));
+    if(newData==0){return Status_NoMemory;}
+    this->data=newData;
+    this->cap=newCap;
+    return Status_Ok;
+}
+Status Array__CField_Push(struct Array__CField* this,struct CField value) {
+    Status status=Array__CField_Reserve(this,1);
+    if(status!=Status_Ok){return status;}
+    this->data[this->len]=value;
+    this->len+=1;
+    return Status_Ok;
+}
+struct Slice__CField Array__CField_Slice(struct Array__CField* this) {
+    struct Slice__CField out={0};
+    out.data=this->data;
+    out.len=this->len;
+    return out;
+}
+Status Array__CTypeUse_Destroy(struct Array__CTypeUse* this) {
+    if(this->data!=0){
+        kek_std_free(this->data);
+    }
+    this->data=0;
+    this->len=0;
+    this->cap=0;
+    return Status_Ok;
+}
+Status Array__CTypeUse_Reserve(struct Array__CTypeUse* this,usize additional) {
+    usize needed=this->len+additional;
+    if(needed<=this->cap){return Status_Ok;}
+    usize newCap=this->cap;
+    if(newCap==0){newCap=8;}
+    while(newCap<needed){newCap=newCap*2;}
+    struct CTypeUse* newData=(struct CTypeUse*)kek_std_resize(
+        this->data,newCap*sizeof(struct CTypeUse));
+    if(newData==0){return Status_NoMemory;}
+    this->data=newData;
+    this->cap=newCap;
+    return Status_Ok;
+}
+Status Array__CTypeUse_Push(struct Array__CTypeUse* this,struct CTypeUse value) {
+    Status status=Array__CTypeUse_Reserve(this,1);
+    if(status!=Status_Ok){return status;}
+    this->data[this->len]=value;
+    this->len+=1;
+    return Status_Ok;
+}
+struct Slice__CTypeUse Array__CTypeUse_Slice(struct Array__CTypeUse* this) {
+    struct Slice__CTypeUse out={0};
+    out.data=this->data;
+    out.len=this->len;
+    return out;
+}
+Status Array__CFuncUse_Destroy(struct Array__CFuncUse* this) {
+    if(this->data!=0){
+        kek_std_free(this->data);
+    }
+    this->data=0;
+    this->len=0;
+    this->cap=0;
+    return Status_Ok;
+}
+Status Array__CFuncUse_Reserve(struct Array__CFuncUse* this,usize additional) {
+    usize needed=this->len+additional;
+    if(needed<=this->cap){return Status_Ok;}
+    usize newCap=this->cap;
+    if(newCap==0){newCap=8;}
+    while(newCap<needed){newCap=newCap*2;}
+    struct CFuncUse* newData=(struct CFuncUse*)kek_std_resize(
+        this->data,newCap*sizeof(struct CFuncUse));
+    if(newData==0){return Status_NoMemory;}
+    this->data=newData;
+    this->cap=newCap;
+    return Status_Ok;
+}
+Status Array__CFuncUse_Push(struct Array__CFuncUse* this,struct CFuncUse value) {
+    Status status=Array__CFuncUse_Reserve(this,1);
+    if(status!=Status_Ok){return status;}
+    this->data[this->len]=value;
+    this->len+=1;
+    return Status_Ok;
+}
+struct Slice__CFuncUse Array__CFuncUse_Slice(struct Array__CFuncUse* this) {
+    struct Slice__CFuncUse out={0};
+    out.data=this->data;
+    out.len=this->len;
+    return out;
+}
+Status Array__CTokenizeJob_Destroy(struct Array__CTokenizeJob* this) {
+    if(this->data!=0){
+        kek_std_free(this->data);
+    }
+    this->data=0;
+    this->len=0;
+    this->cap=0;
+    return Status_Ok;
+}
+Status Array__CTokenizeJob_Reserve(struct Array__CTokenizeJob* this,usize additional) {
+    usize needed=this->len+additional;
+    if(needed<=this->cap){return Status_Ok;}
+    usize newCap=this->cap;
+    if(newCap==0){newCap=8;}
+    while(newCap<needed){newCap=newCap*2;}
+    struct CTokenizeJob* newData=(struct CTokenizeJob*)kek_std_resize(
+        this->data,newCap*sizeof(struct CTokenizeJob));
+    if(newData==0){return Status_NoMemory;}
+    this->data=newData;
+    this->cap=newCap;
+    return Status_Ok;
+}
+Status Array__CTokenizeJob_Push(struct Array__CTokenizeJob* this,struct CTokenizeJob value) {
+    Status status=Array__CTokenizeJob_Reserve(this,1);
+    if(status!=Status_Ok){return status;}
+    this->data[this->len]=value;
+    this->len+=1;
+    return Status_Ok;
+}
+struct Slice__CTokenizeJob Array__CTokenizeJob_Slice(struct Array__CTokenizeJob* this) {
+    struct Slice__CTokenizeJob out={0};
+    out.data=this->data;
+    out.len=this->len;
+    return out;
+}
 int main(int argc,str* argv) {
-    return (kek_compiler_SelfCompilerMain(argc,argv));
+    return (kek_compiler_CompilerMain(argc,argv));
 }
 struct Allocator std_mem_DefaultAllocator(void) {
     return ((struct Allocator){.context=0});
-}
-void std_mem_SetBytes(byte* dest,byte value,usize count) {
-    kek_std_mem_set(dest,value,count);
-}
-struct String std_string_StringFromBytes(struct Slice__byte bytes) {
-    struct String out={0};
-    out.data=bytes.data;
-    out.len=bytes.len;
-    return (out);
 }
 struct String std_string_StringFromCString(str text) {
     struct String out={0};
@@ -1168,38 +1604,6 @@ bool String_Equals(struct String* this,struct String other) {
 }
 bool String_EqualsCString(struct String* this,str text) {
     return (String_Equals(this,std_string_StringFromCString(text)));
-}
-int String_Compare(struct String* this,struct String other) {
-    usize limit=this->len;
-    if (other.len<limit) {
-        limit=other.len;
-    }
-    for (usize i=0;i<limit;i++) {
-        if (this->data[i]<other.data[i]) {
-            return (-1);
-        }
-        if (this->data[i]>other.data[i]) {
-            return (1);
-        }
-    }
-    if (this->len<other.len) {
-        return (-1);
-    }
-    if (this->len>other.len) {
-        return (1);
-    }
-    return (0);
-}
-bool String_EqualsBytes(struct String* this,byte* data,usize len) {
-    if (this->len!=len) {
-        return (0);
-    }
-    for (usize i=0;i<len;i++) {
-        if (this->data[i]!=data[i]) {
-            return (0);
-        }
-    }
-    return (1);
 }
 struct Result__usize String_FindByte(struct String* this,byte value) {
     struct Result__usize result={0};
@@ -1251,9 +1655,6 @@ bool std_string_IsAsciiDigit(byte c) {
 }
 bool std_string_IsAsciiWord(byte c) {
     return (std_string_IsAsciiAlpha(c)||std_string_IsAsciiDigit(c));
-}
-bool std_string_IsAsciiOperator(byte c) {
-    return (c==33||c==37||c==38||c==42||c==43||c==45||c==47||c==60||c==61||c==62||c==94||c==124);
 }
 struct String OwnedString_View(struct OwnedString* this) {
     struct String out={0};
@@ -1320,10 +1721,6 @@ Status StringBuilder_Destroy(struct StringBuilder* this) {
     this->cap=0;
     return (Status_Ok);
 }
-Status StringBuilder_Clear(struct StringBuilder* this) {
-    this->len=0;
-    return (Status_Ok);
-}
 Status StringBuilder_Reserve(struct StringBuilder* this,usize additional) {
     usize needed=this->len+additional;
     if (needed<=this->cap) {
@@ -1371,18 +1768,6 @@ Status StringBuilder_WriteString(struct StringBuilder* this,struct String text) 
 Status StringBuilder_WriteCString(struct StringBuilder* this,str text) {
     return (StringBuilder_WriteString(this,std_string_StringFromCString(text)));
 }
-Status StringBuilder_WriteRepeatByte(struct StringBuilder* this,byte value,usize count) {
-    for (usize i=0;i<count;i++) {
-        Status status=StringBuilder_WriteByte(this,value);
-        if (status!=Status_Ok) {
-            return (status);
-        }
-    }
-    return (Status_Ok);
-}
-Status StringBuilder_WriteIndent(struct StringBuilder* this,usize count) {
-    return (StringBuilder_WriteRepeatByte(this,' ',count));
-}
 struct String StringBuilder_View(struct StringBuilder* this) {
     struct String out={0};
     out.data=this->data;
@@ -1402,20 +1787,6 @@ struct Result__OwnedString StringBuilder_Detach(struct StringBuilder* this) {
     result.status=Status_Ok;
     result.value=out;
     return (result);
-}
-struct Result__OwnedString StringBuilder_ToOwnedString(struct StringBuilder* this) {
-    return (StringBuilder_Detach(this));
-}
-Status std_string_WriteStringToBuilder(struct StringBuilder* builder,struct String text) {
-    struct Result__usize result=StringBuilder_Write(builder,String_Bytes(&text));
-    return (result.status);
-}
-Status std_string_WriteSliceToBuilder(struct StringBuilder* builder,struct Slice__byte data) {
-    struct Result__usize result=StringBuilder_Write(builder,data);
-    return (result.status);
-}
-Status std_string_DestroyStringBuilder(struct StringBuilder* builder) {
-    return (StringBuilder_Destroy(builder));
 }
 struct ByteCursor std_scan_ByteCursorNew(struct String input) {
     struct ByteCursor cursor={0};
@@ -1455,33 +1826,6 @@ byte ByteCursor_Advance(struct ByteCursor* this) {
     }
     return (value);
 }
-bool ByteCursor_MatchByte(struct ByteCursor* this,byte value) {
-    if (ByteCursor_Peek(this)!=value) {
-        return (0);
-    }
-    ByteCursor_Advance(this);
-    return (1);
-}
-Status ByteCursor_SkipAsciiWhitespace(struct ByteCursor* this) {
-    while (!ByteCursor_AtEnd(this)&&std_string_IsAsciiSpace(ByteCursor_Peek(this))) {
-        ByteCursor_Advance(this);
-    }
-    return (Status_Ok);
-}
-struct MemoryReader std_io_MemoryReaderNew(struct Slice__byte data) {
-    struct MemoryReader reader={0};
-    reader.data=data.data;
-    reader.len=data.len;
-    reader.pos=0;
-    return (reader);
-}
-struct MemoryWriter std_io_MemoryWriterNew(struct Span__byte data) {
-    struct MemoryWriter writer={0};
-    writer.data=data.data;
-    writer.len=data.len;
-    writer.pos=0;
-    return (writer);
-}
 struct Result__usize MemoryReader_Read(struct MemoryReader* this,struct Span__byte out) {
     struct Result__usize result={0};
     if (this->pos>=this->len) {
@@ -1516,14 +1860,6 @@ struct Result__usize MemoryWriter_Write(struct MemoryWriter* this,struct Slice__
     result.status=Status_Ok;
     result.value=data.len;
     return (result);
-}
-usize MemoryWriter_Written(struct MemoryWriter* this) {
-    return (this->pos);
-}
-Status std_io_WriteByteToMemory(struct MemoryWriter* writer,byte value) {
-    byte buffer[1]={value};
-    struct Result__usize result=MemoryWriter_Write(writer,std_core_FixedSlice__byte(buffer,1));
-    return (result.status);
 }
 struct Result__File std_file_FileOpen(str path,FileMode mode) {
     struct Result__File result={0};
@@ -1582,28 +1918,6 @@ struct Result__usize File_Write(struct File* this,struct Slice__byte data) {
     result.value=written;
     return (result);
 }
-Status File_Flush(struct File* this) {
-    if (this->handle==0) {
-        return (Status_Invalid);
-    }
-    if (kek_std_file_flush(this->handle)!=0) {
-        return (Status_IoError);
-    }
-    return (Status_Ok);
-}
-Status std_file_ReadFileToOwnedString(str path,struct Allocator allocator,struct OwnedString* out) {
-    struct Result__File opened=std_file_FileOpen(path,FileMode_Read);
-    if (opened.status!=Status_Ok) {
-        return (opened.status);
-    }
-    struct File file=opened.value;
-    Status status=std_file_ReadAllToOwnedString(file,allocator,out);
-    Status closeStatus=File_Close(&file);
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    return (closeStatus);
-}
 Status std_file_WriteFile(str path,struct String text) {
     struct Result__File opened=std_file_FileOpen(path,FileMode_Write);
     if (opened.status!=Status_Ok) {
@@ -1630,12 +1944,6 @@ Status File_Close(struct File* this) {
     this->handle=0;
     this->owned=0;
     return (Status_Ok);
-}
-struct File std_file_Stdin(void) {
-    struct File file={0};
-    file.handle=kek_std_stdin();
-    file.owned=0;
-    return (file);
 }
 struct File std_file_Stdout(void) {
     struct File file={0};
@@ -1676,34 +1984,6 @@ Status std_file_ReadAllToOwnedString(struct File file,struct Allocator allocator
     builder.cap=0;
     return (Status_Ok);
 }
-struct Result__Directory std_dir_DirectoryOpen(str path) {
-    struct Result__Directory result={0};
-    RawHandle handle=kek_std_dir_open(path);
-    if (handle==0) {
-        result.status=Status_NotFound;
-        return (result);
-    }
-    struct Directory directory={0};
-    directory.handle=handle;
-    result.status=Status_Ok;
-    result.value=directory;
-    return (result);
-}
-struct Result__String Directory_ReadName(struct Directory* this) {
-    struct Result__String result={0};
-    if (this->handle==0) {
-        result.status=Status_Invalid;
-        return (result);
-    }
-    str name=kek_std_dir_read_name(this->handle);
-    if (name==0) {
-        result.status=Status_End;
-        return (result);
-    }
-    result.status=Status_Ok;
-    result.value=std_string_StringFromCString(name);
-    return (result);
-}
 Status Directory_Close(struct Directory* this) {
     if (this->handle==0) {
         return (Status_Invalid);
@@ -1719,42 +1999,9 @@ Status std_format_WriteByteToBuilder(struct StringBuilder* writer,byte value) {
     struct Result__usize result=StringBuilder_Write(writer,std_core_FixedSlice__byte(buffer,1));
     return (result.status);
 }
-Status std_format_WriteByteToFile(struct File* writer,byte value) {
-    byte buffer[1]={value};
-    struct Result__usize result=File_Write(writer,std_core_FixedSlice__byte(buffer,1));
-    return (result.status);
-}
-Status std_format_WriteStringToMemory(struct MemoryWriter* writer,struct String text) {
-    struct Result__usize result=MemoryWriter_Write(writer,String_Bytes(&text));
-    return (result.status);
-}
 Status std_format_WriteStringToFile(struct File* writer,struct String text) {
     struct Result__usize result=File_Write(writer,String_Bytes(&text));
     return (result.status);
-}
-Status std_format_WriteBoolToBuilder(struct StringBuilder* writer,bool value) {
-    byte trueText[4]={116,114,117,101};
-    byte falseText[5]={102,97,108,115,101};
-    if (value) {
-        return (std_string_WriteStringToBuilder(writer,std_string_StringFromBytes(std_core_FixedSlice__byte(trueText,((void)(trueText),4)))));
-    }
-    return (std_string_WriteStringToBuilder(writer,std_string_StringFromBytes(std_core_FixedSlice__byte(falseText,((void)(falseText),5)))));
-}
-Status std_format_WriteBoolToMemory(struct MemoryWriter* writer,bool value) {
-    byte trueText[4]={116,114,117,101};
-    byte falseText[5]={102,97,108,115,101};
-    if (value) {
-        return (std_format_WriteStringToMemory(writer,std_string_StringFromBytes(std_core_FixedSlice__byte(trueText,((void)(trueText),4)))));
-    }
-    return (std_format_WriteStringToMemory(writer,std_string_StringFromBytes(std_core_FixedSlice__byte(falseText,((void)(falseText),5)))));
-}
-Status std_format_WriteBoolToFile(struct File* writer,bool value) {
-    byte trueText[4]={116,114,117,101};
-    byte falseText[5]={102,97,108,115,101};
-    if (value) {
-        return (std_format_WriteStringToFile(writer,std_string_StringFromBytes(std_core_FixedSlice__byte(trueText,((void)(trueText),4)))));
-    }
-    return (std_format_WriteStringToFile(writer,std_string_StringFromBytes(std_core_FixedSlice__byte(falseText,((void)(falseText),5)))));
 }
 Status std_format_FormatU64ToBuilder(struct StringBuilder* writer,u64 value,u8 base) {
     byte digits[16]={48,49,50,51,52,53,54,55,56,57,65,66,67,68,69,70,};
@@ -1795,57 +2042,59 @@ Status std_format_FormatI64ToBuilder(struct StringBuilder* writer,i64 value) {
     }
     return (std_format_FormatU64ToBuilder(writer,((u64)(value)),10));
 }
-Status std_format_FormatBoolToBuilder(struct StringBuilder* writer,bool value) {
-    return (std_format_WriteBoolToBuilder(writer,value));
-}
-int std_process_ProcessRun(str command) {
-    return (kek_std_system(command));
-}
-struct SelfSourceLocation kek_diagnostics_SelfSourceLocationNew(usize line,usize column,usize offset,usize length) {
-    struct SelfSourceLocation location={0};
+struct SourceLocation kek_diagnostics_SourceLocationNew(usize line,usize column,usize offset,usize length) {
+    struct SourceLocation location={0};
     location.line=line;
     location.column=column;
     location.offset=offset;
     location.length=length;
     return (location);
 }
-void kek_diagnostics_SelfDiagnosticBagInit(struct SelfDiagnosticBag* bag,struct Allocator allocator) {
-    bag->count=0;
+void kek_diagnostics_DiagnosticBagInit(struct DiagnosticBag* bag,struct Allocator allocator) {
+    bag->items=std_array_ArrayNew__Diagnostic(allocator);
     bag->errorCount=0;
-    bag->allocator=allocator;
 }
-Status kek_diagnostics_SelfDiagnosticBagDestroy(struct SelfDiagnosticBag* bag) {
-    for (usize i=0;i<bag->count;i++) {
-        std_string_DestroyOwnedString(&bag->items[i].message);
+Status kek_diagnostics_DiagnosticBagDestroy(struct DiagnosticBag* bag) {
+    for (usize i=0;i<bag->items.len;i++) {
+        std_string_DestroyOwnedString(&bag->items.data[i].message);
     }
-    bag->count=0;
+    struct Array__Diagnostic items=bag->items;
+    Status status=Array__Diagnostic_Destroy(&items);
+    bag->items=items;
     bag->errorCount=0;
-    return (Status_Ok);
+    return (status);
 }
-Status kek_diagnostics_SelfDiagnosticAdd(struct SelfDiagnosticBag* bag,SelfDiagnosticSeverity severity,SelfDiagnosticPhase phase,i64 fileIndex,struct SelfSourceLocation location,struct String message) {
-    if (severity==SelfDiagnosticSeverity_Error) {
-        bag->errorCount+=1;
+Status kek_diagnostics_DiagnosticBagReserve(struct DiagnosticBag* bag,usize additional) {
+    struct Array__Diagnostic items=bag->items;
+    Status status=Array__Diagnostic_Reserve(&items,additional);
+    bag->items=items;
+    return (status);
+}
+Status kek_diagnostics_DiagnosticAdd(struct DiagnosticBag* bag,DiagnosticSeverity severity,DiagnosticPhase phase,i64 fileIndex,struct SourceLocation location,struct String message) {
+    Status status=kek_diagnostics_DiagnosticBagReserve(bag,1);
+    if (status!=Status_Ok) {
+        return (status);
     }
-    if (bag->count>=(sizeof(bag->items)/sizeof((bag->items)[0]))) {
-        return (Status_NoMemory);
-    }
-    struct SelfDiagnostic* diagnostic=&bag->items[bag->count];
+    struct Diagnostic* diagnostic=&bag->items.data[bag->items.len];
     diagnostic->severity=severity;
     diagnostic->phase=phase;
     diagnostic->fileIndex=fileIndex;
     diagnostic->location=location;
-    Status status=std_string_CloneString(message,bag->allocator,&diagnostic->message);
+    status=std_string_CloneString(message,bag->items.allocator,&diagnostic->message);
     if (status!=Status_Ok) {
         return (status);
     }
-    bag->count+=1;
+    bag->items.len+=1;
+    if (severity==DiagnosticSeverity_Error) {
+        bag->errorCount+=1;
+    }
     return (Status_Ok);
 }
-Status kek_diagnostics_SelfDiagnosticAddCString(struct SelfDiagnosticBag* bag,SelfDiagnosticSeverity severity,SelfDiagnosticPhase phase,i64 fileIndex,struct SelfSourceLocation location,str message) {
-    return (kek_diagnostics_SelfDiagnosticAdd(bag,severity,phase,fileIndex,location,std_string_StringFromCString(message)));
+Status kek_diagnostics_DiagnosticAddCString(struct DiagnosticBag* bag,DiagnosticSeverity severity,DiagnosticPhase phase,i64 fileIndex,struct SourceLocation location,str message) {
+    return (kek_diagnostics_DiagnosticAdd(bag,severity,phase,fileIndex,location,std_string_StringFromCString(message)));
 }
-Status kek_diagnostics_SelfDiagnosticAddPathMessage(struct SelfDiagnosticBag* bag,SelfDiagnosticSeverity severity,SelfDiagnosticPhase phase,i64 fileIndex,struct SelfSourceLocation location,str prefix,struct String path) {
-    struct StringBuilder builder=std_string_StringBuilderNew(bag->allocator);
+Status kek_diagnostics_DiagnosticAddPathMessage(struct DiagnosticBag* bag,DiagnosticSeverity severity,DiagnosticPhase phase,i64 fileIndex,struct SourceLocation location,str prefix,struct String path) {
+    struct StringBuilder builder=std_string_StringBuilderNew(bag->items.allocator);
     Status status=StringBuilder_WriteCString(&builder,prefix);
     if (status==Status_Ok) {
         status=StringBuilder_WriteString(&builder,path);
@@ -1855,11 +2104,11 @@ Status kek_diagnostics_SelfDiagnosticAddPathMessage(struct SelfDiagnosticBag* ba
         return (status);
     }
     struct String message=StringBuilder_View(&builder);
-    status=kek_diagnostics_SelfDiagnosticAdd(bag,severity,phase,fileIndex,location,message);
+    status=kek_diagnostics_DiagnosticAdd(bag,severity,phase,fileIndex,location,message);
     StringBuilder_Destroy(&builder);
     return (status);
 }
-Status kek_diagnostics_SelfWriteU64Field(struct StringBuilder* out,u64 value,bool separator) {
+Status kek_diagnostics_WriteU64Field(struct StringBuilder* out,u64 value,bool separator) {
     Status status=std_format_FormatU64ToBuilder(out,value,10);
     if (status!=Status_Ok) {
         return (status);
@@ -1869,7 +2118,7 @@ Status kek_diagnostics_SelfWriteU64Field(struct StringBuilder* out,u64 value,boo
     }
     return (Status_Ok);
 }
-Status kek_diagnostics_SelfWriteI64Field(struct StringBuilder* out,i64 value,bool separator) {
+Status kek_diagnostics_WriteI64Field(struct StringBuilder* out,i64 value,bool separator) {
     Status status=std_format_FormatI64ToBuilder(out,value);
     if (status!=Status_Ok) {
         return (status);
@@ -1879,38 +2128,38 @@ Status kek_diagnostics_SelfWriteI64Field(struct StringBuilder* out,i64 value,boo
     }
     return (Status_Ok);
 }
-Status kek_diagnostics_SelfWriteDiagnosticDump(struct SelfDiagnosticBag* bag,struct StringBuilder* out) {
-    for (usize i=0;i<bag->count;i++) {
-        struct SelfDiagnostic* diagnostic=&bag->items[i];
+Status kek_diagnostics_WriteDiagnosticDump(struct DiagnosticBag* bag,struct StringBuilder* out) {
+    for (usize i=0;i<bag->items.len;i++) {
+        struct Diagnostic* diagnostic=&bag->items.data[i];
         Status status=StringBuilder_WriteCString(out,"diag|");
         if (status!=Status_Ok) {
             return (status);
         }
-        status=kek_diagnostics_SelfWriteU64Field(out,((u64)(diagnostic->severity)),1);
+        status=kek_diagnostics_WriteU64Field(out,((u64)(diagnostic->severity)),1);
         if (status!=Status_Ok) {
             return (status);
         }
-        status=kek_diagnostics_SelfWriteU64Field(out,((u64)(diagnostic->phase)),1);
+        status=kek_diagnostics_WriteU64Field(out,((u64)(diagnostic->phase)),1);
         if (status!=Status_Ok) {
             return (status);
         }
-        status=kek_diagnostics_SelfWriteI64Field(out,diagnostic->fileIndex,1);
+        status=kek_diagnostics_WriteI64Field(out,diagnostic->fileIndex,1);
         if (status!=Status_Ok) {
             return (status);
         }
-        status=kek_diagnostics_SelfWriteU64Field(out,((u64)(diagnostic->location.line)),1);
+        status=kek_diagnostics_WriteU64Field(out,((u64)(diagnostic->location.line)),1);
         if (status!=Status_Ok) {
             return (status);
         }
-        status=kek_diagnostics_SelfWriteU64Field(out,((u64)(diagnostic->location.column)),1);
+        status=kek_diagnostics_WriteU64Field(out,((u64)(diagnostic->location.column)),1);
         if (status!=Status_Ok) {
             return (status);
         }
-        status=kek_diagnostics_SelfWriteU64Field(out,((u64)(diagnostic->location.offset)),1);
+        status=kek_diagnostics_WriteU64Field(out,((u64)(diagnostic->location.offset)),1);
         if (status!=Status_Ok) {
             return (status);
         }
-        status=kek_diagnostics_SelfWriteU64Field(out,((u64)(diagnostic->location.length)),1);
+        status=kek_diagnostics_WriteU64Field(out,((u64)(diagnostic->location.length)),1);
         if (status!=Status_Ok) {
             return (status);
         }
@@ -1926,23 +2175,24 @@ Status kek_diagnostics_SelfWriteDiagnosticDump(struct SelfDiagnosticBag* bag,str
     }
     return (Status_Ok);
 }
-void kek_source_SelfFileTableInit(struct SelfFileTable* table,struct Allocator allocator) {
-    table->count=0;
-    table->allocator=allocator;
+void kek_source_FileTableInit(struct FileTable* table,struct Allocator allocator) {
+    table->files=std_array_ArrayNew__SourceFile(allocator);
 }
-Status kek_source_SelfFileTableDestroy(struct SelfFileTable* table) {
-    for (usize i=0;i<table->count;i++) {
-        std_string_DestroyOwnedString(&table->files[i].path);
-        std_string_DestroyOwnedString(&table->files[i].content);
+Status kek_source_FileTableDestroy(struct FileTable* table) {
+    for (usize i=0;i<table->files.len;i++) {
+        std_string_DestroyOwnedString(&table->files.data[i].path);
+        std_string_DestroyOwnedString(&table->files.data[i].content);
     }
-    table->count=0;
-    return (Status_Ok);
+    struct Array__SourceFile files=table->files;
+    Status status=Array__SourceFile_Destroy(&files);
+    table->files=files;
+    return (status);
 }
-bool kek_source_SelfStringEndsWithCString(struct String text,str suffixText) {
+bool kek_source_StringEndsWithCString(struct String text,str suffixText) {
     struct String suffix=std_string_StringFromCString(suffixText);
     return (String_EndsWith(&text,suffix));
 }
-Status kek_source_SelfNormalizePath(struct String path,struct Allocator allocator,struct OwnedString* out) {
+Status kek_source_NormalizePath(struct String path,struct Allocator allocator,struct OwnedString* out) {
     struct StringBuilder builder=std_string_StringBuilderNew(allocator);
     bool previousSlash=0;
     usize i=0;
@@ -1983,45 +2233,49 @@ Status kek_source_SelfNormalizePath(struct String path,struct Allocator allocato
     out->allocator=detached.value.allocator;
     return (Status_Ok);
 }
-bool kek_source_SelfFileAlreadyLoaded(struct SelfFileTable* table,struct String path) {
-    for (usize i=0;i<table->count;i++) {
-        struct String filePath=std_string_OwnedStringView(&table->files[i].path);
+bool kek_source_FileAlreadyLoaded(struct FileTable* table,struct String path) {
+    for (usize i=0;i<table->files.len;i++) {
+        struct String filePath=std_string_OwnedStringView(&table->files.data[i].path);
         if (String_Equals(&filePath,path)) {
             return (1);
         }
     }
     return (0);
 }
-Status kek_source_SelfAddSourceDiagnostic(struct SelfDiagnosticBag* diagnostics,str message) {
-    return (kek_diagnostics_SelfDiagnosticAddCString(diagnostics,SelfDiagnosticSeverity_Error,SelfDiagnosticPhase_Source,-1,kek_diagnostics_SelfSourceLocationNew(0,0,0,0),message));
+Status kek_source_FileTableReserve(struct FileTable* table,usize additional) {
+    struct Array__SourceFile files=table->files;
+    Status status=Array__SourceFile_Reserve(&files,additional);
+    table->files=files;
+    return (status);
 }
-Status kek_source_SelfReadFile(struct String path,struct SelfFileTable* table,struct SelfDiagnosticBag* diagnostics) {
+Status kek_source_ReadFile(struct String path,struct FileTable* table,struct DiagnosticBag* diagnostics) {
     struct OwnedString normalized={0};
-    Status status=kek_source_SelfNormalizePath(path,table->allocator,&normalized);
+    Status status=kek_source_NormalizePath(path,table->files.allocator,&normalized);
     if (status!=Status_Ok) {
         return (status);
     }
     struct String normalizedPath=std_string_OwnedStringView(&normalized);
-    if (kek_source_SelfFileAlreadyLoaded(table,normalizedPath)) {
+    if (kek_source_FileAlreadyLoaded(table,normalizedPath)) {
         std_string_DestroyOwnedString(&normalized);
         return (Status_Ok);
     }
-    if (table->count>=(sizeof(table->files)/sizeof((table->files)[0]))) {
+    status=kek_source_FileTableReserve(table,1);
+    if (status!=Status_Ok) {
         std_string_DestroyOwnedString(&normalized);
-        return (kek_source_SelfAddSourceDiagnostic(diagnostics,"file table is full"));
+        return (status);
     }
     struct Result__File opened=std_file_FileOpen(((str)(normalized.data)),FileMode_Read);
     if (opened.status!=Status_Ok) {
-        status=kek_diagnostics_SelfDiagnosticAddPathMessage(diagnostics,SelfDiagnosticSeverity_Error,SelfDiagnosticPhase_Source,-1,kek_diagnostics_SelfSourceLocationNew(0,0,0,0),"could not open file ",normalizedPath);
+        status=kek_diagnostics_DiagnosticAddPathMessage(diagnostics,DiagnosticSeverity_Error,DiagnosticPhase_Source,-1,kek_diagnostics_SourceLocationNew(0,0,0,0),"could not open file ",normalizedPath);
         std_string_DestroyOwnedString(&normalized);
         return (status);
     }
     struct OwnedString content={0};
     struct File file=opened.value;
-    status=std_file_ReadAllToOwnedString(file,table->allocator,&content);
+    status=std_file_ReadAllToOwnedString(file,table->files.allocator,&content);
     Status closeStatus=File_Close(&file);
     if (status!=Status_Ok) {
-        kek_diagnostics_SelfDiagnosticAddPathMessage(diagnostics,SelfDiagnosticSeverity_Error,SelfDiagnosticPhase_Source,-1,kek_diagnostics_SelfSourceLocationNew(0,0,0,0),"could not read file ",normalizedPath);
+        kek_diagnostics_DiagnosticAddPathMessage(diagnostics,DiagnosticSeverity_Error,DiagnosticPhase_Source,-1,kek_diagnostics_SourceLocationNew(0,0,0,0),"could not read file ",normalizedPath);
         std_string_DestroyOwnedString(&normalized);
         return (status);
     }
@@ -2030,14 +2284,14 @@ Status kek_source_SelfReadFile(struct String path,struct SelfFileTable* table,st
         std_string_DestroyOwnedString(&normalized);
         return (closeStatus);
     }
-    struct SelfSourceFile* source=&table->files[table->count];
+    struct SourceFile* source=&table->files.data[table->files.len];
     source->path=normalized;
     source->content=content;
-    source->fileIndex=table->count;
-    table->count+=1;
+    source->fileIndex=table->files.len;
+    table->files.len+=1;
     return (Status_Ok);
 }
-bool kek_source_SelfImportDirectiveAt(struct String source,usize cursor) {
+bool kek_source_ImportDirectiveAt(struct String source,usize cursor) {
     usize lineStart=cursor;
     while (lineStart>0&&source.data[lineStart-1]!='\n'&&source.data[lineStart-1]!='\r') {
         lineStart-=1;
@@ -2050,22 +2304,23 @@ bool kek_source_SelfImportDirectiveAt(struct String source,usize cursor) {
     }
     return (1);
 }
-Status kek_source_SelfLoadImportFile(struct SelfFileTable* table,struct String path,struct SelfDiagnosticBag* diagnostics,i64 fileIndex,struct SelfSourceLocation location) {
-    if (!kek_source_SelfStringEndsWithCString(path,".kek")) {
-        return (kek_diagnostics_SelfDiagnosticAddPathMessage(diagnostics,SelfDiagnosticSeverity_Error,SelfDiagnosticPhase_Source,fileIndex,location,"import path must name a .kek file ",path));
+Status kek_source_LoadImportFile(struct FileTable* table,struct String path,struct DiagnosticBag* diagnostics,i64 fileIndex,struct SourceLocation location) {
+    if (!kek_source_StringEndsWithCString(path,".kek")) {
+        return (kek_diagnostics_DiagnosticAddPathMessage(diagnostics,DiagnosticSeverity_Error,DiagnosticPhase_Source,fileIndex,location,"import path must name a .kek file ",path));
     }
-    usize before=table->count;
-    Status status=kek_source_SelfReadFile(path,table,diagnostics);
+    usize before=table->files.len;
+    Status status=kek_source_ReadFile(path,table,diagnostics);
     if (status!=Status_Ok) {
         return (status);
     }
-    if (table->count>before) {
-        return (kek_source_SelfLoadImports(table,&table->files[before],diagnostics));
+    if (table->files.len>before) {
+        return (kek_source_LoadImports(table,&table->files.data[before],diagnostics));
     }
     return (Status_Ok);
 }
-Status kek_source_SelfLoadImports(struct SelfFileTable* table,struct SelfSourceFile* file,struct SelfDiagnosticBag* diagnostics) {
+Status kek_source_LoadImports(struct FileTable* table,struct SourceFile* file,struct DiagnosticBag* diagnostics) {
     struct String source=std_string_OwnedStringView(&file->content);
+    usize currentFileIndex=file->fileIndex;
     struct String prefix=std_string_StringFromCString("#import");
     usize cursor=0;
     while (cursor+prefix.len+1<=source.len) {
@@ -2080,7 +2335,7 @@ Status kek_source_SelfLoadImports(struct SelfFileTable* table,struct SelfSourceF
             cursor+=1;
             continue;
         }
-        if (!kek_source_SelfImportDirectiveAt(source,cursor)) {
+        if (!kek_source_ImportDirectiveAt(source,cursor)) {
             cursor+=1;
             continue;
         }
@@ -2093,16 +2348,16 @@ Status kek_source_SelfLoadImports(struct SelfFileTable* table,struct SelfSourceF
         while (end<source.len&&source.data[end]!=')') {
             end+=1;
         }
-        struct SelfSourceLocation location=kek_diagnostics_SelfSourceLocationNew(1,1,cursor,prefix.len);
+        struct SourceLocation location=kek_diagnostics_SourceLocationNew(1,1,cursor,prefix.len);
         if (end>=source.len) {
-            return (kek_diagnostics_SelfDiagnosticAddCString(diagnostics,SelfDiagnosticSeverity_Error,SelfDiagnosticPhase_Source,((i64)(file->fileIndex)),location,"unterminated import"));
+            return (kek_diagnostics_DiagnosticAddCString(diagnostics,DiagnosticSeverity_Error,DiagnosticPhase_Source,((i64)(currentFileIndex)),location,"unterminated import"));
         }
         usize length=end-start;
         if (length==0) {
-            return (kek_diagnostics_SelfDiagnosticAddCString(diagnostics,SelfDiagnosticSeverity_Error,SelfDiagnosticPhase_Source,((i64)(file->fileIndex)),location,"invalid import path"));
+            return (kek_diagnostics_DiagnosticAddCString(diagnostics,DiagnosticSeverity_Error,DiagnosticPhase_Source,((i64)(currentFileIndex)),location,"invalid import path"));
         }
         struct String importPath=String_Slice(&source,start,length);
-        Status status=kek_source_SelfLoadImportFile(table,importPath,diagnostics,((i64)(file->fileIndex)),location);
+        Status status=kek_source_LoadImportFile(table,importPath,diagnostics,((i64)(currentFileIndex)),location);
         if (status!=Status_Ok) {
             return (status);
         }
@@ -2110,53 +2365,13 @@ Status kek_source_SelfLoadImports(struct SelfFileTable* table,struct SelfSourceF
     }
     return (Status_Ok);
 }
-Status kek_source_SelfLoadCompilationSources(str entryPath,struct Allocator allocator,struct SelfFileTable* table,struct SelfDiagnosticBag* diagnostics) {
-    kek_source_SelfFileTableInit(table,allocator);
-    Status status=kek_source_SelfReadFile(std_string_StringFromCString(entryPath),table,diagnostics);
+Status kek_source_LoadCompilationSources(str entryPath,struct Allocator allocator,struct FileTable* table,struct DiagnosticBag* diagnostics) {
+    kek_source_FileTableInit(table,allocator);
+    Status status=kek_source_ReadFile(std_string_StringFromCString(entryPath),table,diagnostics);
     if (status!=Status_Ok) {
         return (status);
     }
-    return (kek_source_SelfLoadImports(table,&table->files[0],diagnostics));
-}
-Status kek_source_SelfWriteSourceDump(struct SelfFileTable* table,struct SelfDiagnosticBag* diagnostics,struct StringBuilder* out) {
-    for (usize i=0;i<table->count;i++) {
-        struct SelfSourceFile* file=&table->files[i];
-        Status status=StringBuilder_WriteCString(out,"file|");
-        if (status!=Status_Ok) {
-            return (status);
-        }
-        status=kek_diagnostics_SelfWriteU64Field(out,((u64)(file->fileIndex)),1);
-        if (status!=Status_Ok) {
-            return (status);
-        }
-        struct String filePath=std_string_OwnedStringView(&file->path);
-        status=StringBuilder_WriteString(out,filePath);
-        if (status!=Status_Ok) {
-            return (status);
-        }
-        status=StringBuilder_WriteByte(out,'|');
-        if (status!=Status_Ok) {
-            return (status);
-        }
-        status=kek_diagnostics_SelfWriteU64Field(out,((u64)(file->content.len)),0);
-        if (status!=Status_Ok) {
-            return (status);
-        }
-        status=StringBuilder_WriteByte(out,'\n');
-        if (status!=Status_Ok) {
-            return (status);
-        }
-    }
-    return (kek_diagnostics_SelfWriteDiagnosticDump(diagnostics,out));
-}
-usize kek_tokenizer_TokenizerGenericFootprint(void) {
-    struct Slice__Token slice={0};
-    struct Span__Token span={0};
-    struct Result__Token result={0};
-    slice.len=0;
-    span.len=slice.len;
-    result.status=Status_Ok;
-    return (span.len+((usize)(result.status)));
+    return (kek_source_LoadImports(table,&table->files.data[0],diagnostics));
 }
 struct Token kek_tokenizer_TokenNew(TokenKind kind,u64 subkind,usize line,usize column,usize offset,usize length) {
     struct Token token={0};
@@ -2634,53 +2849,12 @@ struct Token Tokenizer_Next(struct Tokenizer* this) {
     Tokenizer_Advance(this);
     return (kek_tokenizer_TokenNew(TokenKind_Identifier,0,line,column,start,1));
 }
-Status kek_tokenizer_TokenArrayReserve(struct Array__Token* tokens,usize additional) {
-    usize needed=tokens->len+additional;
-    if (needed<=tokens->cap) {
-        return (Status_Ok);
-    }
-    usize newCap=tokens->cap;
-    if (newCap==0) {
-        newCap=64;
-    }
-    while (newCap<needed) {
-        newCap=newCap*2;
-    }
-    struct Token* newData=std_mem_Resize__Token(tokens->allocator,tokens->data,tokens->cap,newCap);
-    if (newData==0) {
-        return (Status_NoMemory);
-    }
-    tokens->data=newData;
-    tokens->cap=newCap;
-    return (Status_Ok);
-}
-Status kek_tokenizer_TokenArrayPush(struct Array__Token* tokens,struct Token token) {
-    Status status=kek_tokenizer_TokenArrayReserve(tokens,1);
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    tokens->data[tokens->len]=token;
-    tokens->len+=1;
-    return (Status_Ok);
-}
-Status kek_tokenizer_TokenArrayDestroy(struct Array__Token* tokens) {
-    if (tokens->data!=0) {
-        std_mem_Free__Token(tokens->allocator,tokens->data,tokens->cap);
-    }
-    tokens->data=0;
-    tokens->len=0;
-    tokens->cap=0;
-    return (Status_Ok);
-}
 Status kek_tokenizer_TokenizeToArray(struct String source,bool emitComments,struct Allocator allocator,struct Array__Token* out) {
-    out->data=0;
-    out->len=0;
-    out->cap=0;
-    out->allocator=allocator;
+    out[0]=std_array_ArrayNew__Token(allocator);
     struct Tokenizer tokenizer=kek_tokenizer_TokenizerNew(source,emitComments);
     while (1) {
         struct Token token=Tokenizer_Next(&tokenizer);
-        Status status=kek_tokenizer_TokenArrayPush(out,token);
+        Status status=Array__Token_Push(out,token);
         if (status!=Status_Ok) {
             return (status);
         }
@@ -2690,105 +2864,33 @@ Status kek_tokenizer_TokenizeToArray(struct String source,bool emitComments,stru
     }
     return (Status_Ok);
 }
-Status kek_tokenizer_WriteTokenField(struct StringBuilder* out,u64 value,bool separator) {
-    Status status=std_format_FormatU64ToBuilder(out,value,10);
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    if (separator) {
-        return (StringBuilder_WriteByte(out,'|'));
-    }
-    return (Status_Ok);
+struct SourceLocation kek_ast_TokenLocation(struct Token token) {
+    return (kek_diagnostics_SourceLocationNew(token.line,token.column,token.offset,token.length));
 }
-Status kek_tokenizer_WriteTokenDumpLine(struct Token token,struct StringBuilder* out) {
-    Status status=kek_tokenizer_WriteTokenField(out,((u64)(token.kind)),1);
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    status=kek_tokenizer_WriteTokenField(out,token.subkind,1);
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    status=kek_tokenizer_WriteTokenField(out,((u64)(token.line)),1);
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    status=kek_tokenizer_WriteTokenField(out,((u64)(token.column)),1);
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    status=kek_tokenizer_WriteTokenField(out,((u64)(token.offset)),1);
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    status=kek_tokenizer_WriteTokenField(out,((u64)(token.length)),0);
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    return (StringBuilder_WriteByte(out,'\n'));
+Status kek_ast_AstTreeReserve(struct AstTree* tree,usize additional) {
+    struct Array__AstNode nodes=tree->nodes;
+    Status status=Array__AstNode_Reserve(&nodes,additional);
+    tree->nodes=nodes;
+    return (status);
 }
-Status kek_tokenizer_WriteTokenDump(struct String source,bool emitComments,struct StringBuilder* out) {
-    struct Array__Token tokens={0};
-    Status status=kek_tokenizer_TokenizeToArray(source,emitComments,out->allocator,&tokens);
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    for (usize i=0;i<tokens.len;i++) {
-        status=kek_tokenizer_WriteTokenDumpLine(tokens.data[i],out);
-        if (status!=Status_Ok) {
-            kek_tokenizer_TokenArrayDestroy(&tokens);
-            return (status);
-        }
-    }
-    return (kek_tokenizer_TokenArrayDestroy(&tokens));
-}
-struct SelfSourceLocation kek_ast_TokenLocation(struct Token token) {
-    return (kek_diagnostics_SelfSourceLocationNew(token.line,token.column,token.offset,token.length));
-}
-Status kek_ast_SelfAstTreeReserve(struct SelfAstTree* tree,usize additional) {
-    usize needed=tree->len+additional;
-    if (needed<=tree->cap) {
-        return (Status_Ok);
-    }
-    usize newCap=tree->cap;
-    if (newCap==0) {
-        newCap=128;
-    }
-    while (newCap<needed) {
-        newCap=newCap*2;
-    }
-    struct SelfAstNode* newData=std_mem_Resize__SelfAstNode(tree->allocator,tree->nodes,tree->cap,newCap);
-    if (newData==0) {
-        return (Status_NoMemory);
-    }
-    tree->nodes=newData;
-    tree->cap=newCap;
-    return (Status_Ok);
-}
-Status kek_ast_SelfAstTreeInit(struct SelfAstTree* tree,struct Allocator allocator) {
-    tree->nodes=0;
-    tree->len=0;
-    tree->cap=0;
+Status kek_ast_AstTreeInit(struct AstTree* tree,struct Allocator allocator) {
+    tree->nodes=std_array_ArrayNew__AstNode(allocator);
     tree->root=0;
-    tree->allocator=allocator;
-    Status status=kek_ast_SelfAstTreeReserve(tree,1);
+    Status status=kek_ast_AstTreeReserve(tree,1);
     if (status!=Status_Ok) {
         return (status);
     }
-    struct SelfAstNode sentinel={0};
-    tree->nodes[0]=sentinel;
-    tree->len=1;
+    struct AstNode sentinel={0};
+    tree->nodes.data[0]=sentinel;
+    tree->nodes.len=1;
     return (Status_Ok);
 }
-Status kek_ast_SelfAstTreeDestroy(struct SelfAstTree* tree) {
-    if (tree->nodes!=0) {
-        std_mem_Free__SelfAstNode(tree->allocator,tree->nodes,tree->cap);
-    }
-    tree->nodes=0;
-    tree->len=0;
-    tree->cap=0;
+Status kek_ast_AstTreeDestroy(struct AstTree* tree) {
+    struct Array__AstNode nodes=tree->nodes;
+    Status status=Array__AstNode_Destroy(&nodes);
+    tree->nodes=nodes;
     tree->root=0;
-    return (Status_Ok);
+    return (status);
 }
 bool kek_ast_IsPunctuationToken(struct Token* token,PunctuationKind punctuation) {
     return (token->kind==TokenKind_Punctuation&&token->subkind==((u64)(punctuation)));
@@ -2817,7 +2919,7 @@ bool kek_ast_IsAstTerminator(struct Token* token,u64 closePunctuation) {
 bool kek_ast_IsGenericTerminator(struct Token* token) {
     return (token->kind==TokenKind_Eof||kek_ast_IsOperatorToken(token,OperatorKind_Greater));
 }
-bool kek_ast_SelfTokenTextEquals(struct SelfParser* parser,struct Token* token,str text) {
+bool kek_ast_TokenTextEquals(struct Parser* parser,struct Token* token,str text) {
     usize length=0;
     while (text[length]!=0) {
         length+=1;
@@ -2838,63 +2940,63 @@ bool kek_ast_SelfTokenTextEquals(struct SelfParser* parser,struct Token* token,s
     }
     return (1);
 }
-usize kek_ast_SelfCreateAstNode(struct SelfParser* parser,SelfAstKind kind,struct SelfSourceLocation location) {
-    Status status=kek_ast_SelfAstTreeReserve(&parser->tree,1);
+usize kek_ast_CreateAstNode(struct Parser* parser,AstKind kind,struct SourceLocation location) {
+    Status status=kek_ast_AstTreeReserve(&parser->tree,1);
     if (status!=Status_Ok) {
-        kek_diagnostics_SelfDiagnosticAddCString(parser->diagnostics,SelfDiagnosticSeverity_Error,SelfDiagnosticPhase_Parse,parser->fileIndex,location,"AST node storage capacity exceeded");
+        kek_diagnostics_DiagnosticAddCString(parser->diagnostics,DiagnosticSeverity_Error,DiagnosticPhase_Parse,parser->fileIndex,location,"AST node storage capacity exceeded");
         parser->errorCount+=1;
-        if (parser->tree.len>0) {
-            return (parser->tree.len-1);
+        if (parser->tree.nodes.len>0) {
+            return (parser->tree.nodes.len-1);
         }
         return (0);
     }
-    usize index=parser->tree.len;
-    struct SelfAstNode node={0};
+    usize index=parser->tree.nodes.len;
+    struct AstNode node={0};
     node.kind=kind;
     node.location=location;
-    parser->tree.nodes[index]=node;
-    parser->tree.len+=1;
+    parser->tree.nodes.data[index]=node;
+    parser->tree.nodes.len+=1;
     return (index);
 }
-void kek_ast_SelfAddAstChild(struct SelfAstTree* tree,usize parentIndex,usize childIndex) {
+void kek_ast_AddAstChild(struct AstTree* tree,usize parentIndex,usize childIndex) {
     if (parentIndex==0||childIndex==0) {
         return;
     }
-    tree->nodes[childIndex].nextSibling=0;
-    if (tree->nodes[parentIndex].lastChild!=0) {
-        usize last=tree->nodes[parentIndex].lastChild;
-        tree->nodes[last].nextSibling=childIndex;
+    tree->nodes.data[childIndex].nextSibling=0;
+    if (tree->nodes.data[parentIndex].lastChild!=0) {
+        usize last=tree->nodes.data[parentIndex].lastChild;
+        tree->nodes.data[last].nextSibling=childIndex;
     } else {
-        tree->nodes[parentIndex].firstChild=childIndex;
+        tree->nodes.data[parentIndex].firstChild=childIndex;
     }
-    tree->nodes[parentIndex].lastChild=childIndex;
-    tree->nodes[parentIndex].childCount+=1;
+    tree->nodes.data[parentIndex].lastChild=childIndex;
+    tree->nodes.data[parentIndex].childCount+=1;
 }
-void kek_ast_SelfFinishLocationFromChildren(struct SelfAstTree* tree,usize nodeIndex) {
-    if (nodeIndex==0||tree->nodes[nodeIndex].childCount==0) {
+void kek_ast_FinishLocationFromChildren(struct AstTree* tree,usize nodeIndex) {
+    if (nodeIndex==0||tree->nodes.data[nodeIndex].childCount==0) {
         return;
     }
-    usize firstIndex=tree->nodes[nodeIndex].firstChild;
-    usize lastIndex=tree->nodes[nodeIndex].lastChild;
-    struct SelfSourceLocation first=tree->nodes[firstIndex].location;
-    struct SelfSourceLocation last=tree->nodes[lastIndex].location;
-    tree->nodes[nodeIndex].location=first;
+    usize firstIndex=tree->nodes.data[nodeIndex].firstChild;
+    usize lastIndex=tree->nodes.data[nodeIndex].lastChild;
+    struct SourceLocation first=tree->nodes.data[firstIndex].location;
+    struct SourceLocation last=tree->nodes.data[lastIndex].location;
+    tree->nodes.data[nodeIndex].location=first;
     if (last.offset+last.length>=first.offset) {
-        tree->nodes[nodeIndex].location.length=(last.offset+last.length)-first.offset;
+        tree->nodes.data[nodeIndex].location.length=(last.offset+last.length)-first.offset;
     }
 }
-usize kek_ast_SelfParseTokenNode(struct SelfParser* parser) {
+usize kek_ast_ParseTokenNode(struct Parser* parser) {
     struct Token token=parser->tokens[parser->position];
     parser->position+=1;
-    usize nodeIndex=kek_ast_SelfCreateAstNode(parser,SelfAstKind_Token,kek_ast_TokenLocation(token));
-    parser->tree.nodes[nodeIndex].token=token;
+    usize nodeIndex=kek_ast_CreateAstNode(parser,AstKind_Token,kek_ast_TokenLocation(token));
+    parser->tree.nodes.data[nodeIndex].token=token;
     return (nodeIndex);
 }
-void kek_ast_SelfReportParseError(struct SelfParser* parser,struct Token* token,str message) {
-    kek_diagnostics_SelfDiagnosticAddCString(parser->diagnostics,SelfDiagnosticSeverity_Error,SelfDiagnosticPhase_Parse,parser->fileIndex,kek_ast_TokenLocation(token[0]),message);
+void kek_ast_ReportParseError(struct Parser* parser,struct Token* token,str message) {
+    kek_diagnostics_DiagnosticAddCString(parser->diagnostics,DiagnosticSeverity_Error,DiagnosticPhase_Parse,parser->fileIndex,kek_ast_TokenLocation(token[0]),message);
     parser->errorCount+=1;
 }
-str kek_ast_SelfPunctuationName(u64 punctuation) {
+str kek_ast_PunctuationName(u64 punctuation) {
     if (punctuation==((u64)(PunctuationKind_RightParen))) {
         return (")");
     }
@@ -2906,25 +3008,25 @@ str kek_ast_SelfPunctuationName(u64 punctuation) {
     }
     return ("<end of file>");
 }
-void kek_ast_SelfReportExpected(struct SelfParser* parser,struct Token* token,u64 punctuation) {
-    struct StringBuilder builder=std_string_StringBuilderNew(parser->tree.allocator);
+void kek_ast_ReportExpected(struct Parser* parser,struct Token* token,u64 punctuation) {
+    struct StringBuilder builder=std_string_StringBuilderNew(parser->tree.nodes.allocator);
     StringBuilder_WriteCString(&builder,"expected '");
-    StringBuilder_WriteCString(&builder,kek_ast_SelfPunctuationName(punctuation));
+    StringBuilder_WriteCString(&builder,kek_ast_PunctuationName(punctuation));
     StringBuilder_WriteByte(&builder,'\'');
     struct String message=StringBuilder_View(&builder);
-    kek_diagnostics_SelfDiagnosticAdd(parser->diagnostics,SelfDiagnosticSeverity_Error,SelfDiagnosticPhase_Parse,parser->fileIndex,kek_ast_TokenLocation(token[0]),message);
+    kek_diagnostics_DiagnosticAdd(parser->diagnostics,DiagnosticSeverity_Error,DiagnosticPhase_Parse,parser->fileIndex,kek_ast_TokenLocation(token[0]),message);
     StringBuilder_Destroy(&builder);
     parser->errorCount+=1;
 }
-bool kek_ast_SelfShouldParseGenericList(struct SelfParser* parser,usize previousChildIndex) {
-    if (previousChildIndex==0||parser->tree.nodes[previousChildIndex].kind!=SelfAstKind_Token) {
+bool kek_ast_ShouldParseGenericList(struct Parser* parser,usize previousChildIndex) {
+    if (previousChildIndex==0||parser->tree.nodes.data[previousChildIndex].kind!=AstKind_Token) {
         return (0);
     }
-    struct Token* previousToken=&parser->tree.nodes[previousChildIndex].token;
+    struct Token* previousToken=&parser->tree.nodes.data[previousChildIndex].token;
     if (previousToken->kind!=TokenKind_Identifier&&previousToken->kind!=TokenKind_Keyword) {
         return (0);
     }
-    if (kek_ast_SelfTokenTextEquals(parser,previousToken,"cast")) {
+    if (kek_ast_TokenTextEquals(parser,previousToken,"cast")) {
         return (0);
     }
     if (parser->position>=parser->count||!kek_ast_IsOperatorToken(&parser->tokens[parser->position],OperatorKind_Less)) {
@@ -2953,16 +3055,16 @@ bool kek_ast_SelfShouldParseGenericList(struct SelfParser* parser,usize previous
     }
     return (0);
 }
-void kek_ast_SelfParseChildrenInto(struct SelfParser* parser,usize parentIndex,u64 closePunctuation) {
+void kek_ast_ParseChildrenInto(struct Parser* parser,usize parentIndex,u64 closePunctuation) {
     while (parser->position<parser->count&&!kek_ast_IsAstTerminator(&parser->tokens[parser->position],closePunctuation)) {
         if (kek_ast_IsTriviaToken(&parser->tokens[parser->position])) {
             parser->position+=1;
             continue;
         }
         usize previousPosition=parser->position;
-        usize statement=kek_ast_SelfParseStatement(parser,closePunctuation);
-        if (parser->tree.nodes[statement].childCount>0) {
-            kek_ast_SelfAddAstChild(&parser->tree,parentIndex,statement);
+        usize statement=kek_ast_ParseStatement(parser,closePunctuation);
+        if (parser->tree.nodes.data[statement].childCount>0) {
+            kek_ast_AddAstChild(&parser->tree,parentIndex,statement);
         } else {
             if (parser->position==previousPosition) {
                 break;
@@ -2970,44 +3072,44 @@ void kek_ast_SelfParseChildrenInto(struct SelfParser* parser,usize parentIndex,u
         }
     }
 }
-usize kek_ast_SelfParseDelimited(struct SelfParser* parser,SelfAstKind kind,u64 closePunctuation) {
+usize kek_ast_ParseDelimited(struct Parser* parser,AstKind kind,u64 closePunctuation) {
     struct Token open=parser->tokens[parser->position];
     parser->position+=1;
-    usize node=kek_ast_SelfCreateAstNode(parser,kind,kek_ast_TokenLocation(open));
-    kek_ast_SelfParseChildrenInto(parser,node,closePunctuation);
+    usize node=kek_ast_CreateAstNode(parser,kind,kek_ast_TokenLocation(open));
+    kek_ast_ParseChildrenInto(parser,node,closePunctuation);
     if (parser->position<parser->count&&parser->tokens[parser->position].kind==TokenKind_Punctuation&&parser->tokens[parser->position].subkind==closePunctuation) {
         struct Token close=parser->tokens[parser->position];
         parser->position+=1;
-        parser->tree.nodes[node].location=kek_ast_TokenLocation(open);
-        parser->tree.nodes[node].location.length=(close.offset+close.length)-open.offset;
+        parser->tree.nodes.data[node].location=kek_ast_TokenLocation(open);
+        parser->tree.nodes.data[node].location.length=(close.offset+close.length)-open.offset;
     } else {
         if (parser->position<parser->count) {
-            kek_ast_SelfReportExpected(parser,&parser->tokens[parser->position],closePunctuation);
+            kek_ast_ReportExpected(parser,&parser->tokens[parser->position],closePunctuation);
             if (kek_ast_IsClosingPunctuation(&parser->tokens[parser->position])) {
                 parser->position+=1;
             }
         } else {
-            kek_ast_SelfReportParseError(parser,&open,"unterminated delimiter");
+            kek_ast_ReportParseError(parser,&open,"unterminated delimiter");
         }
     }
-    if (parser->tree.nodes[node].childCount>0&&parser->tree.nodes[node].location.length==open.length) {
-        kek_ast_SelfFinishLocationFromChildren(&parser->tree,node);
-        parser->tree.nodes[node].location.offset=open.offset;
-        parser->tree.nodes[node].location.line=open.line;
-        parser->tree.nodes[node].location.column=open.column;
+    if (parser->tree.nodes.data[node].childCount>0&&parser->tree.nodes.data[node].location.length==open.length) {
+        kek_ast_FinishLocationFromChildren(&parser->tree,node);
+        parser->tree.nodes.data[node].location.offset=open.offset;
+        parser->tree.nodes.data[node].location.line=open.line;
+        parser->tree.nodes.data[node].location.column=open.column;
     }
     return (node);
 }
-usize kek_ast_SelfParseGenericDelimited(struct SelfParser* parser) {
+usize kek_ast_ParseGenericDelimited(struct Parser* parser) {
     struct Token open=parser->tokens[parser->position];
     parser->position+=1;
-    usize node=kek_ast_SelfCreateAstNode(parser,SelfAstKind_Generic,kek_ast_TokenLocation(open));
+    usize node=kek_ast_CreateAstNode(parser,AstKind_Generic,kek_ast_TokenLocation(open));
     while (parser->position<parser->count&&!kek_ast_IsGenericTerminator(&parser->tokens[parser->position])) {
         if (kek_ast_IsTriviaToken(&parser->tokens[parser->position])) {
             parser->position+=1;
             continue;
         }
-        usize statement=kek_ast_SelfCreateAstNode(parser,SelfAstKind_Statement,kek_ast_TokenLocation(parser->tokens[parser->position]));
+        usize statement=kek_ast_CreateAstNode(parser,AstKind_Statement,kek_ast_TokenLocation(parser->tokens[parser->position]));
         while (parser->position<parser->count&&!kek_ast_IsGenericTerminator(&parser->tokens[parser->position])) {
             struct Token* token=&parser->tokens[parser->position];
             if (kek_ast_IsTriviaToken(token)) {
@@ -3019,46 +3121,46 @@ usize kek_ast_SelfParseGenericDelimited(struct SelfParser* parser) {
                 break;
             }
             if (kek_ast_IsPunctuationToken(token,PunctuationKind_LeftParen)) {
-                kek_ast_SelfAddAstChild(&parser->tree,statement,kek_ast_SelfParseDelimited(parser,SelfAstKind_Group,((u64)(PunctuationKind_RightParen))));
+                kek_ast_AddAstChild(&parser->tree,statement,kek_ast_ParseDelimited(parser,AstKind_Group,((u64)(PunctuationKind_RightParen))));
                 continue;
             }
             if (kek_ast_IsPunctuationToken(token,PunctuationKind_LeftBracket)) {
-                kek_ast_SelfAddAstChild(&parser->tree,statement,kek_ast_SelfParseDelimited(parser,SelfAstKind_Index,((u64)(PunctuationKind_RightBracket))));
+                kek_ast_AddAstChild(&parser->tree,statement,kek_ast_ParseDelimited(parser,AstKind_Index,((u64)(PunctuationKind_RightBracket))));
                 continue;
             }
-            if (kek_ast_SelfShouldParseGenericList(parser,parser->tree.nodes[statement].lastChild)) {
-                kek_ast_SelfAddAstChild(&parser->tree,statement,kek_ast_SelfParseGenericDelimited(parser));
+            if (kek_ast_ShouldParseGenericList(parser,parser->tree.nodes.data[statement].lastChild)) {
+                kek_ast_AddAstChild(&parser->tree,statement,kek_ast_ParseGenericDelimited(parser));
                 continue;
             }
-            kek_ast_SelfAddAstChild(&parser->tree,statement,kek_ast_SelfParseTokenNode(parser));
+            kek_ast_AddAstChild(&parser->tree,statement,kek_ast_ParseTokenNode(parser));
         }
-        kek_ast_SelfFinishLocationFromChildren(&parser->tree,statement);
-        if (parser->tree.nodes[statement].childCount>0) {
-            kek_ast_SelfAddAstChild(&parser->tree,node,statement);
+        kek_ast_FinishLocationFromChildren(&parser->tree,statement);
+        if (parser->tree.nodes.data[statement].childCount>0) {
+            kek_ast_AddAstChild(&parser->tree,node,statement);
         }
     }
     if (parser->position<parser->count&&kek_ast_IsOperatorToken(&parser->tokens[parser->position],OperatorKind_Greater)) {
         struct Token close=parser->tokens[parser->position];
         parser->position+=1;
-        parser->tree.nodes[node].location=kek_ast_TokenLocation(open);
-        parser->tree.nodes[node].location.length=(close.offset+close.length)-open.offset;
+        parser->tree.nodes.data[node].location=kek_ast_TokenLocation(open);
+        parser->tree.nodes.data[node].location.length=(close.offset+close.length)-open.offset;
     } else {
         if (parser->position<parser->count) {
-            kek_ast_SelfReportParseError(parser,&parser->tokens[parser->position],"expected '>'");
+            kek_ast_ReportParseError(parser,&parser->tokens[parser->position],"expected '>'");
         } else {
-            kek_ast_SelfReportParseError(parser,&open,"unterminated generic list");
+            kek_ast_ReportParseError(parser,&open,"unterminated generic list");
         }
     }
-    if (parser->tree.nodes[node].childCount>0&&parser->tree.nodes[node].location.length==open.length) {
-        kek_ast_SelfFinishLocationFromChildren(&parser->tree,node);
-        parser->tree.nodes[node].location.offset=open.offset;
-        parser->tree.nodes[node].location.line=open.line;
-        parser->tree.nodes[node].location.column=open.column;
+    if (parser->tree.nodes.data[node].childCount>0&&parser->tree.nodes.data[node].location.length==open.length) {
+        kek_ast_FinishLocationFromChildren(&parser->tree,node);
+        parser->tree.nodes.data[node].location.offset=open.offset;
+        parser->tree.nodes.data[node].location.line=open.line;
+        parser->tree.nodes.data[node].location.column=open.column;
     }
     return (node);
 }
-usize kek_ast_SelfParseStatement(struct SelfParser* parser,u64 closePunctuation) {
-    usize statement=kek_ast_SelfCreateAstNode(parser,SelfAstKind_Statement,kek_ast_TokenLocation(parser->tokens[parser->position]));
+usize kek_ast_ParseStatement(struct Parser* parser,u64 closePunctuation) {
+    usize statement=kek_ast_CreateAstNode(parser,AstKind_Statement,kek_ast_TokenLocation(parser->tokens[parser->position]));
     while (parser->position<parser->count&&!kek_ast_IsAstTerminator(&parser->tokens[parser->position],closePunctuation)) {
         struct Token* token=&parser->tokens[parser->position];
         if (kek_ast_IsTriviaToken(token)) {
@@ -3073,38 +3175,38 @@ usize kek_ast_SelfParseStatement(struct SelfParser* parser,u64 closePunctuation)
             break;
         }
         if (kek_ast_IsPunctuationToken(token,PunctuationKind_LeftBrace)) {
-            kek_ast_SelfAddAstChild(&parser->tree,statement,kek_ast_SelfParseDelimited(parser,SelfAstKind_Block,((u64)(PunctuationKind_RightBrace))));
+            kek_ast_AddAstChild(&parser->tree,statement,kek_ast_ParseDelimited(parser,AstKind_Block,((u64)(PunctuationKind_RightBrace))));
             break;
         }
         if (kek_ast_IsPunctuationToken(token,PunctuationKind_LeftParen)) {
-            kek_ast_SelfAddAstChild(&parser->tree,statement,kek_ast_SelfParseDelimited(parser,SelfAstKind_Group,((u64)(PunctuationKind_RightParen))));
+            kek_ast_AddAstChild(&parser->tree,statement,kek_ast_ParseDelimited(parser,AstKind_Group,((u64)(PunctuationKind_RightParen))));
             continue;
         }
         if (kek_ast_IsPunctuationToken(token,PunctuationKind_LeftBracket)) {
-            kek_ast_SelfAddAstChild(&parser->tree,statement,kek_ast_SelfParseDelimited(parser,SelfAstKind_Index,((u64)(PunctuationKind_RightBracket))));
+            kek_ast_AddAstChild(&parser->tree,statement,kek_ast_ParseDelimited(parser,AstKind_Index,((u64)(PunctuationKind_RightBracket))));
             continue;
         }
-        if (kek_ast_SelfShouldParseGenericList(parser,parser->tree.nodes[statement].lastChild)) {
-            kek_ast_SelfAddAstChild(&parser->tree,statement,kek_ast_SelfParseGenericDelimited(parser));
+        if (kek_ast_ShouldParseGenericList(parser,parser->tree.nodes.data[statement].lastChild)) {
+            kek_ast_AddAstChild(&parser->tree,statement,kek_ast_ParseGenericDelimited(parser));
             continue;
         }
-        kek_ast_SelfAddAstChild(&parser->tree,statement,kek_ast_SelfParseTokenNode(parser));
+        kek_ast_AddAstChild(&parser->tree,statement,kek_ast_ParseTokenNode(parser));
     }
-    kek_ast_SelfFinishLocationFromChildren(&parser->tree,statement);
+    kek_ast_FinishLocationFromChildren(&parser->tree,statement);
     return (statement);
 }
-usize kek_ast_SelfParseList(struct SelfParser* parser,SelfAstKind listKind,u64 closePunctuation) {
-    usize list=kek_ast_SelfCreateAstNode(parser,listKind,kek_ast_TokenLocation(parser->tokens[parser->position]));
-    kek_ast_SelfParseChildrenInto(parser,list,closePunctuation);
+usize kek_ast_ParseList(struct Parser* parser,AstKind listKind,u64 closePunctuation) {
+    usize list=kek_ast_CreateAstNode(parser,listKind,kek_ast_TokenLocation(parser->tokens[parser->position]));
+    kek_ast_ParseChildrenInto(parser,list,closePunctuation);
     if (closePunctuation==11&&parser->position<parser->count&&kek_ast_IsClosingPunctuation(&parser->tokens[parser->position])) {
-        kek_ast_SelfReportParseError(parser,&parser->tokens[parser->position],"unexpected closing delimiter");
+        kek_ast_ReportParseError(parser,&parser->tokens[parser->position],"unexpected closing delimiter");
         parser->position+=1;
     }
-    kek_ast_SelfFinishLocationFromChildren(&parser->tree,list);
+    kek_ast_FinishLocationFromChildren(&parser->tree,list);
     return (list);
 }
-Status kek_ast_SelfParseTokens(struct Token* tokens,usize count,struct String source,i64 fileIndex,struct Allocator allocator,struct SelfDiagnosticBag* diagnostics,struct SelfAstTree* out) {
-    struct SelfParser parser={0};
+Status kek_ast_ParseTokens(struct Token* tokens,usize count,struct String source,i64 fileIndex,struct Allocator allocator,struct DiagnosticBag* diagnostics,struct AstTree* out) {
+    struct Parser parser={0};
     parser.tokens=tokens;
     parser.count=count;
     parser.position=0;
@@ -3112,188 +3214,65 @@ Status kek_ast_SelfParseTokens(struct Token* tokens,usize count,struct String so
     parser.fileIndex=fileIndex;
     parser.diagnostics=diagnostics;
     parser.errorCount=0;
-    Status status=kek_ast_SelfAstTreeInit(&parser.tree,allocator);
+    Status status=kek_ast_AstTreeInit(&parser.tree,allocator);
     if (status!=Status_Ok) {
         return (status);
     }
-    usize root=kek_ast_SelfParseList(&parser,SelfAstKind_File,11);
+    usize root=kek_ast_ParseList(&parser,AstKind_File,11);
     parser.tree.root=root;
-    parser.tree.nodes[root].location=kek_diagnostics_SelfSourceLocationNew(1,1,0,source.len);
+    parser.tree.nodes.data[root].location=kek_diagnostics_SourceLocationNew(1,1,0,source.len);
     out->nodes=parser.tree.nodes;
-    out->len=parser.tree.len;
-    out->cap=parser.tree.cap;
     out->root=parser.tree.root;
-    out->allocator=parser.tree.allocator;
     return (Status_Ok);
 }
-Status kek_ast_SelfWriteAstNodeDump(struct SelfAstTree* tree,usize nodeIndex,usize depth,struct StringBuilder* out) {
-    struct SelfAstNode* node=&tree->nodes[nodeIndex];
-    Status status=StringBuilder_WriteCString(out,"node|");
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    status=kek_diagnostics_SelfWriteU64Field(out,((u64)(depth)),1);
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    status=kek_diagnostics_SelfWriteU64Field(out,((u64)(node->kind)),1);
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    status=kek_diagnostics_SelfWriteU64Field(out,((u64)(node->location.line)),1);
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    status=kek_diagnostics_SelfWriteU64Field(out,((u64)(node->location.column)),1);
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    status=kek_diagnostics_SelfWriteU64Field(out,((u64)(node->location.offset)),1);
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    status=kek_diagnostics_SelfWriteU64Field(out,((u64)(node->location.length)),1);
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    status=kek_diagnostics_SelfWriteU64Field(out,((u64)(node->childCount)),1);
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    u64 tokenKind=0;
-    u64 tokenSubkind=0;
-    u64 tokenOffset=0;
-    u64 tokenLength=0;
-    if (node->kind==SelfAstKind_Token) {
-        tokenKind=((u64)(node->token.kind));
-        tokenSubkind=node->token.subkind;
-        tokenOffset=((u64)(node->token.offset));
-        tokenLength=((u64)(node->token.length));
-    }
-    status=kek_diagnostics_SelfWriteU64Field(out,tokenKind,1);
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    status=kek_diagnostics_SelfWriteU64Field(out,tokenSubkind,1);
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    status=kek_diagnostics_SelfWriteU64Field(out,tokenOffset,1);
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    status=kek_diagnostics_SelfWriteU64Field(out,tokenLength,0);
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    status=StringBuilder_WriteByte(out,'\n');
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    usize child=node->firstChild;
-    while (child!=0) {
-        status=kek_ast_SelfWriteAstNodeDump(tree,child,depth+1,out);
-        if (status!=Status_Ok) {
-            return (status);
-        }
-        child=tree->nodes[child].nextSibling;
-    }
-    return (Status_Ok);
-}
-Status kek_ast_SelfWriteAstBridgeDump(struct String source,struct StringBuilder* out) {
-    struct Allocator allocator=out->allocator;
-    struct Array__Token tokens={0};
-    Status status=kek_tokenizer_TokenizeToArray(source,0,allocator,&tokens);
-    if (status!=Status_Ok) {
-        return (status);
-    }
-    struct SelfDiagnosticBag diagnostics={0};
-    kek_diagnostics_SelfDiagnosticBagInit(&diagnostics,allocator);
-    struct SelfAstTree tree={0};
-    status=kek_ast_SelfParseTokens(tokens.data,tokens.len,source,0,allocator,&diagnostics,&tree);
-    if (status==Status_Ok) {
-        status=kek_ast_SelfWriteAstNodeDump(&tree,tree.root,0,out);
-    }
-    if (status==Status_Ok) {
-        status=kek_diagnostics_SelfWriteDiagnosticDump(&diagnostics,out);
-    }
-    kek_ast_SelfAstTreeDestroy(&tree);
-    kek_diagnostics_SelfDiagnosticBagDestroy(&diagnostics);
-    kek_tokenizer_TokenArrayDestroy(&tokens);
-    return (status);
-}
-bool kek_compiler_SelfCIsOk(Status status) {
-    return (status==Status_Ok);
-}
-struct String kek_compiler_SelfCTokenText(struct SelfCProgram* program,usize fileIndex,usize tokenIndex) {
-    struct SelfCTokenFile* file=&program->tokenFiles[fileIndex];
+struct String kek_compiler_CTokenText(struct CProgram* program,usize fileIndex,usize tokenIndex) {
+    struct CTokenFile* file=&program->tokenFiles.data[fileIndex];
     struct Token token=file->tokens[tokenIndex];
     struct String sourceText=file->sourceText;
     return (String_Slice(&sourceText,token.offset,token.length));
 }
-bool kek_compiler_SelfCTokenEquals(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,str text) {
-    struct String value=kek_compiler_SelfCTokenText(program,fileIndex,tokenIndex);
+bool kek_compiler_CTokenEquals(struct CProgram* program,usize fileIndex,usize tokenIndex,str text) {
+    struct String value=kek_compiler_CTokenText(program,fileIndex,tokenIndex);
     return (String_EqualsCString(&value,text));
 }
-bool kek_compiler_SelfCStringEquals(struct String value,str text) {
-    return (String_EqualsCString(&value,text));
+bool kek_compiler_CIsTokenKind(struct CProgram* program,usize fileIndex,usize tokenIndex,TokenKind kind) {
+    return (program->tokenFiles.data[fileIndex].tokens[tokenIndex].kind==kind);
 }
-bool kek_compiler_SelfCIsTokenKind(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,TokenKind kind) {
-    return (program->tokenFiles[fileIndex].tokens[tokenIndex].kind==kind);
-}
-bool kek_compiler_SelfCIsPunctuation(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,PunctuationKind kind) {
-    struct Token token=program->tokenFiles[fileIndex].tokens[tokenIndex];
+bool kek_compiler_CIsPunctuation(struct CProgram* program,usize fileIndex,usize tokenIndex,PunctuationKind kind) {
+    struct Token token=program->tokenFiles.data[fileIndex].tokens[tokenIndex];
     return (token.kind==TokenKind_Punctuation&&token.subkind==((u64)(kind)));
 }
-bool kek_compiler_SelfCIsOperator(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,OperatorKind kind) {
-    struct Token token=program->tokenFiles[fileIndex].tokens[tokenIndex];
+bool kek_compiler_CIsOperator(struct CProgram* program,usize fileIndex,usize tokenIndex,OperatorKind kind) {
+    struct Token token=program->tokenFiles.data[fileIndex].tokens[tokenIndex];
     return (token.kind==TokenKind_Operator&&token.subkind==((u64)(kind)));
 }
-bool kek_compiler_SelfCIsKeyword(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,KeywordKind kind) {
-    struct Token token=program->tokenFiles[fileIndex].tokens[tokenIndex];
+bool kek_compiler_CIsKeyword(struct CProgram* program,usize fileIndex,usize tokenIndex,KeywordKind kind) {
+    struct Token token=program->tokenFiles.data[fileIndex].tokens[tokenIndex];
     return (token.kind==TokenKind_Keyword&&token.subkind==((u64)(kind)));
 }
-bool kek_compiler_SelfCIsIdentifierText(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,str text) {
-    struct Token token=program->tokenFiles[fileIndex].tokens[tokenIndex];
+bool kek_compiler_CIsIdentifierText(struct CProgram* program,usize fileIndex,usize tokenIndex,str text) {
+    struct Token token=program->tokenFiles.data[fileIndex].tokens[tokenIndex];
     if (!(token.kind==TokenKind_Identifier||token.kind==TokenKind_Keyword)) {
         return (0);
     }
-    return (kek_compiler_SelfCTokenEquals(program,fileIndex,tokenIndex,text));
+    return (kek_compiler_CTokenEquals(program,fileIndex,tokenIndex,text));
 }
-bool kek_compiler_SelfCIsEof(struct SelfCProgram* program,usize fileIndex,usize tokenIndex) {
-    return (program->tokenFiles[fileIndex].tokens[tokenIndex].kind==TokenKind_Eof);
+bool kek_compiler_CIsEof(struct CProgram* program,usize fileIndex,usize tokenIndex) {
+    return (program->tokenFiles.data[fileIndex].tokens[tokenIndex].kind==TokenKind_Eof);
 }
-usize kek_compiler_SelfCFileTokenCount(struct SelfCProgram* program,usize fileIndex) {
-    return (program->tokenFiles[fileIndex].tokenLen);
+usize kek_compiler_CFileTokenCount(struct CProgram* program,usize fileIndex) {
+    return (program->tokenFiles.data[fileIndex].tokenLen);
 }
-Status kek_compiler_SelfCWrite(struct StringBuilder* out,str text) {
-    return (StringBuilder_WriteCString(out,text));
+Status kek_compiler_CWriteToken(struct CProgram* program,struct StringBuilder* out,usize fileIndex,usize tokenIndex) {
+    return (StringBuilder_WriteString(out,kek_compiler_CTokenText(program,fileIndex,tokenIndex)));
 }
-Status kek_compiler_SelfCWriteString(struct StringBuilder* out,struct String text) {
-    return (StringBuilder_WriteString(out,text));
-}
-Status kek_compiler_SelfCWriteToken(struct SelfCProgram* program,struct StringBuilder* out,usize fileIndex,usize tokenIndex) {
-    return (StringBuilder_WriteString(out,kek_compiler_SelfCTokenText(program,fileIndex,tokenIndex)));
-}
-Status kek_compiler_SelfCCloneCString(struct SelfCProgram* program,str text,struct OwnedString* out) {
+Status kek_compiler_CCloneCString(struct CProgram* program,str text,struct OwnedString* out) {
     return (std_string_CloneCString(text,program->allocator,out));
 }
-Status kek_compiler_SelfCCloneString(struct SelfCProgram* program,struct String text,struct OwnedString* out) {
+Status kek_compiler_CCloneString(struct CProgram* program,struct String text,struct OwnedString* out) {
     return (std_string_CloneString(text,program->allocator,out));
 }
-struct String kek_compiler_SelfCOwnedView(struct OwnedString* value) {
-    return (std_string_OwnedStringView(value));
-}
-bool kek_compiler_SelfCOwnedEqualsCString(struct OwnedString* value,str text) {
-    struct String view=std_string_OwnedStringView(value);
-    return (String_EqualsCString(&view,text));
-}
-bool kek_compiler_SelfCOwnedEquals(struct OwnedString* left,struct OwnedString* right) {
-    struct String leftView=std_string_OwnedStringView(left);
-    struct String rightView=std_string_OwnedStringView(right);
-    return (String_Equals(&leftView,rightView));
-}
-Status kek_compiler_SelfCDetachBuilder(struct StringBuilder* builder,struct OwnedString* out) {
+Status kek_compiler_CDetachBuilder(struct StringBuilder* builder,struct OwnedString* out) {
     struct Result__OwnedString detached=StringBuilder_Detach(builder);
     if (detached.status!=Status_Ok) {
         return (detached.status);
@@ -3304,13 +3283,10 @@ Status kek_compiler_SelfCDetachBuilder(struct StringBuilder* builder,struct Owne
     out->allocator=detached.value.allocator;
     return (Status_Ok);
 }
-Status kek_compiler_SelfCMakeOwnedEmpty(struct SelfCProgram* program,struct OwnedString* out) {
-    return (kek_compiler_SelfCCloneCString(program,"",out));
+Status kek_compiler_CMakeOwnedEmpty(struct CProgram* program,struct OwnedString* out) {
+    return (kek_compiler_CCloneCString(program,"",out));
 }
-Status kek_compiler_SelfCWriteOwned(struct StringBuilder* out,struct OwnedString* text) {
-    return (StringBuilder_WriteString(out,std_string_OwnedStringView(text)));
-}
-usize kek_compiler_SelfCStringLastSlash(struct String path) {
+usize kek_compiler_CStringLastSlash(struct String path) {
     usize last=path.len;
     for (usize i=0;i<path.len;i++) {
         if (path.data[i]=='/') {
@@ -3319,8 +3295,8 @@ usize kek_compiler_SelfCStringLastSlash(struct String path) {
     }
     return (last);
 }
-Status kek_compiler_SelfCPackageNameFromPath(struct String path,struct Allocator allocator,struct OwnedString* out) {
-    usize lastSlash=kek_compiler_SelfCStringLastSlash(path);
+Status kek_compiler_CPackageNameFromPath(struct String path,struct Allocator allocator,struct OwnedString* out) {
+    usize lastSlash=kek_compiler_CStringLastSlash(path);
     if (lastSlash==path.len) {
         return (std_string_CloneCString("",allocator,out));
     }
@@ -3332,8 +3308,8 @@ Status kek_compiler_SelfCPackageNameFromPath(struct String path,struct Allocator
     }
     return (std_string_CloneString(String_Slice(&path,segmentStart,lastSlash-segmentStart),allocator,out));
 }
-Status kek_compiler_SelfCModuleNameFromPath(struct String path,struct Allocator allocator,struct OwnedString* out) {
-    usize lastSlash=kek_compiler_SelfCStringLastSlash(path);
+Status kek_compiler_CModuleNameFromPath(struct String path,struct Allocator allocator,struct OwnedString* out) {
+    usize lastSlash=kek_compiler_CStringLastSlash(path);
     if (lastSlash==path.len) {
         return (std_string_CloneCString("",allocator,out));
     }
@@ -3343,7 +3319,7 @@ Status kek_compiler_SelfCModuleNameFromPath(struct String path,struct Allocator 
     }
     return (std_string_CloneString(name,allocator,out));
 }
-Status kek_compiler_SelfCInitTokenFileSlot(struct Allocator allocator,struct SelfCTokenFile* tokenFile,usize fileIndex) {
+Status kek_compiler_CInitTokenFileSlot(struct Allocator allocator,struct CTokenFile* tokenFile,usize fileIndex) {
     tokenFile->tokens=0;
     tokenFile->tokenLen=0;
     tokenFile->tokenCap=0;
@@ -3356,7 +3332,7 @@ Status kek_compiler_SelfCInitTokenFileSlot(struct Allocator allocator,struct Sel
     }
     return (status);
 }
-Status kek_compiler_SelfCSetTokenFileNames(struct Allocator allocator,struct SelfCTokenFile* tokenFile,bool isRoot) {
+Status kek_compiler_CSetTokenFileNames(struct Allocator allocator,struct CTokenFile* tokenFile,bool isRoot) {
     std_string_DestroyOwnedString(&tokenFile->packageName);
     std_string_DestroyOwnedString(&tokenFile->moduleName);
     if (isRoot) {
@@ -3366,212 +3342,265 @@ Status kek_compiler_SelfCSetTokenFileNames(struct Allocator allocator,struct Sel
         }
         return (status);
     }
-    Status status=kek_compiler_SelfCPackageNameFromPath(tokenFile->path,allocator,&tokenFile->packageName);
+    Status status=kek_compiler_CPackageNameFromPath(tokenFile->path,allocator,&tokenFile->packageName);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCModuleNameFromPath(tokenFile->path,allocator,&tokenFile->moduleName);
+        status=kek_compiler_CModuleNameFromPath(tokenFile->path,allocator,&tokenFile->moduleName);
     }
     return (status);
 }
-Status kek_compiler_SelfCTokenizeSourceFile(struct Allocator allocator,struct SelfSourceFile* sourceFile,struct SelfCTokenFile* tokenFile,usize fileIndex,bool isRoot,struct SelfDiagnosticBag* diagnostics) {
+Status kek_compiler_CTokenizeSourceFile(struct Allocator allocator,struct SourceFile* sourceFile,struct CTokenFile* tokenFile,usize fileIndex,bool isRoot,struct DiagnosticBag* diagnostics) {
     tokenFile->sourceText=std_string_OwnedStringView(&sourceFile->content);
     tokenFile->path=std_string_OwnedStringView(&sourceFile->path);
     tokenFile->fileIndex=fileIndex;
-    Status status=kek_compiler_SelfCSetTokenFileNames(allocator,tokenFile,isRoot);
+    Status status=kek_compiler_CSetTokenFileNames(allocator,tokenFile,isRoot);
     if (status!=Status_Ok) {
         return (status);
     }
     struct Array__Token tokens={0};
     status=kek_tokenizer_TokenizeToArray(tokenFile->sourceText,0,allocator,&tokens);
     if (status!=Status_Ok) {
-        kek_tokenizer_TokenArrayDestroy(&tokens);
+        Array__Token_Destroy(&tokens);
         return (status);
     }
     tokenFile->tokens=tokens.data;
     tokenFile->tokenLen=tokens.len;
     tokenFile->tokenCap=tokens.cap;
-    struct SelfAstTree tree={0};
-    status=kek_ast_SelfParseTokens(tokenFile->tokens,tokenFile->tokenLen,tokenFile->sourceText,((i64)(fileIndex)),allocator,diagnostics,&tree);
+    struct AstTree tree={0};
+    status=kek_ast_ParseTokens(tokenFile->tokens,tokenFile->tokenLen,tokenFile->sourceText,((i64)(fileIndex)),allocator,diagnostics,&tree);
     if (status==Status_Ok) {
-        kek_ast_SelfAstTreeDestroy(&tree);
+        kek_ast_AstTreeDestroy(&tree);
     }
     return (status);
 }
-void kek_compiler_SelfCTokenizeJobRun(struct SelfCTokenizeJob* job) {
-    job->status=kek_compiler_SelfCTokenizeSourceFile(job->allocator,job->sourceFile,job->tokenFile,job->fileIndex,job->isRoot,&job->diagnostics);
+void kek_compiler_CTokenizeJobRun(struct CTokenizeJob* job) {
+    job->status=kek_compiler_CTokenizeSourceFile(job->allocator,job->sourceFile,job->tokenFile,job->fileIndex,job->isRoot,&job->diagnostics);
 }
-ptr kek_compiler_SelfCTokenizeFileThreadEntry(ptr arg) {
-    struct SelfCTokenizeJob* job=((struct SelfCTokenizeJob*)(arg));
-    kek_compiler_SelfCTokenizeJobRun(job);
+ptr kek_compiler_CTokenizeFileThreadEntry(ptr arg) {
+    struct CTokenizeJob* job=((struct CTokenizeJob*)(arg));
+    kek_compiler_CTokenizeJobRun(job);
     return (0);
 }
-Status kek_compiler_SelfCMergeDiagnostics(struct SelfDiagnosticBag* target,struct SelfDiagnosticBag* source) {
-    for (usize i=0;i<source->count;i++) {
-        struct SelfDiagnostic* item=&source->items[i];
-        Status status=kek_diagnostics_SelfDiagnosticAdd(target,item->severity,item->phase,item->fileIndex,item->location,std_string_OwnedStringView(&item->message));
+Status kek_compiler_CMergeDiagnostics(struct DiagnosticBag* target,struct DiagnosticBag* source) {
+    for (usize i=0;i<source->items.len;i++) {
+        struct Diagnostic* item=&source->items.data[i];
+        Status status=kek_diagnostics_DiagnosticAdd(target,item->severity,item->phase,item->fileIndex,item->location,std_string_OwnedStringView(&item->message));
         if (status!=Status_Ok) {
             return (status);
         }
     }
     return (Status_Ok);
 }
-Status kek_compiler_SelfCProgramInit(struct SelfCProgram* program,struct Allocator allocator) {
+Status kek_compiler_CProgramInit(struct CProgram* program,struct Allocator allocator) {
     program->allocator=allocator;
-    kek_diagnostics_SelfDiagnosticBagInit(&program->diagnostics,allocator);
-    kek_source_SelfFileTableInit(&program->files,allocator);
-    program->tokenFileCount=0;
-    program->declCount=0;
-    program->paramCount=0;
-    program->fieldCount=0;
-    program->typeUseCount=0;
-    program->funcUseCount=0;
+    kek_diagnostics_DiagnosticBagInit(&program->diagnostics,allocator);
+    kek_source_FileTableInit(&program->files,allocator);
+    program->tokenFiles=std_array_ArrayNew__CTokenFile(allocator);
+    program->decls=std_array_ArrayNew__CDecl(allocator);
+    program->params=std_array_ArrayNew__CParam(allocator);
+    program->fields=std_array_ArrayNew__CField(allocator);
+    program->typeUses=std_array_ArrayNew__CTypeUse(allocator);
+    program->funcUses=std_array_ArrayNew__CFuncUse(allocator);
     return (Status_Ok);
 }
-Status kek_compiler_SelfCProgramDestroy(struct SelfCProgram* program) {
-    for (usize i=0;i<program->tokenFileCount;i++) {
+Status kek_compiler_CProgramDestroy(struct CProgram* program) {
+    for (usize i=0;i<program->tokenFiles.len;i++) {
         struct Array__Token tokens={0};
-        tokens.data=program->tokenFiles[i].tokens;
-        tokens.len=program->tokenFiles[i].tokenLen;
-        tokens.cap=program->tokenFiles[i].tokenCap;
+        tokens.data=program->tokenFiles.data[i].tokens;
+        tokens.len=program->tokenFiles.data[i].tokenLen;
+        tokens.cap=program->tokenFiles.data[i].tokenCap;
         tokens.allocator=program->allocator;
-        kek_tokenizer_TokenArrayDestroy(&tokens);
-        std_string_DestroyOwnedString(&program->tokenFiles[i].packageName);
-        std_string_DestroyOwnedString(&program->tokenFiles[i].moduleName);
+        Array__Token_Destroy(&tokens);
+        std_string_DestroyOwnedString(&program->tokenFiles.data[i].packageName);
+        std_string_DestroyOwnedString(&program->tokenFiles.data[i].moduleName);
     }
-    for (usize i=0;i<program->declCount;i++) {
-        std_string_DestroyOwnedString(&program->decls[i].packageName);
-        std_string_DestroyOwnedString(&program->decls[i].moduleName);
+    for (usize i=0;i<program->decls.len;i++) {
+        std_string_DestroyOwnedString(&program->decls.data[i].packageName);
+        std_string_DestroyOwnedString(&program->decls.data[i].moduleName);
     }
-    for (usize i=0;i<program->typeUseCount;i++) {
-        std_string_DestroyOwnedString(&program->typeUses[i].key);
-        std_string_DestroyOwnedString(&program->typeUses[i].cName);
-        std_string_DestroyOwnedString(&program->typeUses[i].baseName);
-        std_string_DestroyOwnedString(&program->typeUses[i].arg0);
-        std_string_DestroyOwnedString(&program->typeUses[i].arg1);
-        std_string_DestroyOwnedString(&program->typeUses[i].arg2);
+    for (usize i=0;i<program->typeUses.len;i++) {
+        std_string_DestroyOwnedString(&program->typeUses.data[i].key);
+        std_string_DestroyOwnedString(&program->typeUses.data[i].cName);
+        std_string_DestroyOwnedString(&program->typeUses.data[i].baseName);
+        std_string_DestroyOwnedString(&program->typeUses.data[i].arg0);
+        std_string_DestroyOwnedString(&program->typeUses.data[i].arg1);
+        std_string_DestroyOwnedString(&program->typeUses.data[i].arg2);
     }
-    for (usize i=0;i<program->funcUseCount;i++) {
-        std_string_DestroyOwnedString(&program->funcUses[i].key);
-        std_string_DestroyOwnedString(&program->funcUses[i].cName);
-        std_string_DestroyOwnedString(&program->funcUses[i].arg0);
-        std_string_DestroyOwnedString(&program->funcUses[i].arg1);
-        std_string_DestroyOwnedString(&program->funcUses[i].arg2);
+    for (usize i=0;i<program->funcUses.len;i++) {
+        std_string_DestroyOwnedString(&program->funcUses.data[i].key);
+        std_string_DestroyOwnedString(&program->funcUses.data[i].cName);
+        std_string_DestroyOwnedString(&program->funcUses.data[i].arg0);
+        std_string_DestroyOwnedString(&program->funcUses.data[i].arg1);
+        std_string_DestroyOwnedString(&program->funcUses.data[i].arg2);
     }
-    kek_source_SelfFileTableDestroy(&program->files);
-    kek_diagnostics_SelfDiagnosticBagDestroy(&program->diagnostics);
-    return (Status_Ok);
+    struct Array__CTokenFile tokenFiles=program->tokenFiles;
+    Status status=Array__CTokenFile_Destroy(&tokenFiles);
+    program->tokenFiles=tokenFiles;
+    struct Array__CDecl decls=program->decls;
+    if (status==Status_Ok) {
+        status=Array__CDecl_Destroy(&decls);
+    }
+    program->decls=decls;
+    struct Array__CParam params=program->params;
+    if (status==Status_Ok) {
+        status=Array__CParam_Destroy(&params);
+    }
+    program->params=params;
+    struct Array__CField fields=program->fields;
+    if (status==Status_Ok) {
+        status=Array__CField_Destroy(&fields);
+    }
+    program->fields=fields;
+    struct Array__CTypeUse typeUses=program->typeUses;
+    if (status==Status_Ok) {
+        status=Array__CTypeUse_Destroy(&typeUses);
+    }
+    program->typeUses=typeUses;
+    struct Array__CFuncUse funcUses=program->funcUses;
+    if (status==Status_Ok) {
+        status=Array__CFuncUse_Destroy(&funcUses);
+    }
+    program->funcUses=funcUses;
+    if (status==Status_Ok) {
+        status=kek_source_FileTableDestroy(&program->files);
+    }
+    if (status==Status_Ok) {
+        status=kek_diagnostics_DiagnosticBagDestroy(&program->diagnostics);
+    }
+    return (status);
 }
-Status kek_compiler_SelfCAddDiagnostic(struct SelfCProgram* program,str message) {
-    return (kek_diagnostics_SelfDiagnosticAddCString(&program->diagnostics,SelfDiagnosticSeverity_Error,SelfDiagnosticPhase_Semantic,-1,kek_diagnostics_SelfSourceLocationNew(0,0,0,0),message));
+Status kek_compiler_CReserveTokenFiles(struct CProgram* program,usize additional) {
+    struct Array__CTokenFile tokenFiles=program->tokenFiles;
+    Status status=Array__CTokenFile_Reserve(&tokenFiles,additional);
+    program->tokenFiles=tokenFiles;
+    return (status);
 }
-Status kek_compiler_SelfCLoadAndTokenize(struct SelfCProgram* program,str entryPath) {
-    Status status=kek_source_SelfLoadCompilationSources(entryPath,program->allocator,&program->files,&program->diagnostics);
+Status kek_compiler_CReserveDecls(struct CProgram* program,usize additional) {
+    struct Array__CDecl decls=program->decls;
+    Status status=Array__CDecl_Reserve(&decls,additional);
+    program->decls=decls;
+    return (status);
+}
+Status kek_compiler_CReserveParams(struct CProgram* program,usize additional) {
+    struct Array__CParam params=program->params;
+    Status status=Array__CParam_Reserve(&params,additional);
+    program->params=params;
+    return (status);
+}
+Status kek_compiler_CReserveFields(struct CProgram* program,usize additional) {
+    struct Array__CField fields=program->fields;
+    Status status=Array__CField_Reserve(&fields,additional);
+    program->fields=fields;
+    return (status);
+}
+Status kek_compiler_CReserveTypeUses(struct CProgram* program,usize additional) {
+    struct Array__CTypeUse typeUses=program->typeUses;
+    Status status=Array__CTypeUse_Reserve(&typeUses,additional);
+    program->typeUses=typeUses;
+    return (status);
+}
+Status kek_compiler_CReserveFuncUses(struct CProgram* program,usize additional) {
+    struct Array__CFuncUse funcUses=program->funcUses;
+    Status status=Array__CFuncUse_Reserve(&funcUses,additional);
+    program->funcUses=funcUses;
+    return (status);
+}
+Status kek_compiler_CReserveLocals(struct CEnv* env,usize additional) {
+    struct Array__CLocal locals=env->locals;
+    Status status=Array__CLocal_Reserve(&locals,additional);
+    env->locals=locals;
+    return (status);
+}
+Status kek_compiler_CLoadAndTokenize(struct CProgram* program,str entryPath) {
+    Status status=kek_source_LoadCompilationSources(entryPath,program->allocator,&program->files,&program->diagnostics);
     if (status!=Status_Ok) {
         return (status);
     }
-    if (program->files.count>(sizeof(program->tokenFiles)/sizeof((program->tokenFiles)[0]))) {
-        return (kek_compiler_SelfCAddDiagnostic(program,"too many source files"));
+    status=kek_compiler_CReserveTokenFiles(program,program->files.files.len);
+    if (status!=Status_Ok) {
+        return (status);
     }
-    for (usize i=0;i<program->files.count;i++) {
-        status=kek_compiler_SelfCInitTokenFileSlot(program->allocator,&program->tokenFiles[i],i);
+    for (usize i=0;i<program->files.files.len;i++) {
+        status=kek_compiler_CInitTokenFileSlot(program->allocator,&program->tokenFiles.data[i],i);
         if (status!=Status_Ok) {
-            program->tokenFileCount=i;
+            program->tokenFiles.len=i;
             return (status);
         }
     }
-    program->tokenFileCount=program->files.count;
-    struct SelfCTokenizeJob jobs[96];
-    for (usize i=0;i<program->files.count;i++) {
-        struct SelfCTokenizeJob* job=&jobs[i];
+    program->tokenFiles.len=program->files.files.len;
+    struct Array__CTokenizeJob jobs=std_array_ArrayNew__CTokenizeJob(program->allocator);
+    if (program->files.files.len>0) {
+        status=Array__CTokenizeJob_Reserve(&jobs,program->files.files.len);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        jobs.len=program->files.files.len;
+    }
+    for (usize i=0;i<program->files.files.len;i++) {
+        struct CTokenizeJob* job=&jobs.data[i];
         job->allocator=program->allocator;
-        job->sourceFile=&program->files.files[i];
-        job->tokenFile=&program->tokenFiles[i];
-        kek_diagnostics_SelfDiagnosticBagInit(&job->diagnostics,program->allocator);
+        job->sourceFile=&program->files.files.data[i];
+        job->tokenFile=&program->tokenFiles.data[i];
+        kek_diagnostics_DiagnosticBagInit(&job->diagnostics,program->allocator);
         job->status=Status_Ok;
         job->fileIndex=i;
         job->isRoot=i==0;
         job->threaded=0;
-        Status startStatus=std_thread_ThreadHandleStart(&job->threadHandle,((ptr)(kek_compiler_SelfCTokenizeFileThreadEntry)),((ptr)(job)));
+        Status startStatus=std_thread_ThreadHandleStart(&job->threadHandle,((ptr)(kek_compiler_CTokenizeFileThreadEntry)),((ptr)(job)));
         if (startStatus==Status_Ok) {
             job->threaded=1;
         } else {
-            kek_compiler_SelfCTokenizeJobRun(job);
+            kek_compiler_CTokenizeJobRun(job);
         }
     }
     Status firstStatus=Status_Ok;
-    for (usize i=0;i<program->files.count;i++) {
-        struct SelfCTokenizeJob* job=&jobs[i];
+    for (usize i=0;i<program->files.files.len;i++) {
+        struct CTokenizeJob* job=&jobs.data[i];
         if (job->threaded) {
             Status joinStatus=std_thread_ThreadHandleJoin(&job->threadHandle);
             if (joinStatus!=Status_Ok&&job->status==Status_Ok) {
                 job->status=joinStatus;
             }
         }
-        Status mergeStatus=kek_compiler_SelfCMergeDiagnostics(&program->diagnostics,&job->diagnostics);
+        Status mergeStatus=kek_compiler_CMergeDiagnostics(&program->diagnostics,&job->diagnostics);
         if (firstStatus==Status_Ok&&mergeStatus!=Status_Ok) {
             firstStatus=mergeStatus;
         }
         if (firstStatus==Status_Ok&&job->status!=Status_Ok) {
             firstStatus=job->status;
         }
-        kek_diagnostics_SelfDiagnosticBagDestroy(&job->diagnostics);
+        kek_diagnostics_DiagnosticBagDestroy(&job->diagnostics);
+    }
+    Status jobsStatus=Array__CTokenizeJob_Destroy(&jobs);
+    if (firstStatus==Status_Ok&&jobsStatus!=Status_Ok) {
+        firstStatus=jobsStatus;
     }
     return (firstStatus);
 }
-int kek_compiler_SelfCompilerFail(str text) {
+int kek_compiler_CompilerFail(str text) {
     struct File stderr=std_file_Stderr();
     std_format_WriteStringToFile(&stderr,std_string_StringFromCString(text));
     return (1);
 }
-int kek_compiler_SelfCompilerPrintHelp(void) {
+int kek_compiler_CompilerPrintHelp(void) {
     struct File stdout=std_file_Stdout();
     std_format_WriteStringToFile(&stdout,std_string_StringFromCString("kek build <input.kek> -o <output.c>\n"));
     std_format_WriteStringToFile(&stdout,std_string_StringFromCString("kek --help\n"));
     std_format_WriteStringToFile(&stdout,std_string_StringFromCString("kek --version\n"));
     return (0);
 }
-Status kek_compiler_SelfCWriteDiagnostics(struct SelfCProgram* program) {
-    struct StringBuilder builder=std_string_StringBuilderNew(program->allocator);
-    Status status=kek_diagnostics_SelfWriteDiagnosticDump(&program->diagnostics,&builder);
-    if (status==Status_Ok) {
-        struct File stderr=std_file_Stderr();
-        struct String view=StringBuilder_View(&builder);
-        struct Result__usize write=File_Write(&stderr,String_Bytes(&view));
-        status=write.status;
-    }
-    StringBuilder_Destroy(&builder);
-    return (status);
-}
-bool kek_compiler_SelfCIsOpenDelimiter(struct SelfCProgram* program,usize fileIndex,usize index) {
-    return (kek_compiler_SelfCIsPunctuation(program,fileIndex,index,PunctuationKind_LeftParen)||kek_compiler_SelfCIsPunctuation(program,fileIndex,index,PunctuationKind_LeftBrace)||kek_compiler_SelfCIsPunctuation(program,fileIndex,index,PunctuationKind_LeftBracket)||kek_compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_Less));
-}
-bool kek_compiler_SelfCDelimiterMatches(struct SelfCProgram* program,usize fileIndex,usize openIndex,usize closeIndex) {
-    if (kek_compiler_SelfCIsPunctuation(program,fileIndex,openIndex,PunctuationKind_LeftParen)) {
-        return (kek_compiler_SelfCIsPunctuation(program,fileIndex,closeIndex,PunctuationKind_RightParen));
-    }
-    if (kek_compiler_SelfCIsPunctuation(program,fileIndex,openIndex,PunctuationKind_LeftBrace)) {
-        return (kek_compiler_SelfCIsPunctuation(program,fileIndex,closeIndex,PunctuationKind_RightBrace));
-    }
-    if (kek_compiler_SelfCIsPunctuation(program,fileIndex,openIndex,PunctuationKind_LeftBracket)) {
-        return (kek_compiler_SelfCIsPunctuation(program,fileIndex,closeIndex,PunctuationKind_RightBracket));
-    }
-    if (kek_compiler_SelfCIsOperator(program,fileIndex,openIndex,OperatorKind_Less)) {
-        return (kek_compiler_SelfCIsOperator(program,fileIndex,closeIndex,OperatorKind_Greater));
-    }
-    return (0);
-}
-usize kek_compiler_SelfCFindMatching(struct SelfCProgram* program,usize fileIndex,usize openIndex) {
-    usize count=kek_compiler_SelfCFileTokenCount(program,fileIndex);
+usize kek_compiler_CFindMatching(struct CProgram* program,usize fileIndex,usize openIndex) {
+    usize count=kek_compiler_CFileTokenCount(program,fileIndex);
     usize depth=0;
-    bool isParen=kek_compiler_SelfCIsPunctuation(program,fileIndex,openIndex,PunctuationKind_LeftParen);
-    bool isBrace=kek_compiler_SelfCIsPunctuation(program,fileIndex,openIndex,PunctuationKind_LeftBrace);
-    bool isBracket=kek_compiler_SelfCIsPunctuation(program,fileIndex,openIndex,PunctuationKind_LeftBracket);
-    bool isGeneric=kek_compiler_SelfCIsOperator(program,fileIndex,openIndex,OperatorKind_Less);
+    bool isParen=kek_compiler_CIsPunctuation(program,fileIndex,openIndex,PunctuationKind_LeftParen);
+    bool isBrace=kek_compiler_CIsPunctuation(program,fileIndex,openIndex,PunctuationKind_LeftBrace);
+    bool isBracket=kek_compiler_CIsPunctuation(program,fileIndex,openIndex,PunctuationKind_LeftBracket);
+    bool isGeneric=kek_compiler_CIsOperator(program,fileIndex,openIndex,OperatorKind_Less);
     for (usize i=openIndex;i<count;i++) {
-        if ((isParen&&kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftParen))||(isBrace&&kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBrace))||(isBracket&&kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBracket))||(isGeneric&&kek_compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Less))) {
+        if ((isParen&&kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_LeftParen))||(isBrace&&kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBrace))||(isBracket&&kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBracket))||(isGeneric&&kek_compiler_CIsOperator(program,fileIndex,i,OperatorKind_Less))) {
             depth+=1;
             continue;
         }
-        if ((isParen&&kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_RightParen))||(isBrace&&kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_RightBrace))||(isBracket&&kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_RightBracket))||(isGeneric&&kek_compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Greater))) {
+        if ((isParen&&kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_RightParen))||(isBrace&&kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_RightBrace))||(isBracket&&kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_RightBracket))||(isGeneric&&kek_compiler_CIsOperator(program,fileIndex,i,OperatorKind_Greater))) {
             if (depth==0) {
                 return (i);
             }
@@ -3583,194 +3612,194 @@ usize kek_compiler_SelfCFindMatching(struct SelfCProgram* program,usize fileInde
     }
     return (count);
 }
-usize kek_compiler_SelfCSkipDelimited(struct SelfCProgram* program,usize fileIndex,usize index) {
-    usize match=kek_compiler_SelfCFindMatching(program,fileIndex,index);
-    if (match>=kek_compiler_SelfCFileTokenCount(program,fileIndex)) {
+usize kek_compiler_CSkipDelimited(struct CProgram* program,usize fileIndex,usize index) {
+    usize match=kek_compiler_CFindMatching(program,fileIndex,index);
+    if (match>=kek_compiler_CFileTokenCount(program,fileIndex)) {
         return (index+1);
     }
     return (match+1);
 }
-usize kek_compiler_SelfCSkipAttributes(struct SelfCProgram* program,usize fileIndex,usize index) {
-    while (index<kek_compiler_SelfCFileTokenCount(program,fileIndex)&&kek_compiler_SelfCIsPunctuation(program,fileIndex,index,PunctuationKind_LeftBracket)) {
-        index=kek_compiler_SelfCSkipDelimited(program,fileIndex,index);
+usize kek_compiler_CSkipAttributes(struct CProgram* program,usize fileIndex,usize index) {
+    while (index<kek_compiler_CFileTokenCount(program,fileIndex)&&kek_compiler_CIsPunctuation(program,fileIndex,index,PunctuationKind_LeftBracket)) {
+        index=kek_compiler_CSkipDelimited(program,fileIndex,index);
     }
     return (index);
 }
-usize kek_compiler_SelfCFindTopLevelColon(struct SelfCProgram* program,usize fileIndex,usize start,usize end) {
+usize kek_compiler_CFindTopLevelColon(struct CProgram* program,usize fileIndex,usize start,usize end) {
     usize parenDepth=0;
     usize braceDepth=0;
     usize bracketDepth=0;
     usize genericDepth=0;
     for (usize i=start;i<end;i++) {
-        if (kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftParen)) {
+        if (kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_LeftParen)) {
             parenDepth+=1;
             continue;
         }
-        if (kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_RightParen)) {
+        if (kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_RightParen)) {
             if (parenDepth>0) {
                 parenDepth-=1;
             }
             continue;
         }
-        if (kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBrace)) {
+        if (kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBrace)) {
             braceDepth+=1;
             continue;
         }
-        if (kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_RightBrace)) {
+        if (kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_RightBrace)) {
             if (braceDepth>0) {
                 braceDepth-=1;
             }
             continue;
         }
-        if (kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBracket)) {
+        if (kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBracket)) {
             bracketDepth+=1;
             continue;
         }
-        if (kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_RightBracket)) {
+        if (kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_RightBracket)) {
             if (bracketDepth>0) {
                 bracketDepth-=1;
             }
             continue;
         }
-        if (kek_compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Less)) {
+        if (kek_compiler_CIsOperator(program,fileIndex,i,OperatorKind_Less)) {
             genericDepth+=1;
             continue;
         }
-        if (kek_compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Greater)) {
+        if (kek_compiler_CIsOperator(program,fileIndex,i,OperatorKind_Greater)) {
             if (genericDepth>0) {
                 genericDepth-=1;
             }
             continue;
         }
-        if (parenDepth==0&&braceDepth==0&&bracketDepth==0&&genericDepth==0&&kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_Colon)) {
+        if (parenDepth==0&&braceDepth==0&&bracketDepth==0&&genericDepth==0&&kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_Colon)) {
             return (i);
         }
     }
     return (end);
 }
-usize kek_compiler_SelfCFindTokenAtDepthZero(struct SelfCProgram* program,usize fileIndex,usize start,usize end,PunctuationKind punctuation) {
+usize kek_compiler_CFindTokenAtDepthZero(struct CProgram* program,usize fileIndex,usize start,usize end,PunctuationKind punctuation) {
     usize parenDepth=0;
     usize braceDepth=0;
     usize bracketDepth=0;
     usize genericDepth=0;
     for (usize i=start;i<end;i++) {
-        if (kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftParen)) {
+        if (kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_LeftParen)) {
             parenDepth+=1;
             continue;
         }
-        if (kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_RightParen)) {
+        if (kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_RightParen)) {
             if (parenDepth>0) {
                 parenDepth-=1;
             }
             continue;
         }
-        if (kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBrace)) {
+        if (kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBrace)) {
             braceDepth+=1;
             continue;
         }
-        if (kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_RightBrace)) {
+        if (kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_RightBrace)) {
             if (braceDepth>0) {
                 braceDepth-=1;
             }
             continue;
         }
-        if (kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBracket)) {
+        if (kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBracket)) {
             bracketDepth+=1;
             continue;
         }
-        if (kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_RightBracket)) {
+        if (kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_RightBracket)) {
             if (bracketDepth>0) {
                 bracketDepth-=1;
             }
             continue;
         }
-        if (parenDepth==0&&braceDepth==0&&bracketDepth==0&&genericDepth==0&&kek_compiler_SelfCIsPunctuation(program,fileIndex,i,punctuation)) {
+        if (parenDepth==0&&braceDepth==0&&bracketDepth==0&&genericDepth==0&&kek_compiler_CIsPunctuation(program,fileIndex,i,punctuation)) {
             return (i);
         }
     }
     return (end);
 }
-usize kek_compiler_SelfCFindOperatorScope(struct SelfCProgram* program,usize fileIndex,usize start,usize end) {
+usize kek_compiler_CFindOperatorScope(struct CProgram* program,usize fileIndex,usize start,usize end) {
     usize genericDepth=0;
     for (usize i=start;i<end;i++) {
-        if (kek_compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Less)) {
+        if (kek_compiler_CIsOperator(program,fileIndex,i,OperatorKind_Less)) {
             genericDepth+=1;
             continue;
         }
-        if (kek_compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Greater)) {
+        if (kek_compiler_CIsOperator(program,fileIndex,i,OperatorKind_Greater)) {
             if (genericDepth>0) {
                 genericDepth-=1;
             }
             continue;
         }
-        if (genericDepth==0&&kek_compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Scope)) {
+        if (genericDepth==0&&kek_compiler_CIsOperator(program,fileIndex,i,OperatorKind_Scope)) {
             return (i);
         }
     }
     return (end);
 }
-usize kek_compiler_SelfCFindNextGroup(struct SelfCProgram* program,usize fileIndex,usize start,usize end) {
+usize kek_compiler_CFindNextGroup(struct CProgram* program,usize fileIndex,usize start,usize end) {
     for (usize i=start;i<end;i++) {
-        if (kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftParen)) {
+        if (kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_LeftParen)) {
             return (i);
         }
     }
     return (end);
 }
-usize kek_compiler_SelfCFindNextBlock(struct SelfCProgram* program,usize fileIndex,usize start,usize end) {
+usize kek_compiler_CFindNextBlock(struct CProgram* program,usize fileIndex,usize start,usize end) {
     for (usize i=start;i<end;i++) {
-        if (kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBrace)) {
+        if (kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBrace)) {
             return (i);
         }
     }
     return (end);
 }
-u8 kek_compiler_SelfCOperatorCode(struct SelfCProgram* program,usize fileIndex,usize index) {
-    struct Token token=program->tokenFiles[fileIndex].tokens[index];
+u8 kek_compiler_COperatorCode(struct CProgram* program,usize fileIndex,usize index) {
+    struct Token token=program->tokenFiles.data[fileIndex].tokens[index];
     if (token.kind==TokenKind_Operator) {
         return (((u8)(token.subkind+1)));
     }
     return (0);
 }
-Status kek_compiler_SelfCAddDecl(struct SelfCProgram* program,struct SelfCDecl* decl) {
-    if (program->declCount>=(sizeof(program->decls)/sizeof((program->decls)[0]))) {
-        return (kek_compiler_SelfCAddDiagnostic(program,"too many declarations"));
+Status kek_compiler_CAddDecl(struct CProgram* program,struct CDecl* decl) {
+    Status status=kek_compiler_CReserveDecls(program,1);
+    if (status==Status_Ok) {
+        program->decls.data[program->decls.len]=decl[0];
+        program->decls.len+=1;
     }
-    program->decls[program->declCount]=decl[0];
-    program->declCount+=1;
-    return (Status_Ok);
+    return (status);
 }
-Status kek_compiler_SelfCAddParam(struct SelfCProgram* program,struct SelfCParam* param) {
-    if (program->paramCount>=(sizeof(program->params)/sizeof((program->params)[0]))) {
-        return (kek_compiler_SelfCAddDiagnostic(program,"too many parameters"));
+Status kek_compiler_CAddParam(struct CProgram* program,struct CParam* param) {
+    Status status=kek_compiler_CReserveParams(program,1);
+    if (status==Status_Ok) {
+        program->params.data[program->params.len]=param[0];
+        program->params.len+=1;
     }
-    program->params[program->paramCount]=param[0];
-    program->paramCount+=1;
-    return (Status_Ok);
+    return (status);
 }
-Status kek_compiler_SelfCAddField(struct SelfCProgram* program,struct SelfCField* field) {
-    if (program->fieldCount>=(sizeof(program->fields)/sizeof((program->fields)[0]))) {
-        return (kek_compiler_SelfCAddDiagnostic(program,"too many fields"));
+Status kek_compiler_CAddField(struct CProgram* program,struct CField* field) {
+    Status status=kek_compiler_CReserveFields(program,1);
+    if (status==Status_Ok) {
+        program->fields.data[program->fields.len]=field[0];
+        program->fields.len+=1;
     }
-    program->fields[program->fieldCount]=field[0];
-    program->fieldCount+=1;
-    return (Status_Ok);
+    return (status);
 }
-Status kek_compiler_SelfCParseParams(struct SelfCProgram* program,struct SelfCDecl* decl,usize fileIndex,usize start,usize end) {
-    decl->firstParam=program->paramCount;
+Status kek_compiler_CParseParams(struct CProgram* program,struct CDecl* decl,usize fileIndex,usize start,usize end) {
+    decl->firstParam=program->params.len;
     decl->paramCount=0;
     usize itemStart=start;
     while (itemStart<end) {
-        if (kek_compiler_SelfCIsPunctuation(program,fileIndex,itemStart,PunctuationKind_Comma)) {
+        if (kek_compiler_CIsPunctuation(program,fileIndex,itemStart,PunctuationKind_Comma)) {
             itemStart+=1;
             continue;
         }
-        usize itemEnd=kek_compiler_SelfCFindTokenAtDepthZero(program,fileIndex,itemStart,end,PunctuationKind_Comma);
-        usize colon=kek_compiler_SelfCFindTopLevelColon(program,fileIndex,itemStart,itemEnd);
+        usize itemEnd=kek_compiler_CFindTokenAtDepthZero(program,fileIndex,itemStart,end,PunctuationKind_Comma);
+        usize colon=kek_compiler_CFindTopLevelColon(program,fileIndex,itemStart,itemEnd);
         if (colon>=itemEnd) {
             break;
         }
-        struct SelfCParam param={0};
+        struct CParam param={0};
         param.fileIndex=fileIndex;
         param.typeStart=itemStart;
         param.typeEnd=colon;
@@ -3779,14 +3808,14 @@ Status kek_compiler_SelfCParseParams(struct SelfCProgram* program,struct SelfCDe
         param.defaultEnd=itemEnd;
         param.hasDefault=0;
         for (usize i=param.nameIndex+1;i<itemEnd;i++) {
-            if (kek_compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Assign)) {
+            if (kek_compiler_CIsOperator(program,fileIndex,i,OperatorKind_Assign)) {
                 param.defaultStart=i+1;
                 param.defaultEnd=itemEnd;
                 param.hasDefault=1;
                 break;
             }
         }
-        Status status=kek_compiler_SelfCAddParam(program,&param);
+        Status status=kek_compiler_CAddParam(program,&param);
         if (status!=Status_Ok) {
             return (status);
         }
@@ -3798,20 +3827,20 @@ Status kek_compiler_SelfCParseParams(struct SelfCProgram* program,struct SelfCDe
     }
     return (Status_Ok);
 }
-Status kek_compiler_SelfCParseFields(struct SelfCProgram* program,struct SelfCDecl* decl,usize fileIndex,usize start,usize end) {
-    decl->firstField=program->fieldCount;
+Status kek_compiler_CParseFields(struct CProgram* program,struct CDecl* decl,usize fileIndex,usize start,usize end) {
+    decl->firstField=program->fields.len;
     decl->fieldCount=0;
     usize itemStart=start;
     while (itemStart<end) {
-        itemStart=kek_compiler_SelfCSkipAttributes(program,fileIndex,itemStart);
+        itemStart=kek_compiler_CSkipAttributes(program,fileIndex,itemStart);
         if (itemStart>=end) {
             break;
         }
-        if (kek_compiler_SelfCIsPunctuation(program,fileIndex,itemStart,PunctuationKind_Semicolon)) {
+        if (kek_compiler_CIsPunctuation(program,fileIndex,itemStart,PunctuationKind_Semicolon)) {
             itemStart+=1;
             continue;
         }
-        struct SelfCField field={0};
+        struct CField field={0};
         field.fileIndex=fileIndex;
         field.typeStart=itemStart;
         field.typeEnd=itemStart;
@@ -3825,37 +3854,37 @@ Status kek_compiler_SelfCParseFields(struct SelfCProgram* program,struct SelfCDe
         field.isNestedStruct=0;
         field.nestedBodyStart=end;
         field.nestedBodyEnd=end;
-        if (kek_compiler_SelfCIsKeyword(program,fileIndex,itemStart,KeywordKind_Struct)) {
+        if (kek_compiler_CIsKeyword(program,fileIndex,itemStart,KeywordKind_Struct)) {
             usize colon=itemStart+1;
-            if (colon<end&&kek_compiler_SelfCIsPunctuation(program,fileIndex,colon,PunctuationKind_Colon)) {
+            if (colon<end&&kek_compiler_CIsPunctuation(program,fileIndex,colon,PunctuationKind_Colon)) {
                 usize nameIndex=colon+1;
-                usize blockStart=kek_compiler_SelfCFindNextBlock(program,fileIndex,nameIndex+1,end);
-                usize blockEnd=kek_compiler_SelfCFindMatching(program,fileIndex,blockStart);
+                usize blockStart=kek_compiler_CFindNextBlock(program,fileIndex,nameIndex+1,end);
+                usize blockEnd=kek_compiler_CFindMatching(program,fileIndex,blockStart);
                 field.isNestedStruct=1;
                 field.nameIndex=nameIndex;
                 field.nestedBodyStart=blockStart+1;
                 field.nestedBodyEnd=blockEnd;
-                Status addNested=kek_compiler_SelfCAddField(program,&field);
+                Status addNested=kek_compiler_CAddField(program,&field);
                 if (addNested!=Status_Ok) {
                     return (addNested);
                 }
                 decl->fieldCount+=1;
                 itemStart=blockEnd+1;
-                if (itemStart<end&&kek_compiler_SelfCIsPunctuation(program,fileIndex,itemStart,PunctuationKind_Semicolon)) {
+                if (itemStart<end&&kek_compiler_CIsPunctuation(program,fileIndex,itemStart,PunctuationKind_Semicolon)) {
                     itemStart+=1;
                 }
                 continue;
             }
         }
         usize itemEnd=itemStart;
-        while (itemEnd<end&&!kek_compiler_SelfCIsPunctuation(program,fileIndex,itemEnd,PunctuationKind_Semicolon)) {
-            if (kek_compiler_SelfCIsPunctuation(program,fileIndex,itemEnd,PunctuationKind_LeftBrace)||kek_compiler_SelfCIsPunctuation(program,fileIndex,itemEnd,PunctuationKind_LeftParen)||kek_compiler_SelfCIsPunctuation(program,fileIndex,itemEnd,PunctuationKind_LeftBracket)) {
-                itemEnd=kek_compiler_SelfCSkipDelimited(program,fileIndex,itemEnd);
+        while (itemEnd<end&&!kek_compiler_CIsPunctuation(program,fileIndex,itemEnd,PunctuationKind_Semicolon)) {
+            if (kek_compiler_CIsPunctuation(program,fileIndex,itemEnd,PunctuationKind_LeftBrace)||kek_compiler_CIsPunctuation(program,fileIndex,itemEnd,PunctuationKind_LeftParen)||kek_compiler_CIsPunctuation(program,fileIndex,itemEnd,PunctuationKind_LeftBracket)) {
+                itemEnd=kek_compiler_CSkipDelimited(program,fileIndex,itemEnd);
                 continue;
             }
             itemEnd+=1;
         }
-        usize colon=kek_compiler_SelfCFindTopLevelColon(program,fileIndex,itemStart,itemEnd);
+        usize colon=kek_compiler_CFindTopLevelColon(program,fileIndex,itemStart,itemEnd);
         if (colon>=itemEnd) {
             itemStart=itemEnd+1;
             continue;
@@ -3864,21 +3893,21 @@ Status kek_compiler_SelfCParseFields(struct SelfCProgram* program,struct SelfCDe
         field.typeEnd=colon;
         field.nameIndex=colon+1;
         usize afterName=field.nameIndex+1;
-        if (afterName<itemEnd&&kek_compiler_SelfCIsPunctuation(program,fileIndex,afterName,PunctuationKind_LeftBracket)) {
+        if (afterName<itemEnd&&kek_compiler_CIsPunctuation(program,fileIndex,afterName,PunctuationKind_LeftBracket)) {
             field.isArray=1;
             field.arrayStart=afterName+1;
-            field.arrayEnd=kek_compiler_SelfCFindMatching(program,fileIndex,afterName);
+            field.arrayEnd=kek_compiler_CFindMatching(program,fileIndex,afterName);
             afterName=field.arrayEnd+1;
         }
         for (usize i=afterName;i<itemEnd;i++) {
-            if (kek_compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Assign)) {
+            if (kek_compiler_CIsOperator(program,fileIndex,i,OperatorKind_Assign)) {
                 field.hasDefault=1;
                 field.defaultStart=i+1;
                 field.defaultEnd=itemEnd;
                 break;
             }
         }
-        Status status=kek_compiler_SelfCAddField(program,&field);
+        Status status=kek_compiler_CAddField(program,&field);
         if (status!=Status_Ok) {
             return (status);
         }
@@ -3887,30 +3916,30 @@ Status kek_compiler_SelfCParseFields(struct SelfCProgram* program,struct SelfCDe
     }
     return (Status_Ok);
 }
-bool kek_compiler_SelfCDeclNameMatches(struct SelfCProgram* program,struct SelfCDecl* decl,struct String name) {
-    if (decl->nameIndex>=kek_compiler_SelfCFileTokenCount(program,decl->fileIndex)) {
+bool kek_compiler_CDeclNameMatches(struct CProgram* program,struct CDecl* decl,struct String name) {
+    if (decl->nameIndex>=kek_compiler_CFileTokenCount(program,decl->fileIndex)) {
         return (0);
     }
-    struct String declName=kek_compiler_SelfCTokenText(program,decl->fileIndex,decl->nameIndex);
+    struct String declName=kek_compiler_CTokenText(program,decl->fileIndex,decl->nameIndex);
     return (String_Equals(&declName,name));
 }
-struct SelfCDecl* kek_compiler_SelfCFindTypeDecl(struct SelfCProgram* program,struct String name) {
-    for (usize i=0;i<program->declCount;i++) {
-        struct SelfCDecl* decl=&program->decls[i];
-        if ((decl->kind==SelfCDeclKind_Struct||decl->kind==SelfCDeclKind_Union||decl->kind==SelfCDeclKind_Enum||decl->kind==SelfCDeclKind_Alias)&&kek_compiler_SelfCDeclNameMatches(program,decl,name)) {
+struct CDecl* kek_compiler_CFindTypeDecl(struct CProgram* program,struct String name) {
+    for (usize i=0;i<program->decls.len;i++) {
+        struct CDecl* decl=&program->decls.data[i];
+        if ((decl->kind==CDeclKind_Struct||decl->kind==CDeclKind_Union||decl->kind==CDeclKind_Enum||decl->kind==CDeclKind_Alias)&&kek_compiler_CDeclNameMatches(program,decl,name)) {
             return (decl);
         }
     }
     return (0);
 }
-Status kek_compiler_SelfCParseAliasDecl(struct SelfCProgram* program,usize fileIndex,usize start,usize* outEnd) {
-    usize count=kek_compiler_SelfCFileTokenCount(program,fileIndex);
+Status kek_compiler_CParseAliasDecl(struct CProgram* program,usize fileIndex,usize start,usize* outEnd) {
+    usize count=kek_compiler_CFileTokenCount(program,fileIndex);
     usize end=start;
-    while (end<count&&!kek_compiler_SelfCIsPunctuation(program,fileIndex,end,PunctuationKind_Semicolon)&&!kek_compiler_SelfCIsEof(program,fileIndex,end)) {
+    while (end<count&&!kek_compiler_CIsPunctuation(program,fileIndex,end,PunctuationKind_Semicolon)&&!kek_compiler_CIsEof(program,fileIndex,end)) {
         end+=1;
     }
-    struct SelfCDecl decl={0};
-    decl.kind=SelfCDeclKind_Alias;
+    struct CDecl decl={0};
+    decl.kind=CDeclKind_Alias;
     decl.fileIndex=fileIndex;
     decl.start=start;
     decl.end=end+1;
@@ -3935,32 +3964,33 @@ Status kek_compiler_SelfCParseAliasDecl(struct SelfCProgram* program,usize fileI
     decl.firstField=0;
     decl.fieldCount=0;
     decl.emitted=0;
-    Status clone=kek_compiler_SelfCCloneString(program,std_string_OwnedStringView(&program->tokenFiles[fileIndex].packageName),&decl.packageName);
+    decl.reachable=0;
+    Status clone=kek_compiler_CCloneString(program,std_string_OwnedStringView(&program->tokenFiles.data[fileIndex].packageName),&decl.packageName);
     if (clone!=Status_Ok) {
         return (clone);
     }
-    clone=kek_compiler_SelfCCloneString(program,std_string_OwnedStringView(&program->tokenFiles[fileIndex].moduleName),&decl.moduleName);
+    clone=kek_compiler_CCloneString(program,std_string_OwnedStringView(&program->tokenFiles.data[fileIndex].moduleName),&decl.moduleName);
     if (clone!=Status_Ok) {
         return (clone);
     }
     for (usize i=start+3;i<end;i++) {
-        if (kek_compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Assign)) {
+        if (kek_compiler_CIsOperator(program,fileIndex,i,OperatorKind_Assign)) {
             decl.returnStart=i+1;
             decl.returnEnd=end;
             break;
         }
     }
-    Status status=kek_compiler_SelfCAddDecl(program,&decl);
+    Status status=kek_compiler_CAddDecl(program,&decl);
     outEnd[0]=end+1;
     return (status);
 }
-Status kek_compiler_SelfCParseTypeDecl(struct SelfCProgram* program,usize fileIndex,usize start,SelfCDeclKind kind,usize* outEnd) {
-    usize count=kek_compiler_SelfCFileTokenCount(program,fileIndex);
+Status kek_compiler_CParseTypeDecl(struct CProgram* program,usize fileIndex,usize start,CDeclKind kind,usize* outEnd) {
+    usize count=kek_compiler_CFileTokenCount(program,fileIndex);
     usize colon=start+1;
     usize nameIndex=colon+1;
-    if (kind==SelfCDeclKind_Enum) {
-        if (colon<count&&kek_compiler_SelfCIsPunctuation(program,fileIndex,colon,PunctuationKind_Colon)) {
-            usize secondColon=kek_compiler_SelfCFindTopLevelColon(program,fileIndex,colon+1,count);
+    if (kind==CDeclKind_Enum) {
+        if (colon<count&&kek_compiler_CIsPunctuation(program,fileIndex,colon,PunctuationKind_Colon)) {
+            usize secondColon=kek_compiler_CFindTopLevelColon(program,fileIndex,colon+1,count);
             if (secondColon<count) {
                 nameIndex=secondColon+1;
             }
@@ -3968,13 +3998,13 @@ Status kek_compiler_SelfCParseTypeDecl(struct SelfCProgram* program,usize fileIn
     }
     usize genericStart=count;
     usize genericEnd=count;
-    if (nameIndex+1<count&&kek_compiler_SelfCIsOperator(program,fileIndex,nameIndex+1,OperatorKind_Less)) {
+    if (nameIndex+1<count&&kek_compiler_CIsOperator(program,fileIndex,nameIndex+1,OperatorKind_Less)) {
         genericStart=nameIndex+1;
-        genericEnd=kek_compiler_SelfCFindMatching(program,fileIndex,genericStart);
+        genericEnd=kek_compiler_CFindMatching(program,fileIndex,genericStart);
     }
-    usize blockStart=kek_compiler_SelfCFindNextBlock(program,fileIndex,nameIndex+1,count);
-    usize blockEnd=kek_compiler_SelfCFindMatching(program,fileIndex,blockStart);
-    struct SelfCDecl decl={0};
+    usize blockStart=kek_compiler_CFindNextBlock(program,fileIndex,nameIndex+1,count);
+    usize blockEnd=kek_compiler_CFindMatching(program,fileIndex,blockStart);
+    struct CDecl decl={0};
     decl.kind=kind;
     decl.fileIndex=fileIndex;
     decl.start=start;
@@ -4000,33 +4030,34 @@ Status kek_compiler_SelfCParseTypeDecl(struct SelfCProgram* program,usize fileIn
     decl.firstField=0;
     decl.fieldCount=0;
     decl.emitted=0;
-    Status clone=kek_compiler_SelfCCloneString(program,std_string_OwnedStringView(&program->tokenFiles[fileIndex].packageName),&decl.packageName);
+    decl.reachable=0;
+    Status clone=kek_compiler_CCloneString(program,std_string_OwnedStringView(&program->tokenFiles.data[fileIndex].packageName),&decl.packageName);
     if (clone!=Status_Ok) {
         return (clone);
     }
-    clone=kek_compiler_SelfCCloneString(program,std_string_OwnedStringView(&program->tokenFiles[fileIndex].moduleName),&decl.moduleName);
+    clone=kek_compiler_CCloneString(program,std_string_OwnedStringView(&program->tokenFiles.data[fileIndex].moduleName),&decl.moduleName);
     if (clone!=Status_Ok) {
         return (clone);
     }
-    if (kind==SelfCDeclKind_Struct||kind==SelfCDeclKind_Union) {
-        Status fields=kek_compiler_SelfCParseFields(program,&decl,fileIndex,blockStart+1,blockEnd);
+    if (kind==CDeclKind_Struct||kind==CDeclKind_Union) {
+        Status fields=kek_compiler_CParseFields(program,&decl,fileIndex,blockStart+1,blockEnd);
         if (fields!=Status_Ok) {
             return (fields);
         }
     }
-    Status status=kek_compiler_SelfCAddDecl(program,&decl);
+    Status status=kek_compiler_CAddDecl(program,&decl);
     outEnd[0]=blockEnd+1;
-    if (outEnd[0]<count&&kek_compiler_SelfCIsPunctuation(program,fileIndex,outEnd[0],PunctuationKind_Semicolon)) {
+    if (outEnd[0]<count&&kek_compiler_CIsPunctuation(program,fileIndex,outEnd[0],PunctuationKind_Semicolon)) {
         outEnd[0]+=1;
     }
     return (status);
 }
-Status kek_compiler_SelfCParseExternDecl(struct SelfCProgram* program,usize fileIndex,usize start,usize* outEnd) {
-    usize count=kek_compiler_SelfCFileTokenCount(program,fileIndex);
-    usize blockStart=kek_compiler_SelfCFindNextBlock(program,fileIndex,start,count);
-    usize blockEnd=kek_compiler_SelfCFindMatching(program,fileIndex,blockStart);
-    struct SelfCDecl decl={0};
-    decl.kind=SelfCDeclKind_ExternC;
+Status kek_compiler_CParseExternDecl(struct CProgram* program,usize fileIndex,usize start,usize* outEnd) {
+    usize count=kek_compiler_CFileTokenCount(program,fileIndex);
+    usize blockStart=kek_compiler_CFindNextBlock(program,fileIndex,start,count);
+    usize blockEnd=kek_compiler_CFindMatching(program,fileIndex,blockStart);
+    struct CDecl decl={0};
+    decl.kind=CDeclKind_ExternC;
     decl.fileIndex=fileIndex;
     decl.start=start;
     decl.end=blockEnd+1;
@@ -4051,27 +4082,28 @@ Status kek_compiler_SelfCParseExternDecl(struct SelfCProgram* program,usize file
     decl.firstField=0;
     decl.fieldCount=0;
     decl.emitted=0;
-    Status clone=kek_compiler_SelfCCloneString(program,std_string_OwnedStringView(&program->tokenFiles[fileIndex].packageName),&decl.packageName);
+    decl.reachable=0;
+    Status clone=kek_compiler_CCloneString(program,std_string_OwnedStringView(&program->tokenFiles.data[fileIndex].packageName),&decl.packageName);
     if (clone!=Status_Ok) {
         return (clone);
     }
-    clone=kek_compiler_SelfCCloneString(program,std_string_OwnedStringView(&program->tokenFiles[fileIndex].moduleName),&decl.moduleName);
+    clone=kek_compiler_CCloneString(program,std_string_OwnedStringView(&program->tokenFiles.data[fileIndex].moduleName),&decl.moduleName);
     if (clone!=Status_Ok) {
         return (clone);
     }
-    Status status=kek_compiler_SelfCAddDecl(program,&decl);
+    Status status=kek_compiler_CAddDecl(program,&decl);
     outEnd[0]=blockEnd+1;
     return (status);
 }
-Status kek_compiler_SelfCParseFunctionDecl(struct SelfCProgram* program,usize fileIndex,usize start,usize* outEnd) {
-    usize count=kek_compiler_SelfCFileTokenCount(program,fileIndex);
-    usize groupStart=kek_compiler_SelfCFindNextGroup(program,fileIndex,start,count);
+Status kek_compiler_CParseFunctionDecl(struct CProgram* program,usize fileIndex,usize start,usize* outEnd) {
+    usize count=kek_compiler_CFileTokenCount(program,fileIndex);
+    usize groupStart=kek_compiler_CFindNextGroup(program,fileIndex,start,count);
     if (groupStart>=count) {
         outEnd[0]=start+1;
         return (Status_Ok);
     }
-    usize groupEnd=kek_compiler_SelfCFindMatching(program,fileIndex,groupStart);
-    usize colon=kek_compiler_SelfCFindTopLevelColon(program,fileIndex,start,groupStart);
+    usize groupEnd=kek_compiler_CFindMatching(program,fileIndex,groupStart);
+    usize colon=kek_compiler_CFindTopLevelColon(program,fileIndex,start,groupStart);
     if (colon>=groupStart) {
         outEnd[0]=groupEnd+1;
         return (Status_Ok);
@@ -4079,12 +4111,12 @@ Status kek_compiler_SelfCParseFunctionDecl(struct SelfCProgram* program,usize fi
     usize blockStart=groupEnd+1;
     bool hasBody=0;
     usize blockEnd=groupEnd;
-    if (blockStart<count&&kek_compiler_SelfCIsPunctuation(program,fileIndex,blockStart,PunctuationKind_LeftBrace)) {
+    if (blockStart<count&&kek_compiler_CIsPunctuation(program,fileIndex,blockStart,PunctuationKind_LeftBrace)) {
         hasBody=1;
-        blockEnd=kek_compiler_SelfCFindMatching(program,fileIndex,blockStart);
+        blockEnd=kek_compiler_CFindMatching(program,fileIndex,blockStart);
     }
-    struct SelfCDecl decl={0};
-    decl.kind=SelfCDeclKind_Function;
+    struct CDecl decl={0};
+    decl.kind=CDeclKind_Function;
     decl.fileIndex=fileIndex;
     decl.start=start;
     decl.end=blockEnd+1;
@@ -4109,86 +4141,87 @@ Status kek_compiler_SelfCParseFunctionDecl(struct SelfCProgram* program,usize fi
     decl.firstField=0;
     decl.fieldCount=0;
     decl.emitted=0;
-    Status clone=kek_compiler_SelfCCloneString(program,std_string_OwnedStringView(&program->tokenFiles[fileIndex].packageName),&decl.packageName);
+    decl.reachable=0;
+    Status clone=kek_compiler_CCloneString(program,std_string_OwnedStringView(&program->tokenFiles.data[fileIndex].packageName),&decl.packageName);
     if (clone!=Status_Ok) {
         return (clone);
     }
-    clone=kek_compiler_SelfCCloneString(program,std_string_OwnedStringView(&program->tokenFiles[fileIndex].moduleName),&decl.moduleName);
+    clone=kek_compiler_CCloneString(program,std_string_OwnedStringView(&program->tokenFiles.data[fileIndex].moduleName),&decl.moduleName);
     if (clone!=Status_Ok) {
         return (clone);
     }
-    usize scope=kek_compiler_SelfCFindOperatorScope(program,fileIndex,colon+1,groupStart);
+    usize scope=kek_compiler_CFindOperatorScope(program,fileIndex,colon+1,groupStart);
     if (scope<groupStart) {
         decl.hasReceiver=1;
         decl.receiverStart=colon+1;
         decl.receiverEnd=scope;
         decl.nameIndex=scope+1;
     }
-    if (decl.nameIndex<groupStart&&kek_compiler_SelfCIsIdentifierText(program,fileIndex,decl.nameIndex,"operator")) {
+    if (decl.nameIndex<groupStart&&kek_compiler_CIsIdentifierText(program,fileIndex,decl.nameIndex,"operator")) {
         decl.isOperator=1;
-        decl.operatorCode=kek_compiler_SelfCOperatorCode(program,fileIndex,decl.nameIndex+1);
+        decl.operatorCode=kek_compiler_COperatorCode(program,fileIndex,decl.nameIndex+1);
     }
     usize genericProbe=decl.nameIndex+1;
     if (decl.isOperator) {
         genericProbe=decl.nameIndex+2;
     }
-    if (genericProbe<groupStart&&kek_compiler_SelfCIsOperator(program,fileIndex,genericProbe,OperatorKind_Less)) {
+    if (genericProbe<groupStart&&kek_compiler_CIsOperator(program,fileIndex,genericProbe,OperatorKind_Less)) {
         decl.genericStart=genericProbe;
-        decl.genericEnd=kek_compiler_SelfCFindMatching(program,fileIndex,genericProbe);
+        decl.genericEnd=kek_compiler_CFindMatching(program,fileIndex,genericProbe);
         decl.isGeneric=1;
     }
     for (usize i=decl.receiverStart;i<decl.receiverEnd;i++) {
-        if (kek_compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Less)) {
+        if (kek_compiler_CIsOperator(program,fileIndex,i,OperatorKind_Less)) {
             decl.isGeneric=1;
         }
     }
-    Status params=kek_compiler_SelfCParseParams(program,&decl,fileIndex,groupStart+1,groupEnd);
+    Status params=kek_compiler_CParseParams(program,&decl,fileIndex,groupStart+1,groupEnd);
     if (params!=Status_Ok) {
         return (params);
     }
-    Status status=kek_compiler_SelfCAddDecl(program,&decl);
+    Status status=kek_compiler_CAddDecl(program,&decl);
     outEnd[0]=blockEnd+1;
-    if (outEnd[0]<count&&kek_compiler_SelfCIsPunctuation(program,fileIndex,outEnd[0],PunctuationKind_Semicolon)) {
+    if (outEnd[0]<count&&kek_compiler_CIsPunctuation(program,fileIndex,outEnd[0],PunctuationKind_Semicolon)) {
         outEnd[0]+=1;
     }
     return (status);
 }
-Status kek_compiler_SelfCParseDeclarations(struct SelfCProgram* program) {
-    for (usize fileIndex=0;fileIndex<program->tokenFileCount;fileIndex++) {
+Status kek_compiler_CParseDeclarations(struct CProgram* program) {
+    for (usize fileIndex=0;fileIndex<program->tokenFiles.len;fileIndex++) {
         usize index=0;
-        usize count=kek_compiler_SelfCFileTokenCount(program,fileIndex);
-        while (index<count&&!kek_compiler_SelfCIsEof(program,fileIndex,index)) {
-            index=kek_compiler_SelfCSkipAttributes(program,fileIndex,index);
-            if (index>=count||kek_compiler_SelfCIsEof(program,fileIndex,index)) {
+        usize count=kek_compiler_CFileTokenCount(program,fileIndex);
+        while (index<count&&!kek_compiler_CIsEof(program,fileIndex,index)) {
+            index=kek_compiler_CSkipAttributes(program,fileIndex,index);
+            if (index>=count||kek_compiler_CIsEof(program,fileIndex,index)) {
                 break;
             }
             usize next=index+1;
             Status status=Status_Ok;
-            if (kek_compiler_SelfCIsPunctuation(program,fileIndex,index,PunctuationKind_Hash)) {
-                usize groupStart=kek_compiler_SelfCFindNextGroup(program,fileIndex,index,count);
+            if (kek_compiler_CIsPunctuation(program,fileIndex,index,PunctuationKind_Hash)) {
+                usize groupStart=kek_compiler_CFindNextGroup(program,fileIndex,index,count);
                 if (groupStart<count) {
-                    next=kek_compiler_SelfCSkipDelimited(program,fileIndex,groupStart);
-                    if (next<count&&kek_compiler_SelfCIsPunctuation(program,fileIndex,next,PunctuationKind_Semicolon)) {
+                    next=kek_compiler_CSkipDelimited(program,fileIndex,groupStart);
+                    if (next<count&&kek_compiler_CIsPunctuation(program,fileIndex,next,PunctuationKind_Semicolon)) {
                         next+=1;
                     }
                 }
             } else {
-                if (kek_compiler_SelfCIsKeyword(program,fileIndex,index,KeywordKind_Extern)) {
-                    status=kek_compiler_SelfCParseExternDecl(program,fileIndex,index,&next);
+                if (kek_compiler_CIsKeyword(program,fileIndex,index,KeywordKind_Extern)) {
+                    status=kek_compiler_CParseExternDecl(program,fileIndex,index,&next);
                 } else {
-                    if (kek_compiler_SelfCIsKeyword(program,fileIndex,index,KeywordKind_Alias)||kek_compiler_SelfCIsIdentifierText(program,fileIndex,index,"alias")) {
-                        status=kek_compiler_SelfCParseAliasDecl(program,fileIndex,index,&next);
+                    if (kek_compiler_CIsKeyword(program,fileIndex,index,KeywordKind_Alias)||kek_compiler_CIsIdentifierText(program,fileIndex,index,"alias")) {
+                        status=kek_compiler_CParseAliasDecl(program,fileIndex,index,&next);
                     } else {
-                        if (kek_compiler_SelfCIsKeyword(program,fileIndex,index,KeywordKind_Struct)||kek_compiler_SelfCIsIdentifierText(program,fileIndex,index,"struct")) {
-                            status=kek_compiler_SelfCParseTypeDecl(program,fileIndex,index,SelfCDeclKind_Struct,&next);
+                        if (kek_compiler_CIsKeyword(program,fileIndex,index,KeywordKind_Struct)||kek_compiler_CIsIdentifierText(program,fileIndex,index,"struct")) {
+                            status=kek_compiler_CParseTypeDecl(program,fileIndex,index,CDeclKind_Struct,&next);
                         } else {
-                            if (kek_compiler_SelfCIsKeyword(program,fileIndex,index,KeywordKind_Union)||kek_compiler_SelfCIsIdentifierText(program,fileIndex,index,"union")) {
-                                status=kek_compiler_SelfCParseTypeDecl(program,fileIndex,index,SelfCDeclKind_Union,&next);
+                            if (kek_compiler_CIsKeyword(program,fileIndex,index,KeywordKind_Union)||kek_compiler_CIsIdentifierText(program,fileIndex,index,"union")) {
+                                status=kek_compiler_CParseTypeDecl(program,fileIndex,index,CDeclKind_Union,&next);
                             } else {
-                                if (kek_compiler_SelfCIsKeyword(program,fileIndex,index,KeywordKind_Enum)||kek_compiler_SelfCIsIdentifierText(program,fileIndex,index,"enum")) {
-                                    status=kek_compiler_SelfCParseTypeDecl(program,fileIndex,index,SelfCDeclKind_Enum,&next);
+                                if (kek_compiler_CIsKeyword(program,fileIndex,index,KeywordKind_Enum)||kek_compiler_CIsIdentifierText(program,fileIndex,index,"enum")) {
+                                    status=kek_compiler_CParseTypeDecl(program,fileIndex,index,CDeclKind_Enum,&next);
                                 } else {
-                                    status=kek_compiler_SelfCParseFunctionDecl(program,fileIndex,index,&next);
+                                    status=kek_compiler_CParseFunctionDecl(program,fileIndex,index,&next);
                                 }
                             }
                         }
@@ -4206,19 +4239,101 @@ Status kek_compiler_SelfCParseDeclarations(struct SelfCProgram* program) {
     }
     return (Status_Ok);
 }
-Status kek_compiler_SelfCWriteTokenRangeRaw(struct SelfCProgram* program,struct StringBuilder* out,usize fileIndex,usize start,usize end) {
+bool kek_compiler_CMarkDeclReachable(struct CDecl* decl) {
+    if (decl->reachable) {
+        return (0);
+    }
+    decl->reachable=1;
+    return (1);
+}
+bool kek_compiler_CMarkReachableRoots(struct CProgram* program) {
+    bool changed=0;
+    for (usize i=0;i<program->decls.len;i++) {
+        struct CDecl* decl=&program->decls.data[i];
+        if (decl->fileIndex==0&&decl->kind!=CDeclKind_ExternC&&!decl->isGeneric) {
+            if (kek_compiler_CMarkDeclReachable(decl)) {
+                changed=1;
+            }
+        }
+    }
+    return (changed);
+}
+bool kek_compiler_CMarkNamedDeclsReachable(struct CProgram* program,struct String name) {
+    bool changed=0;
+    for (usize i=0;i<program->decls.len;i++) {
+        struct CDecl* decl=&program->decls.data[i];
+        if (decl->kind==CDeclKind_ExternC||decl->isOperator) {
+            continue;
+        }
+        if (kek_compiler_CDeclNameMatches(program,decl,name)) {
+            if (kek_compiler_CMarkDeclReachable(decl)) {
+                changed=1;
+            }
+        }
+    }
+    return (changed);
+}
+bool kek_compiler_CMarkOperatorDeclsReachable(struct CProgram* program,u8 operatorCode) {
+    if (operatorCode==0) {
+        return (0);
+    }
+    bool changed=0;
+    for (usize i=0;i<program->decls.len;i++) {
+        struct CDecl* decl=&program->decls.data[i];
+        if (decl->kind==CDeclKind_Function&&decl->isOperator&&decl->operatorCode==operatorCode) {
+            if (kek_compiler_CMarkDeclReachable(decl)) {
+                changed=1;
+            }
+        }
+    }
+    return (changed);
+}
+bool kek_compiler_CMarkReferencesInRange(struct CProgram* program,usize fileIndex,usize start,usize end) {
+    bool changed=0;
     for (usize i=start;i<end;i++) {
-        Status status=kek_compiler_SelfCWriteToken(program,out,fileIndex,i);
+        struct Token token=program->tokenFiles.data[fileIndex].tokens[i];
+        if (token.kind==TokenKind_Identifier||token.kind==TokenKind_Keyword) {
+            if (kek_compiler_CMarkNamedDeclsReachable(program,kek_compiler_CTokenText(program,fileIndex,i))) {
+                changed=1;
+            }
+        }
+        if (token.kind==TokenKind_Operator) {
+            if (kek_compiler_CMarkOperatorDeclsReachable(program,kek_compiler_COperatorCode(program,fileIndex,i))) {
+                changed=1;
+            }
+        }
+    }
+    return (changed);
+}
+Status kek_compiler_CMarkReachableDecls(struct CProgram* program) {
+    bool changed=kek_compiler_CMarkReachableRoots(program);
+    while (changed) {
+        changed=0;
+        for (usize i=0;i<program->decls.len;i++) {
+            struct CDecl* decl=&program->decls.data[i];
+            if (!decl->reachable) {
+                continue;
+            }
+            if (kek_compiler_CMarkReferencesInRange(program,decl->fileIndex,decl->start,decl->end)) {
+                changed=1;
+            }
+        }
+    }
+    return (Status_Ok);
+}
+Status kek_compiler_CWriteTokenRangeRaw(struct CProgram* program,struct StringBuilder* out,usize fileIndex,usize start,usize end) {
+    for (usize i=start;i<end;i++) {
+        Status status=kek_compiler_CWriteToken(program,out,fileIndex,i);
         if (status!=Status_Ok) {
             return (status);
         }
     }
     return (Status_Ok);
 }
-bool kek_compiler_SelfCIsBuiltinTypeName(struct String name) {
+bool kek_compiler_CIsBuiltinTypeName(struct String name) {
     return (String_EqualsCString(&name,"void")||String_EqualsCString(&name,"bool")||String_EqualsCString(&name,"int")||String_EqualsCString(&name,"u8")||String_EqualsCString(&name,"u16")||String_EqualsCString(&name,"u32")||String_EqualsCString(&name,"u64")||String_EqualsCString(&name,"i8")||String_EqualsCString(&name,"i16")||String_EqualsCString(&name,"i32")||String_EqualsCString(&name,"i64")||String_EqualsCString(&name,"f32")||String_EqualsCString(&name,"f64")||String_EqualsCString(&name,"ptr")||String_EqualsCString(&name,"str")||String_EqualsCString(&name,"byte")||String_EqualsCString(&name,"usize")||String_EqualsCString(&name,"isize")||String_EqualsCString(&name,"RawHandle"));
 }
-Status kek_compiler_SelfCWriteSanitized(struct StringBuilder* out,struct String text) {
+Status kek_compiler_CWriteSanitized(struct StringBuilder* out,struct String text) {
     for (usize i=0;i<text.len;i++) {
         byte c=text.data[i];
         if ((c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='_') {
@@ -4235,7 +4350,7 @@ Status kek_compiler_SelfCWriteSanitized(struct StringBuilder* out,struct String 
     }
     return (Status_Ok);
 }
-Status kek_compiler_SelfCWriteOperatorName(struct StringBuilder* out,u8 operatorCode) {
+Status kek_compiler_CWriteOperatorName(struct StringBuilder* out,u8 operatorCode) {
     u64 kind=((u64)(operatorCode));
     if (kind==((u64)(OperatorKind_Plus))+1) {
         return (StringBuilder_WriteCString(out,"plus"));
@@ -4260,14 +4375,14 @@ Status kek_compiler_SelfCWriteOperatorName(struct StringBuilder* out,u8 operator
     }
     return (StringBuilder_WriteCString(out,"op"));
 }
-bool kek_compiler_SelfCDeclPackageIsRoot(struct SelfCDecl* decl) {
+bool kek_compiler_CDeclPackageIsRoot(struct CDecl* decl) {
     struct String packageName=std_string_OwnedStringView(&decl->packageName);
     struct String moduleName=std_string_OwnedStringView(&decl->moduleName);
     return (packageName.len==0&&moduleName.len==0);
 }
-Status kek_compiler_SelfCWriteDeclCName(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl) {
+Status kek_compiler_CWriteDeclCName(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl) {
     if (decl->hasReceiver) {
-        Status status=kek_compiler_SelfCWriteTypeSuffixFromRange(program,out,decl->fileIndex,decl->receiverStart,decl->receiverEnd);
+        Status status=kek_compiler_CWriteTypeSuffixFromRange(program,out,decl->fileIndex,decl->receiverStart,decl->receiverEnd);
         if (status!=Status_Ok) {
             return (status);
         }
@@ -4278,7 +4393,7 @@ Status kek_compiler_SelfCWriteDeclCName(struct SelfCProgram* program,struct Stri
         if (decl->isOperator) {
             status=StringBuilder_WriteCString(out,"operator_");
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteOperatorName(out,decl->operatorCode);
+                status=kek_compiler_CWriteOperatorName(out,decl->operatorCode);
             }
             if (status==Status_Ok) {
                 status=StringBuilder_WriteCString(out,"_");
@@ -4288,7 +4403,7 @@ Status kek_compiler_SelfCWriteDeclCName(struct SelfCProgram* program,struct Stri
             }
             return (status);
         }
-        return (kek_compiler_SelfCWriteToken(program,out,decl->fileIndex,decl->nameIndex));
+        return (kek_compiler_CWriteToken(program,out,decl->fileIndex,decl->nameIndex));
     }
     struct String packageName=std_string_OwnedStringView(&decl->packageName);
     struct String moduleName=std_string_OwnedStringView(&decl->moduleName);
@@ -4312,33 +4427,33 @@ Status kek_compiler_SelfCWriteDeclCName(struct SelfCProgram* program,struct Stri
             return (status);
         }
     }
-    Status nameStatus=kek_compiler_SelfCWriteToken(program,out,decl->fileIndex,decl->nameIndex);
+    Status nameStatus=kek_compiler_CWriteToken(program,out,decl->fileIndex,decl->nameIndex);
     if (nameStatus!=Status_Ok) {
         return (nameStatus);
     }
-    if (decl->isGeneric&&decl->genericStart<kek_compiler_SelfCFileTokenCount(program,decl->fileIndex)) {
+    if (decl->isGeneric&&decl->genericStart<kek_compiler_CFileTokenCount(program,decl->fileIndex)) {
         return (Status_Ok);
     }
     return (Status_Ok);
 }
-Status kek_compiler_SelfCWriteTypeSuffixFromRange(struct SelfCProgram* program,struct StringBuilder* out,usize fileIndex,usize start,usize end) {
+Status kek_compiler_CWriteTypeSuffixFromRange(struct CProgram* program,struct StringBuilder* out,usize fileIndex,usize start,usize end) {
     if (start>=end) {
         return (Status_Ok);
     }
-    if (start+1<end&&kek_compiler_SelfCIsOperator(program,fileIndex,start+1,OperatorKind_Less)) {
-        Status status=kek_compiler_SelfCWriteSanitized(out,kek_compiler_SelfCTokenText(program,fileIndex,start));
+    if (start+1<end&&kek_compiler_CIsOperator(program,fileIndex,start+1,OperatorKind_Less)) {
+        Status status=kek_compiler_CWriteSanitized(out,kek_compiler_CTokenText(program,fileIndex,start));
         if (status!=Status_Ok) {
             return (status);
         }
-        usize genericEnd=kek_compiler_SelfCFindMatching(program,fileIndex,start+1);
+        usize genericEnd=kek_compiler_CFindMatching(program,fileIndex,start+1);
         usize argStart=start+2;
         while (argStart<genericEnd) {
-            usize argEnd=kek_compiler_SelfCFindTokenAtDepthZero(program,fileIndex,argStart,genericEnd,PunctuationKind_Comma);
+            usize argEnd=kek_compiler_CFindTokenAtDepthZero(program,fileIndex,argStart,genericEnd,PunctuationKind_Comma);
             status=StringBuilder_WriteCString(out,"__");
             if (status!=Status_Ok) {
                 return (status);
             }
-            status=kek_compiler_SelfCWriteTypeSuffixFromRange(program,out,fileIndex,argStart,argEnd);
+            status=kek_compiler_CWriteTypeSuffixFromRange(program,out,fileIndex,argStart,argEnd);
             if (status!=Status_Ok) {
                 return (status);
             }
@@ -4349,9 +4464,9 @@ Status kek_compiler_SelfCWriteTypeSuffixFromRange(struct SelfCProgram* program,s
         }
         return (Status_Ok);
     }
-    return (kek_compiler_SelfCWriteSanitized(out,kek_compiler_SelfCTokenText(program,fileIndex,start)));
+    return (kek_compiler_CWriteSanitized(out,kek_compiler_CTokenText(program,fileIndex,start)));
 }
-Status kek_compiler_SelfCTypeInfoDestroy(struct SelfCTypeInfo* info) {
+Status kek_compiler_CTypeInfoDestroy(struct CTypeInfo* info) {
     std_string_DestroyOwnedString(&info->key);
     std_string_DestroyOwnedString(&info->cType);
     std_string_DestroyOwnedString(&info->baseName);
@@ -4360,28 +4475,28 @@ Status kek_compiler_SelfCTypeInfoDestroy(struct SelfCTypeInfo* info) {
     std_string_DestroyOwnedString(&info->arg2);
     return (Status_Ok);
 }
-Status kek_compiler_SelfCTypeInfoInitEmpty(struct SelfCProgram* program,struct SelfCTypeInfo* info) {
-    Status status=kek_compiler_SelfCMakeOwnedEmpty(program,&info->key);
+Status kek_compiler_CTypeInfoInitEmpty(struct CProgram* program,struct CTypeInfo* info) {
+    Status status=kek_compiler_CMakeOwnedEmpty(program,&info->key);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCMakeOwnedEmpty(program,&info->cType);
+        status=kek_compiler_CMakeOwnedEmpty(program,&info->cType);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCMakeOwnedEmpty(program,&info->baseName);
+        status=kek_compiler_CMakeOwnedEmpty(program,&info->baseName);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCMakeOwnedEmpty(program,&info->arg0);
+        status=kek_compiler_CMakeOwnedEmpty(program,&info->arg0);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCMakeOwnedEmpty(program,&info->arg1);
+        status=kek_compiler_CMakeOwnedEmpty(program,&info->arg1);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCMakeOwnedEmpty(program,&info->arg2);
+        status=kek_compiler_CMakeOwnedEmpty(program,&info->arg2);
     }
     info->argCount=0;
     info->isPointer=0;
     return (status);
 }
-Status kek_compiler_SelfCReplaceOwned(struct OwnedString* target,struct OwnedString value) {
+Status kek_compiler_CReplaceOwned(struct OwnedString* target,struct OwnedString value) {
     std_string_DestroyOwnedString(target);
     target->data=value.data;
     target->len=value.len;
@@ -4389,16 +4504,16 @@ Status kek_compiler_SelfCReplaceOwned(struct OwnedString* target,struct OwnedStr
     target->allocator=value.allocator;
     return (Status_Ok);
 }
-Status kek_compiler_SelfCBuildTypeKey(struct SelfCProgram* program,usize fileIndex,usize start,usize end,struct OwnedString* out) {
+Status kek_compiler_CBuildTypeKey(struct CProgram* program,usize fileIndex,usize start,usize end,struct OwnedString* out) {
     struct StringBuilder builder=std_string_StringBuilderNew(program->allocator);
-    Status status=kek_compiler_SelfCWriteTypeSuffixFromRange(program,&builder,fileIndex,start,end);
+    Status status=kek_compiler_CWriteTypeSuffixFromRange(program,&builder,fileIndex,start,end);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCDetachBuilder(&builder,out);
+        status=kek_compiler_CDetachBuilder(&builder,out);
     }
     StringBuilder_Destroy(&builder);
     return (status);
 }
-Status kek_compiler_SelfCWriteCTypeFromKey(struct SelfCProgram* program,struct StringBuilder* out,struct String key) {
+Status kek_compiler_CWriteCTypeFromKey(struct CProgram* program,struct StringBuilder* out,struct String key) {
     if (String_EqualsCString(&key,"f32")) {
         return (StringBuilder_WriteCString(out,"float"));
     }
@@ -4411,16 +4526,16 @@ Status kek_compiler_SelfCWriteCTypeFromKey(struct SelfCProgram* program,struct S
     if (String_EqualsCString(&key,"str")) {
         return (StringBuilder_WriteCString(out,"str"));
     }
-    if (kek_compiler_SelfCIsBuiltinTypeName(key)) {
+    if (kek_compiler_CIsBuiltinTypeName(key)) {
         return (StringBuilder_WriteString(out,key));
     }
     struct Result__usize ptrMarker=String_FindByte(&key,'*');
     if (ptrMarker.status==Status_Ok) {
         return (StringBuilder_WriteString(out,key));
     }
-    struct SelfCDecl* decl=kek_compiler_SelfCFindTypeDecl(program,key);
+    struct CDecl* decl=kek_compiler_CFindTypeDecl(program,key);
     if (decl!=0) {
-        if (decl->kind==SelfCDeclKind_Struct) {
+        if (decl->kind==CDeclKind_Struct) {
             Status status=StringBuilder_WriteCString(out,"struct ");
             if (status==Status_Ok) {
                 status=StringBuilder_WriteString(out,key);
@@ -4429,11 +4544,11 @@ Status kek_compiler_SelfCWriteCTypeFromKey(struct SelfCProgram* program,struct S
         }
         return (StringBuilder_WriteString(out,key));
     }
-    for (usize i=0;i<program->typeUseCount;i++) {
-        struct String useKey=std_string_OwnedStringView(&program->typeUses[i].key);
+    for (usize i=0;i<program->typeUses.len;i++) {
+        struct String useKey=std_string_OwnedStringView(&program->typeUses.data[i].key);
         if (String_Equals(&useKey,key)) {
-            struct SelfCDecl* baseDecl=kek_compiler_SelfCFindTypeDecl(program,std_string_OwnedStringView(&program->typeUses[i].baseName));
-            if (baseDecl!=0&&baseDecl->kind==SelfCDeclKind_Struct) {
+            struct CDecl* baseDecl=kek_compiler_CFindTypeDecl(program,std_string_OwnedStringView(&program->typeUses.data[i].baseName));
+            if (baseDecl!=0&&baseDecl->kind==CDeclKind_Struct) {
                 Status status=StringBuilder_WriteCString(out,"struct ");
                 if (status==Status_Ok) {
                     status=StringBuilder_WriteString(out,key);
@@ -4452,49 +4567,49 @@ Status kek_compiler_SelfCWriteCTypeFromKey(struct SelfCProgram* program,struct S
     }
     return (StringBuilder_WriteString(out,key));
 }
-Status kek_compiler_SelfCMakeCTypeFromKey(struct SelfCProgram* program,struct String key,struct OwnedString* out) {
+Status kek_compiler_CMakeCTypeFromKey(struct CProgram* program,struct String key,struct OwnedString* out) {
     struct StringBuilder builder=std_string_StringBuilderNew(program->allocator);
-    Status status=kek_compiler_SelfCWriteCTypeFromKey(program,&builder,key);
+    Status status=kek_compiler_CWriteCTypeFromKey(program,&builder,key);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCDetachBuilder(&builder,out);
+        status=kek_compiler_CDetachBuilder(&builder,out);
     }
     StringBuilder_Destroy(&builder);
     return (status);
 }
-Status kek_compiler_SelfCTypeInfoFromKey(struct SelfCProgram* program,struct String key,struct SelfCTypeInfo* info) {
-    Status status=kek_compiler_SelfCTypeInfoInitEmpty(program,info);
+Status kek_compiler_CTypeInfoFromKey(struct CProgram* program,struct String key,struct CTypeInfo* info) {
+    Status status=kek_compiler_CTypeInfoInitEmpty(program,info);
     if (status!=Status_Ok) {
         return (status);
     }
     struct OwnedString keyOwned={0};
-    status=kek_compiler_SelfCCloneString(program,key,&keyOwned);
+    status=kek_compiler_CCloneString(program,key,&keyOwned);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCReplaceOwned(&info->key,keyOwned);
+        status=kek_compiler_CReplaceOwned(&info->key,keyOwned);
     }
     struct OwnedString cOwned={0};
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCMakeCTypeFromKey(program,key,&cOwned);
+        status=kek_compiler_CMakeCTypeFromKey(program,key,&cOwned);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCReplaceOwned(&info->cType,cOwned);
+        status=kek_compiler_CReplaceOwned(&info->cType,cOwned);
     }
     struct Result__usize ptrMarker=String_FindByte(&key,'*');
     info->isPointer=ptrMarker.status==Status_Ok;
     return (status);
 }
-Status kek_compiler_SelfCRenderTypeInfo(struct SelfCProgram* program,usize fileIndex,usize start,usize end,struct SelfCTypeInfo* info) {
-    Status status=kek_compiler_SelfCTypeInfoInitEmpty(program,info);
+Status kek_compiler_CRenderTypeInfo(struct CProgram* program,usize fileIndex,usize start,usize end,struct CTypeInfo* info) {
+    Status status=kek_compiler_CTypeInfoInitEmpty(program,info);
     if (status!=Status_Ok) {
         return (status);
     }
     if (start>=end) {
         return (Status_Ok);
     }
-    struct String first=kek_compiler_SelfCTokenText(program,fileIndex,start);
-    if (String_EqualsCString(&first,"ptr")&&start+1<end&&kek_compiler_SelfCIsOperator(program,fileIndex,start+1,OperatorKind_Less)) {
-        usize genericEnd=kek_compiler_SelfCFindMatching(program,fileIndex,start+1);
-        struct SelfCTypeInfo inner={0};
-        status=kek_compiler_SelfCRenderTypeInfo(program,fileIndex,start+2,genericEnd,&inner);
+    struct String first=kek_compiler_CTokenText(program,fileIndex,start);
+    if (String_EqualsCString(&first,"ptr")&&start+1<end&&kek_compiler_CIsOperator(program,fileIndex,start+1,OperatorKind_Less)) {
+        usize genericEnd=kek_compiler_CFindMatching(program,fileIndex,start+1);
+        struct CTypeInfo inner={0};
+        status=kek_compiler_CRenderTypeInfo(program,fileIndex,start+2,genericEnd,&inner);
         if (status!=Status_Ok) {
             return (status);
         }
@@ -4505,11 +4620,11 @@ Status kek_compiler_SelfCRenderTypeInfo(struct SelfCProgram* program,usize fileI
         }
         struct OwnedString keyOwned={0};
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCDetachBuilder(&key,&keyOwned);
+            status=kek_compiler_CDetachBuilder(&key,&keyOwned);
         }
         StringBuilder_Destroy(&key);
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCReplaceOwned(&info->key,keyOwned);
+            status=kek_compiler_CReplaceOwned(&info->key,keyOwned);
         }
         struct StringBuilder cType=std_string_StringBuilderNew(program->allocator);
         if (status==Status_Ok) {
@@ -4520,59 +4635,59 @@ Status kek_compiler_SelfCRenderTypeInfo(struct SelfCProgram* program,usize fileI
         }
         struct OwnedString cOwned={0};
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCDetachBuilder(&cType,&cOwned);
+            status=kek_compiler_CDetachBuilder(&cType,&cOwned);
         }
         StringBuilder_Destroy(&cType);
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCReplaceOwned(&info->cType,cOwned);
+            status=kek_compiler_CReplaceOwned(&info->cType,cOwned);
         }
         info->isPointer=1;
-        kek_compiler_SelfCTypeInfoDestroy(&inner);
+        kek_compiler_CTypeInfoDestroy(&inner);
         return (status);
     }
-    status=kek_compiler_SelfCBuildTypeKey(program,fileIndex,start,end,&info->key);
+    status=kek_compiler_CBuildTypeKey(program,fileIndex,start,end,&info->key);
     if (status!=Status_Ok) {
         return (status);
     }
-    if (start+1<end&&kek_compiler_SelfCIsOperator(program,fileIndex,start+1,OperatorKind_Less)) {
-        status=kek_compiler_SelfCCloneString(program,first,&info->baseName);
+    if (start+1<end&&kek_compiler_CIsOperator(program,fileIndex,start+1,OperatorKind_Less)) {
+        status=kek_compiler_CCloneString(program,first,&info->baseName);
         if (status!=Status_Ok) {
             return (status);
         }
-        usize genericEnd=kek_compiler_SelfCFindMatching(program,fileIndex,start+1);
+        usize genericEnd=kek_compiler_CFindMatching(program,fileIndex,start+1);
         usize argStart=start+2;
         while (argStart<genericEnd) {
-            usize argEnd=kek_compiler_SelfCFindTokenAtDepthZero(program,fileIndex,argStart,genericEnd,PunctuationKind_Comma);
-            struct SelfCTypeInfo argInfo={0};
-            status=kek_compiler_SelfCRenderTypeInfo(program,fileIndex,argStart,argEnd,&argInfo);
+            usize argEnd=kek_compiler_CFindTokenAtDepthZero(program,fileIndex,argStart,genericEnd,PunctuationKind_Comma);
+            struct CTypeInfo argInfo={0};
+            status=kek_compiler_CRenderTypeInfo(program,fileIndex,argStart,argEnd,&argInfo);
             if (status!=Status_Ok) {
                 return (status);
             }
             if (info->argCount==0) {
                 struct OwnedString cloneArg={0};
-                status=kek_compiler_SelfCCloneString(program,std_string_OwnedStringView(&argInfo.key),&cloneArg);
+                status=kek_compiler_CCloneString(program,std_string_OwnedStringView(&argInfo.key),&cloneArg);
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCReplaceOwned(&info->arg0,cloneArg);
+                    status=kek_compiler_CReplaceOwned(&info->arg0,cloneArg);
                 }
             } else {
                 if (info->argCount==1) {
                     struct OwnedString cloneArg1={0};
-                    status=kek_compiler_SelfCCloneString(program,std_string_OwnedStringView(&argInfo.key),&cloneArg1);
+                    status=kek_compiler_CCloneString(program,std_string_OwnedStringView(&argInfo.key),&cloneArg1);
                     if (status==Status_Ok) {
-                        status=kek_compiler_SelfCReplaceOwned(&info->arg1,cloneArg1);
+                        status=kek_compiler_CReplaceOwned(&info->arg1,cloneArg1);
                     }
                 } else {
                     if (info->argCount==2) {
                         struct OwnedString cloneArg2={0};
-                        status=kek_compiler_SelfCCloneString(program,std_string_OwnedStringView(&argInfo.key),&cloneArg2);
+                        status=kek_compiler_CCloneString(program,std_string_OwnedStringView(&argInfo.key),&cloneArg2);
                         if (status==Status_Ok) {
-                            status=kek_compiler_SelfCReplaceOwned(&info->arg2,cloneArg2);
+                            status=kek_compiler_CReplaceOwned(&info->arg2,cloneArg2);
                         }
                     }
                 }
             }
             info->argCount+=1;
-            kek_compiler_SelfCTypeInfoDestroy(&argInfo);
+            kek_compiler_CTypeInfoDestroy(&argInfo);
             if (status!=Status_Ok) {
                 return (status);
             }
@@ -4582,54 +4697,55 @@ Status kek_compiler_SelfCRenderTypeInfo(struct SelfCProgram* program,usize fileI
             argStart=argEnd+1;
         }
     }
-    status=kek_compiler_SelfCMakeCTypeFromKey(program,std_string_OwnedStringView(&info->key),&info->cType);
+    status=kek_compiler_CMakeCTypeFromKey(program,std_string_OwnedStringView(&info->key),&info->cType);
     return (status);
 }
-bool kek_compiler_SelfCTypeUseExists(struct SelfCProgram* program,struct String key) {
-    for (usize i=0;i<program->typeUseCount;i++) {
-        struct String useKey=std_string_OwnedStringView(&program->typeUses[i].key);
+bool kek_compiler_CTypeUseExists(struct CProgram* program,struct String key) {
+    for (usize i=0;i<program->typeUses.len;i++) {
+        struct String useKey=std_string_OwnedStringView(&program->typeUses.data[i].key);
         if (String_Equals(&useKey,key)) {
             return (1);
         }
     }
     return (0);
 }
-Status kek_compiler_SelfCAddTypeUse(struct SelfCProgram* program,struct SelfCTypeInfo* info) {
+Status kek_compiler_CAddTypeUse(struct CProgram* program,struct CTypeInfo* info) {
     if (info->argCount==0) {
         return (Status_Ok);
     }
     struct String key=std_string_OwnedStringView(&info->key);
-    if (kek_compiler_SelfCTypeUseExists(program,key)) {
+    if (kek_compiler_CTypeUseExists(program,key)) {
         return (Status_Ok);
     }
-    if (program->typeUseCount>=(sizeof(program->typeUses)/sizeof((program->typeUses)[0]))) {
-        return (kek_compiler_SelfCAddDiagnostic(program,"too many generic type uses"));
+    Status status=kek_compiler_CReserveTypeUses(program,1);
+    if (status!=Status_Ok) {
+        return (status);
     }
-    struct SelfCTypeUse* use=&program->typeUses[program->typeUseCount];
-    Status status=kek_compiler_SelfCCloneString(program,key,&use->key);
+    struct CTypeUse* use=&program->typeUses.data[program->typeUses.len];
+    status=kek_compiler_CCloneString(program,key,&use->key);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCCloneString(program,std_string_OwnedStringView(&info->cType),&use->cName);
-    }
-    if (status==Status_Ok) {
-        status=kek_compiler_SelfCCloneString(program,std_string_OwnedStringView(&info->baseName),&use->baseName);
+        status=kek_compiler_CCloneString(program,std_string_OwnedStringView(&info->cType),&use->cName);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCCloneString(program,std_string_OwnedStringView(&info->arg0),&use->arg0);
+        status=kek_compiler_CCloneString(program,std_string_OwnedStringView(&info->baseName),&use->baseName);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCCloneString(program,std_string_OwnedStringView(&info->arg1),&use->arg1);
+        status=kek_compiler_CCloneString(program,std_string_OwnedStringView(&info->arg0),&use->arg0);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCCloneString(program,std_string_OwnedStringView(&info->arg2),&use->arg2);
+        status=kek_compiler_CCloneString(program,std_string_OwnedStringView(&info->arg1),&use->arg1);
+    }
+    if (status==Status_Ok) {
+        status=kek_compiler_CCloneString(program,std_string_OwnedStringView(&info->arg2),&use->arg2);
     }
     use->argCount=info->argCount;
     use->emitted=0;
     if (status==Status_Ok) {
-        program->typeUseCount+=1;
+        program->typeUses.len+=1;
     }
     return (status);
 }
-Status kek_compiler_SelfCAddTypeUseFromBaseArg(struct SelfCProgram* program,str baseName,struct String arg0) {
+Status kek_compiler_CAddTypeUseFromBaseArg(struct CProgram* program,str baseName,struct String arg0) {
     struct StringBuilder keyBuilder=std_string_StringBuilderNew(program->allocator);
     Status status=StringBuilder_WriteCString(&keyBuilder,baseName);
     if (status==Status_Ok) {
@@ -4639,94 +4755,97 @@ Status kek_compiler_SelfCAddTypeUseFromBaseArg(struct SelfCProgram* program,str 
         status=StringBuilder_WriteString(&keyBuilder,arg0);
     }
     struct String key=StringBuilder_View(&keyBuilder);
-    if (status==Status_Ok&&kek_compiler_SelfCTypeUseExists(program,key)) {
+    if (status==Status_Ok&&kek_compiler_CTypeUseExists(program,key)) {
         StringBuilder_Destroy(&keyBuilder);
         return (Status_Ok);
     }
-    if (status==Status_Ok&&program->typeUseCount>=(sizeof(program->typeUses)/sizeof((program->typeUses)[0]))) {
+    if (status==Status_Ok) {
+        status=kek_compiler_CReserveTypeUses(program,1);
+    }
+    if (status!=Status_Ok) {
         StringBuilder_Destroy(&keyBuilder);
-        return (kek_compiler_SelfCAddDiagnostic(program,"too many generic type uses"));
+        return (status);
     }
-    struct SelfCTypeUse* use=&program->typeUses[program->typeUseCount];
+    struct CTypeUse* use=&program->typeUses.data[program->typeUses.len];
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCCloneString(program,key,&use->key);
-    }
-    if (status==Status_Ok) {
-        status=kek_compiler_SelfCCloneString(program,key,&use->cName);
+        status=kek_compiler_CCloneString(program,key,&use->key);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCCloneString(program,std_string_StringFromCString(baseName),&use->baseName);
+        status=kek_compiler_CCloneString(program,key,&use->cName);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCCloneString(program,arg0,&use->arg0);
+        status=kek_compiler_CCloneString(program,std_string_StringFromCString(baseName),&use->baseName);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCMakeOwnedEmpty(program,&use->arg1);
+        status=kek_compiler_CCloneString(program,arg0,&use->arg0);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCMakeOwnedEmpty(program,&use->arg2);
+        status=kek_compiler_CMakeOwnedEmpty(program,&use->arg1);
+    }
+    if (status==Status_Ok) {
+        status=kek_compiler_CMakeOwnedEmpty(program,&use->arg2);
     }
     use->argCount=1;
     use->emitted=0;
     if (status==Status_Ok) {
-        program->typeUseCount+=1;
+        program->typeUses.len+=1;
     }
     StringBuilder_Destroy(&keyBuilder);
     return (status);
 }
-bool kek_compiler_SelfCConcreteTypeKey(struct SelfCProgram* program,struct String key) {
+bool kek_compiler_CConcreteTypeKey(struct CProgram* program,struct String key) {
     if (key.len==0) {
         return (0);
     }
-    if (kek_compiler_SelfCIsBuiltinTypeName(key)) {
+    if (kek_compiler_CIsBuiltinTypeName(key)) {
         return (1);
     }
     if (String_ContainsByte(&key,'*')) {
         return (1);
     }
-    if (kek_compiler_SelfCFindTypeDecl(program,key)!=0) {
+    if (kek_compiler_CFindTypeDecl(program,key)!=0) {
         return (1);
     }
-    for (usize i=0;i<program->typeUseCount;i++) {
-        struct String useKey=std_string_OwnedStringView(&program->typeUses[i].key);
+    for (usize i=0;i<program->typeUses.len;i++) {
+        struct String useKey=std_string_OwnedStringView(&program->typeUses.data[i].key);
         if (String_Equals(&useKey,key)) {
             return (1);
         }
     }
     return (0);
 }
-bool kek_compiler_SelfCTypeInfoConcrete(struct SelfCProgram* program,struct SelfCTypeInfo* info) {
+bool kek_compiler_CTypeInfoConcrete(struct CProgram* program,struct CTypeInfo* info) {
     if (info->argCount==0) {
-        return (kek_compiler_SelfCConcreteTypeKey(program,std_string_OwnedStringView(&info->key)));
+        return (kek_compiler_CConcreteTypeKey(program,std_string_OwnedStringView(&info->key)));
     }
-    if (info->argCount>=1&&!kek_compiler_SelfCConcreteTypeKey(program,std_string_OwnedStringView(&info->arg0))) {
+    if (info->argCount>=1&&!kek_compiler_CConcreteTypeKey(program,std_string_OwnedStringView(&info->arg0))) {
         return (0);
     }
-    if (info->argCount>=2&&!kek_compiler_SelfCConcreteTypeKey(program,std_string_OwnedStringView(&info->arg1))) {
+    if (info->argCount>=2&&!kek_compiler_CConcreteTypeKey(program,std_string_OwnedStringView(&info->arg1))) {
         return (0);
     }
-    if (info->argCount>=3&&!kek_compiler_SelfCConcreteTypeKey(program,std_string_OwnedStringView(&info->arg2))) {
+    if (info->argCount>=3&&!kek_compiler_CConcreteTypeKey(program,std_string_OwnedStringView(&info->arg2))) {
         return (0);
     }
     return (1);
 }
-Status kek_compiler_SelfCCollectTypeUsesInRange(struct SelfCProgram* program,usize fileIndex,usize start,usize end) {
+Status kek_compiler_CCollectTypeUsesInRange(struct CProgram* program,usize fileIndex,usize start,usize end) {
     usize i=start;
     while (i<end) {
-        if (i+1<end&&kek_compiler_SelfCIsOperator(program,fileIndex,i+1,OperatorKind_Less)) {
-            struct String name=kek_compiler_SelfCTokenText(program,fileIndex,i);
-            struct SelfCDecl* decl=kek_compiler_SelfCFindTypeDecl(program,name);
+        if (i+1<end&&kek_compiler_CIsOperator(program,fileIndex,i+1,OperatorKind_Less)) {
+            struct String name=kek_compiler_CTokenText(program,fileIndex,i);
+            struct CDecl* decl=kek_compiler_CFindTypeDecl(program,name);
             if (decl!=0&&decl->isGeneric) {
-                usize genericEnd=kek_compiler_SelfCFindMatching(program,fileIndex,i+1);
-                struct SelfCTypeInfo info={0};
-                Status status=kek_compiler_SelfCRenderTypeInfo(program,fileIndex,i,genericEnd+1,&info);
+                usize genericEnd=kek_compiler_CFindMatching(program,fileIndex,i+1);
+                struct CTypeInfo info={0};
+                Status status=kek_compiler_CRenderTypeInfo(program,fileIndex,i,genericEnd+1,&info);
                 if (status!=Status_Ok) {
                     return (status);
                 }
-                if (kek_compiler_SelfCTypeInfoConcrete(program,&info)) {
-                    status=kek_compiler_SelfCAddTypeUse(program,&info);
+                if (kek_compiler_CTypeInfoConcrete(program,&info)) {
+                    status=kek_compiler_CAddTypeUse(program,&info);
                 }
-                kek_compiler_SelfCTypeInfoDestroy(&info);
+                kek_compiler_CTypeInfoDestroy(&info);
                 if (status!=Status_Ok) {
                     return (status);
                 }
@@ -4738,7 +4857,7 @@ Status kek_compiler_SelfCCollectTypeUsesInRange(struct SelfCProgram* program,usi
     }
     return (Status_Ok);
 }
-bool kek_compiler_SelfCDeclScopeMatches(struct SelfCDecl* decl,struct String scopeName) {
+bool kek_compiler_CDeclScopeMatches(struct CDecl* decl,struct String scopeName) {
     if (scopeName.len==0) {
         return (1);
     }
@@ -4749,46 +4868,46 @@ bool kek_compiler_SelfCDeclScopeMatches(struct SelfCDecl* decl,struct String sco
     struct String declModule=std_string_OwnedStringView(&decl->moduleName);
     return (String_Equals(&declModule,scopeName));
 }
-struct SelfCDecl* kek_compiler_SelfCFindFunctionDeclByName(struct SelfCProgram* program,struct String name,struct String scopeName) {
-    for (usize i=0;i<program->declCount;i++) {
-        struct SelfCDecl* decl=&program->decls[i];
-        if (decl->kind!=SelfCDeclKind_Function) {
+struct CDecl* kek_compiler_CFindFunctionDeclByName(struct CProgram* program,struct String name,struct String scopeName) {
+    for (usize i=0;i<program->decls.len;i++) {
+        struct CDecl* decl=&program->decls.data[i];
+        if (decl->kind!=CDeclKind_Function) {
             continue;
         }
         if (decl->hasReceiver) {
             continue;
         }
-        if (!kek_compiler_SelfCDeclNameMatches(program,decl,name)) {
+        if (!kek_compiler_CDeclNameMatches(program,decl,name)) {
             continue;
         }
-        if (kek_compiler_SelfCDeclScopeMatches(decl,scopeName)) {
+        if (kek_compiler_CDeclScopeMatches(decl,scopeName)) {
             return (decl);
         }
     }
     return (0);
 }
-bool kek_compiler_SelfCFuncUseExists(struct SelfCProgram* program,usize declIndex,struct String key) {
-    for (usize i=0;i<program->funcUseCount;i++) {
-        struct String useKey=std_string_OwnedStringView(&program->funcUses[i].key);
-        if (program->funcUses[i].declIndex==declIndex&&String_Equals(&useKey,key)) {
+bool kek_compiler_CFuncUseExists(struct CProgram* program,usize declIndex,struct String key) {
+    for (usize i=0;i<program->funcUses.len;i++) {
+        struct String useKey=std_string_OwnedStringView(&program->funcUses.data[i].key);
+        if (program->funcUses.data[i].declIndex==declIndex&&String_Equals(&useKey,key)) {
             return (1);
         }
     }
     return (0);
 }
-usize kek_compiler_SelfCDeclIndex(struct SelfCProgram* program,struct SelfCDecl* decl) {
-    for (usize i=0;i<program->declCount;i++) {
-        if (&program->decls[i]==decl) {
+usize kek_compiler_CDeclIndex(struct CProgram* program,struct CDecl* decl) {
+    for (usize i=0;i<program->decls.len;i++) {
+        if (&program->decls.data[i]==decl) {
             return (i);
         }
     }
-    return ((sizeof(program->decls)/sizeof((program->decls)[0])));
+    return (program->decls.len);
 }
-Status kek_compiler_SelfCBuildGenericFuncCName(struct SelfCProgram* program,struct SelfCDecl* decl,struct SelfCTypeInfo* arg0,struct SelfCTypeInfo* arg1,struct SelfCTypeInfo* arg2,usize argCount,struct OwnedString* out) {
+Status kek_compiler_CBuildGenericFuncCName(struct CProgram* program,struct CDecl* decl,struct CTypeInfo* arg0,struct CTypeInfo* arg1,struct CTypeInfo* arg2,usize argCount,struct OwnedString* out) {
     struct StringBuilder builder=std_string_StringBuilderNew(program->allocator);
     Status status=Status_Ok;
     if (decl->hasReceiver&&argCount>=1) {
-        status=kek_compiler_SelfCWriteSanitized(&builder,kek_compiler_SelfCTokenText(program,decl->fileIndex,decl->receiverStart));
+        status=kek_compiler_CWriteSanitized(&builder,kek_compiler_CTokenText(program,decl->fileIndex,decl->receiverStart));
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(&builder,"__");
         }
@@ -4803,7 +4922,7 @@ Status kek_compiler_SelfCBuildGenericFuncCName(struct SelfCProgram* program,stru
                 status=StringBuilder_WriteCString(&builder,"operator_");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteOperatorName(&builder,decl->operatorCode);
+                status=kek_compiler_CWriteOperatorName(&builder,decl->operatorCode);
             }
             if (status==Status_Ok) {
                 status=StringBuilder_WriteCString(&builder,"_");
@@ -4813,16 +4932,16 @@ Status kek_compiler_SelfCBuildGenericFuncCName(struct SelfCProgram* program,stru
             }
         } else {
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteToken(program,&builder,decl->fileIndex,decl->nameIndex);
+                status=kek_compiler_CWriteToken(program,&builder,decl->fileIndex,decl->nameIndex);
             }
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCDetachBuilder(&builder,out);
+            status=kek_compiler_CDetachBuilder(&builder,out);
         }
         StringBuilder_Destroy(&builder);
         return (status);
     }
-    status=kek_compiler_SelfCWriteDeclCName(program,&builder,decl);
+    status=kek_compiler_CWriteDeclCName(program,&builder,decl);
     if (status==Status_Ok&&argCount>=1) {
         status=StringBuilder_WriteCString(&builder,"__");
         if (status==Status_Ok) {
@@ -4842,107 +4961,108 @@ Status kek_compiler_SelfCBuildGenericFuncCName(struct SelfCProgram* program,stru
         }
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCDetachBuilder(&builder,out);
+        status=kek_compiler_CDetachBuilder(&builder,out);
     }
     StringBuilder_Destroy(&builder);
     return (status);
 }
-Status kek_compiler_SelfCAddFuncUse(struct SelfCProgram* program,struct SelfCDecl* decl,struct SelfCTypeInfo* arg0,struct SelfCTypeInfo* arg1,struct SelfCTypeInfo* arg2,usize argCount) {
+Status kek_compiler_CAddFuncUse(struct CProgram* program,struct CDecl* decl,struct CTypeInfo* arg0,struct CTypeInfo* arg1,struct CTypeInfo* arg2,usize argCount) {
     if (argCount==0) {
         return (Status_Ok);
     }
-    if (argCount>=1&&!kek_compiler_SelfCTypeInfoConcrete(program,arg0)) {
+    if (argCount>=1&&!kek_compiler_CTypeInfoConcrete(program,arg0)) {
         return (Status_Ok);
     }
-    if (argCount>=2&&!kek_compiler_SelfCTypeInfoConcrete(program,arg1)) {
+    if (argCount>=2&&!kek_compiler_CTypeInfoConcrete(program,arg1)) {
         return (Status_Ok);
     }
-    if (argCount>=3&&!kek_compiler_SelfCTypeInfoConcrete(program,arg2)) {
+    if (argCount>=3&&!kek_compiler_CTypeInfoConcrete(program,arg2)) {
         return (Status_Ok);
     }
     struct OwnedString cName={0};
-    Status status=kek_compiler_SelfCBuildGenericFuncCName(program,decl,arg0,arg1,arg2,argCount,&cName);
+    Status status=kek_compiler_CBuildGenericFuncCName(program,decl,arg0,arg1,arg2,argCount,&cName);
     if (status!=Status_Ok) {
         return (status);
     }
-    usize declIndex=kek_compiler_SelfCDeclIndex(program,decl);
+    usize declIndex=kek_compiler_CDeclIndex(program,decl);
     struct String key=std_string_OwnedStringView(&cName);
-    if (kek_compiler_SelfCFuncUseExists(program,declIndex,key)) {
+    if (kek_compiler_CFuncUseExists(program,declIndex,key)) {
         std_string_DestroyOwnedString(&cName);
         return (Status_Ok);
     }
-    if (program->funcUseCount>=(sizeof(program->funcUses)/sizeof((program->funcUses)[0]))) {
+    status=kek_compiler_CReserveFuncUses(program,1);
+    if (status!=Status_Ok) {
         std_string_DestroyOwnedString(&cName);
-        return (kek_compiler_SelfCAddDiagnostic(program,"too many generic function uses"));
+        return (status);
     }
-    struct SelfCFuncUse* use=&program->funcUses[program->funcUseCount];
+    struct CFuncUse* use=&program->funcUses.data[program->funcUses.len];
     use->declIndex=declIndex;
-    status=kek_compiler_SelfCCloneString(program,key,&use->key);
+    status=kek_compiler_CCloneString(program,key,&use->key);
     if (status==Status_Ok) {
         use->cName=cName;
     } else {
         std_string_DestroyOwnedString(&cName);
     }
     if (status==Status_Ok&&argCount>=1) {
-        status=kek_compiler_SelfCCloneString(program,std_string_OwnedStringView(&arg0->key),&use->arg0);
+        status=kek_compiler_CCloneString(program,std_string_OwnedStringView(&arg0->key),&use->arg0);
     } else {
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCMakeOwnedEmpty(program,&use->arg0);
+            status=kek_compiler_CMakeOwnedEmpty(program,&use->arg0);
         }
     }
     if (status==Status_Ok&&argCount>=2) {
-        status=kek_compiler_SelfCCloneString(program,std_string_OwnedStringView(&arg1->key),&use->arg1);
+        status=kek_compiler_CCloneString(program,std_string_OwnedStringView(&arg1->key),&use->arg1);
     } else {
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCMakeOwnedEmpty(program,&use->arg1);
+            status=kek_compiler_CMakeOwnedEmpty(program,&use->arg1);
         }
     }
     if (status==Status_Ok&&argCount>=3) {
-        status=kek_compiler_SelfCCloneString(program,std_string_OwnedStringView(&arg2->key),&use->arg2);
+        status=kek_compiler_CCloneString(program,std_string_OwnedStringView(&arg2->key),&use->arg2);
     } else {
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCMakeOwnedEmpty(program,&use->arg2);
+            status=kek_compiler_CMakeOwnedEmpty(program,&use->arg2);
         }
     }
     use->argCount=argCount;
     use->emitted=0;
     if (status==Status_Ok) {
-        program->funcUseCount+=1;
+        program->funcUses.len+=1;
     }
     return (status);
 }
-Status kek_compiler_SelfCCollectGenericFunctionUsesInRange(struct SelfCProgram* program,usize fileIndex,usize start,usize end) {
+Status kek_compiler_CCollectGenericFunctionUsesInRange(struct CProgram* program,usize fileIndex,usize start,usize end) {
     usize i=start;
     while (i<end) {
-        if (i+2<end&&kek_compiler_SelfCIsOperator(program,fileIndex,i+1,OperatorKind_Less)) {
-            usize genericEnd=kek_compiler_SelfCFindMatching(program,fileIndex,i+1);
-            if (genericEnd+1<end&&kek_compiler_SelfCIsPunctuation(program,fileIndex,genericEnd+1,PunctuationKind_LeftParen)) {
-                struct String name=kek_compiler_SelfCTokenText(program,fileIndex,i);
+        if (i+2<end&&kek_compiler_CIsOperator(program,fileIndex,i+1,OperatorKind_Less)) {
+            usize genericEnd=kek_compiler_CFindMatching(program,fileIndex,i+1);
+            if (genericEnd+1<end&&kek_compiler_CIsPunctuation(program,fileIndex,genericEnd+1,PunctuationKind_LeftParen)) {
+                struct String name=kek_compiler_CTokenText(program,fileIndex,i);
                 struct String scopeName=std_string_StringFromCString("");
-                if (i>=2&&kek_compiler_SelfCIsOperator(program,fileIndex,i-1,OperatorKind_Scope)) {
-                    scopeName=kek_compiler_SelfCTokenText(program,fileIndex,i-2);
+                if (i>=2&&kek_compiler_CIsOperator(program,fileIndex,i-1,OperatorKind_Scope)) {
+                    scopeName=kek_compiler_CTokenText(program,fileIndex,i-2);
                 }
-                struct SelfCDecl* decl=kek_compiler_SelfCFindFunctionDeclByName(program,name,scopeName);
+                struct CDecl* decl=kek_compiler_CFindFunctionDeclByName(program,name,scopeName);
                 if (decl!=0&&decl->isGeneric) {
-                    struct SelfCTypeInfo arg0={0};
-                    struct SelfCTypeInfo arg1={0};
-                    struct SelfCTypeInfo arg2={0};
-                    kek_compiler_SelfCTypeInfoInitEmpty(program,&arg0);
-                    kek_compiler_SelfCTypeInfoInitEmpty(program,&arg1);
-                    kek_compiler_SelfCTypeInfoInitEmpty(program,&arg2);
+                    struct CTypeInfo arg0={0};
+                    struct CTypeInfo arg1={0};
+                    struct CTypeInfo arg2={0};
+                    kek_compiler_CTypeInfoInitEmpty(program,&arg0);
+                    kek_compiler_CTypeInfoInitEmpty(program,&arg1);
+                    kek_compiler_CTypeInfoInitEmpty(program,&arg2);
                     usize argCount=0;
                     usize argStart=i+2;
                     Status status=Status_Ok;
                     while (argStart<genericEnd) {
-                        usize argEnd=kek_compiler_SelfCFindTokenAtDepthZero(program,fileIndex,argStart,genericEnd,PunctuationKind_Comma);
+                        usize argEnd=kek_compiler_CFindTokenAtDepthZero(program,fileIndex,argStart,genericEnd,PunctuationKind_Comma);
                         if (argCount==0) {
-                            status=kek_compiler_SelfCRenderTypeInfo(program,fileIndex,argStart,argEnd,&arg0);
+                            status=kek_compiler_CRenderTypeInfo(program,fileIndex,argStart,argEnd,&arg0);
                         } else {
                             if (argCount==1) {
-                                status=kek_compiler_SelfCRenderTypeInfo(program,fileIndex,argStart,argEnd,&arg1);
+                                status=kek_compiler_CRenderTypeInfo(program,fileIndex,argStart,argEnd,&arg1);
                             } else {
                                 if (argCount==2) {
-                                    status=kek_compiler_SelfCRenderTypeInfo(program,fileIndex,argStart,argEnd,&arg2);
+                                    status=kek_compiler_CRenderTypeInfo(program,fileIndex,argStart,argEnd,&arg2);
                                 }
                             }
                         }
@@ -4953,11 +5073,11 @@ Status kek_compiler_SelfCCollectGenericFunctionUsesInRange(struct SelfCProgram* 
                         argStart=argEnd+1;
                     }
                     if (status==Status_Ok) {
-                        status=kek_compiler_SelfCAddFuncUse(program,decl,&arg0,&arg1,&arg2,argCount);
+                        status=kek_compiler_CAddFuncUse(program,decl,&arg0,&arg1,&arg2,argCount);
                     }
-                    kek_compiler_SelfCTypeInfoDestroy(&arg0);
-                    kek_compiler_SelfCTypeInfoDestroy(&arg1);
-                    kek_compiler_SelfCTypeInfoDestroy(&arg2);
+                    kek_compiler_CTypeInfoDestroy(&arg0);
+                    kek_compiler_CTypeInfoDestroy(&arg1);
+                    kek_compiler_CTypeInfoDestroy(&arg2);
                     if (status!=Status_Ok) {
                         return (status);
                     }
@@ -4970,141 +5090,177 @@ Status kek_compiler_SelfCCollectGenericFunctionUsesInRange(struct SelfCProgram* 
     }
     return (Status_Ok);
 }
-struct SelfCDecl* kek_compiler_SelfCFindGenericMethodDecl(struct SelfCProgram* program,struct String receiverBase,str methodName) {
-    for (usize i=0;i<program->declCount;i++) {
-        struct SelfCDecl* decl=&program->decls[i];
-        if (decl->kind!=SelfCDeclKind_Function||!decl->hasReceiver||!decl->isGeneric||decl->isOperator) {
+struct CDecl* kek_compiler_CFindGenericMethodDecl(struct CProgram* program,struct String receiverBase,str methodName) {
+    for (usize i=0;i<program->decls.len;i++) {
+        struct CDecl* decl=&program->decls.data[i];
+        if (decl->kind!=CDeclKind_Function||!decl->hasReceiver||!decl->isGeneric||decl->isOperator) {
             continue;
         }
-        struct String base=kek_compiler_SelfCTokenText(program,decl->fileIndex,decl->receiverStart);
+        struct String base=kek_compiler_CTokenText(program,decl->fileIndex,decl->receiverStart);
         if (!String_Equals(&base,receiverBase)) {
             continue;
         }
-        struct String name=kek_compiler_SelfCTokenText(program,decl->fileIndex,decl->nameIndex);
+        struct String name=kek_compiler_CTokenText(program,decl->fileIndex,decl->nameIndex);
         if (String_EqualsCString(&name,methodName)) {
             return (decl);
         }
     }
     return (0);
 }
-Status kek_compiler_SelfCAddGenericMethodUseByName(struct SelfCProgram* program,struct SelfCTypeUse* typeUse,str methodName) {
+Status kek_compiler_CAddGenericMethodUseByName(struct CProgram* program,struct CTypeUse* typeUse,str methodName) {
     struct String baseName=std_string_OwnedStringView(&typeUse->baseName);
-    struct SelfCDecl* decl=kek_compiler_SelfCFindGenericMethodDecl(program,baseName,methodName);
+    struct CDecl* decl=kek_compiler_CFindGenericMethodDecl(program,baseName,methodName);
     if (decl==0) {
         return (Status_Ok);
     }
-    struct SelfCTypeInfo arg0={0};
-    struct SelfCTypeInfo arg1={0};
-    struct SelfCTypeInfo arg2={0};
+    struct CTypeInfo arg0={0};
+    struct CTypeInfo arg1={0};
+    struct CTypeInfo arg2={0};
     bool arg0Ready=0;
     bool arg1Ready=0;
     bool arg2Ready=0;
-    Status status=kek_compiler_SelfCTypeInfoInitEmpty(program,&arg1);
+    Status status=kek_compiler_CTypeInfoInitEmpty(program,&arg1);
     if (status==Status_Ok) {
         arg1Ready=1;
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCTypeInfoInitEmpty(program,&arg2);
+        status=kek_compiler_CTypeInfoInitEmpty(program,&arg2);
     }
     if (status==Status_Ok) {
         arg2Ready=1;
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCTypeInfoFromKey(program,std_string_OwnedStringView(&typeUse->arg0),&arg0);
+        status=kek_compiler_CTypeInfoFromKey(program,std_string_OwnedStringView(&typeUse->arg0),&arg0);
     }
     if (status==Status_Ok) {
         arg0Ready=1;
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCAddFuncUse(program,decl,&arg0,&arg1,&arg2,1);
+        status=kek_compiler_CAddFuncUse(program,decl,&arg0,&arg1,&arg2,1);
     }
     if (arg0Ready) {
-        kek_compiler_SelfCTypeInfoDestroy(&arg0);
+        kek_compiler_CTypeInfoDestroy(&arg0);
     }
     if (arg1Ready) {
-        kek_compiler_SelfCTypeInfoDestroy(&arg1);
+        kek_compiler_CTypeInfoDestroy(&arg1);
     }
     if (arg2Ready) {
-        kek_compiler_SelfCTypeInfoDestroy(&arg2);
+        kek_compiler_CTypeInfoDestroy(&arg2);
     }
     return (status);
 }
-Status kek_compiler_SelfCCollectGenericCollectionMethods(struct SelfCProgram* program) {
-    usize typeUseLimit=program->typeUseCount;
+bool kek_compiler_CMethodCallNameUsed(struct CProgram* program,str methodName) {
+    for (usize i=0;i<program->decls.len;i++) {
+        struct CDecl* decl=&program->decls.data[i];
+        if (!decl->reachable) {
+            continue;
+        }
+        for (usize j=decl->start;j+2<decl->end;j++) {
+            if (!kek_compiler_CIsPunctuation(program,decl->fileIndex,j,PunctuationKind_Dot)) {
+                continue;
+            }
+            if (!kek_compiler_CTokenEquals(program,decl->fileIndex,j+1,methodName)) {
+                continue;
+            }
+            if (kek_compiler_CIsPunctuation(program,decl->fileIndex,j+2,PunctuationKind_LeftParen)) {
+                return (1);
+            }
+        }
+    }
+    return (0);
+}
+Status kek_compiler_CCollectGenericCollectionMethods(struct CProgram* program) {
+    bool arrayDestroyUsed=kek_compiler_CMethodCallNameUsed(program,"Destroy");
+    bool arrayClearUsed=kek_compiler_CMethodCallNameUsed(program,"Clear");
+    bool arrayReserveUsed=kek_compiler_CMethodCallNameUsed(program,"Reserve");
+    bool arrayAppendSliceUsed=kek_compiler_CMethodCallNameUsed(program,"AppendSlice");
+    bool arrayPushUsed=kek_compiler_CMethodCallNameUsed(program,"Push");
+    bool arrayPushZeroedUsed=kek_compiler_CMethodCallNameUsed(program,"PushZeroed");
+    bool arrayPopUsed=kek_compiler_CMethodCallNameUsed(program,"Pop");
+    bool arrayGetUsed=kek_compiler_CMethodCallNameUsed(program,"Get");
+    bool arraySetUsed=kek_compiler_CMethodCallNameUsed(program,"Set");
+    bool arrayGetPtrUsed=kek_compiler_CMethodCallNameUsed(program,"GetPtr");
+    bool arrayLastPtrUsed=kek_compiler_CMethodCallNameUsed(program,"LastPtr");
+    bool arraySpanUsed=kek_compiler_CMethodCallNameUsed(program,"Span");
+    bool arraySliceUsed=kek_compiler_CMethodCallNameUsed(program,"Slice");
+    usize typeUseLimit=program->typeUses.len;
     for (usize i=0;i<typeUseLimit;i++) {
-        struct SelfCTypeUse* use=&program->typeUses[i];
+        struct CTypeUse useValue=program->typeUses.data[i];
+        struct CTypeUse* use=&useValue;
         struct String base=std_string_OwnedStringView(&use->baseName);
         if (use->argCount<1) {
             continue;
         }
         Status status=Status_Ok;
         if (String_EqualsCString(&base,"Array")) {
-            status=kek_compiler_SelfCAddTypeUseFromBaseArg(program,"Result",std_string_OwnedStringView(&use->arg0));
-            if (status==Status_Ok) {
-                status=kek_compiler_SelfCAddTypeUseFromBaseArg(program,"Slice",std_string_OwnedStringView(&use->arg0));
+            if (status==Status_Ok&&(arrayPopUsed||arrayGetUsed)) {
+                status=kek_compiler_CAddTypeUseFromBaseArg(program,"Result",std_string_OwnedStringView(&use->arg0));
             }
-            if (status==Status_Ok) {
-                status=kek_compiler_SelfCAddTypeUseFromBaseArg(program,"Span",std_string_OwnedStringView(&use->arg0));
+            if (status==Status_Ok&&(arrayAppendSliceUsed||arraySliceUsed)) {
+                status=kek_compiler_CAddTypeUseFromBaseArg(program,"Slice",std_string_OwnedStringView(&use->arg0));
             }
-            if (status==Status_Ok) {
-                status=kek_compiler_SelfCAddGenericMethodUseByName(program,use,"Destroy");
+            if (status==Status_Ok&&arraySpanUsed) {
+                status=kek_compiler_CAddTypeUseFromBaseArg(program,"Span",std_string_OwnedStringView(&use->arg0));
             }
-            if (status==Status_Ok) {
-                status=kek_compiler_SelfCAddGenericMethodUseByName(program,use,"Clear");
+            if (status==Status_Ok&&arrayDestroyUsed) {
+                status=kek_compiler_CAddGenericMethodUseByName(program,use,"Destroy");
             }
-            if (status==Status_Ok) {
-                status=kek_compiler_SelfCAddGenericMethodUseByName(program,use,"Reserve");
+            if (status==Status_Ok&&arrayClearUsed) {
+                status=kek_compiler_CAddGenericMethodUseByName(program,use,"Clear");
             }
-            if (status==Status_Ok) {
-                status=kek_compiler_SelfCAddGenericMethodUseByName(program,use,"AppendSlice");
+            if (status==Status_Ok&&(arrayReserveUsed||arrayAppendSliceUsed||arrayPushUsed||arrayPushZeroedUsed)) {
+                status=kek_compiler_CAddGenericMethodUseByName(program,use,"Reserve");
             }
-            if (status==Status_Ok) {
-                status=kek_compiler_SelfCAddGenericMethodUseByName(program,use,"Push");
+            if (status==Status_Ok&&arrayAppendSliceUsed) {
+                status=kek_compiler_CAddGenericMethodUseByName(program,use,"AppendSlice");
             }
-            if (status==Status_Ok) {
-                status=kek_compiler_SelfCAddGenericMethodUseByName(program,use,"PushZeroed");
+            if (status==Status_Ok&&arrayPushUsed) {
+                status=kek_compiler_CAddGenericMethodUseByName(program,use,"Push");
             }
-            if (status==Status_Ok) {
-                status=kek_compiler_SelfCAddGenericMethodUseByName(program,use,"Pop");
+            if (status==Status_Ok&&arrayPushZeroedUsed) {
+                status=kek_compiler_CAddGenericMethodUseByName(program,use,"PushZeroed");
             }
-            if (status==Status_Ok) {
-                status=kek_compiler_SelfCAddGenericMethodUseByName(program,use,"Get");
+            if (status==Status_Ok&&arrayPopUsed) {
+                status=kek_compiler_CAddGenericMethodUseByName(program,use,"Pop");
             }
-            if (status==Status_Ok) {
-                status=kek_compiler_SelfCAddGenericMethodUseByName(program,use,"Set");
+            if (status==Status_Ok&&arrayGetUsed) {
+                status=kek_compiler_CAddGenericMethodUseByName(program,use,"Get");
             }
-            if (status==Status_Ok) {
-                status=kek_compiler_SelfCAddGenericMethodUseByName(program,use,"GetPtr");
+            if (status==Status_Ok&&arraySetUsed) {
+                status=kek_compiler_CAddGenericMethodUseByName(program,use,"Set");
             }
-            if (status==Status_Ok) {
-                status=kek_compiler_SelfCAddGenericMethodUseByName(program,use,"LastPtr");
+            if (status==Status_Ok&&arrayGetPtrUsed) {
+                status=kek_compiler_CAddGenericMethodUseByName(program,use,"GetPtr");
             }
-            if (status==Status_Ok) {
-                status=kek_compiler_SelfCAddGenericMethodUseByName(program,use,"Span");
+            if (status==Status_Ok&&arrayLastPtrUsed) {
+                status=kek_compiler_CAddGenericMethodUseByName(program,use,"LastPtr");
             }
-            if (status==Status_Ok) {
-                status=kek_compiler_SelfCAddGenericMethodUseByName(program,use,"Slice");
+            if (status==Status_Ok&&arraySpanUsed) {
+                status=kek_compiler_CAddGenericMethodUseByName(program,use,"Span");
+            }
+            if (status==Status_Ok&&arraySliceUsed) {
+                status=kek_compiler_CAddGenericMethodUseByName(program,use,"Slice");
             }
         } else {
             if (String_EqualsCString(&base,"LinkedList")) {
-                status=kek_compiler_SelfCAddTypeUseFromBaseArg(program,"ListNode",std_string_OwnedStringView(&use->arg0));
+                status=kek_compiler_CAddTypeUseFromBaseArg(program,"ListNode",std_string_OwnedStringView(&use->arg0));
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCAddTypeUseFromBaseArg(program,"Result",std_string_OwnedStringView(&use->arg0));
+                    status=kek_compiler_CAddTypeUseFromBaseArg(program,"Result",std_string_OwnedStringView(&use->arg0));
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCAddGenericMethodUseByName(program,use,"PushBack");
+                    status=kek_compiler_CAddGenericMethodUseByName(program,use,"PushBack");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCAddGenericMethodUseByName(program,use,"PushFront");
+                    status=kek_compiler_CAddGenericMethodUseByName(program,use,"PushFront");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCAddGenericMethodUseByName(program,use,"PopBack");
+                    status=kek_compiler_CAddGenericMethodUseByName(program,use,"PopBack");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCAddGenericMethodUseByName(program,use,"Destroy");
+                    status=kek_compiler_CAddGenericMethodUseByName(program,use,"Destroy");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCAddGenericMethodUseByName(program,use,"PopFront");
+                    status=kek_compiler_CAddGenericMethodUseByName(program,use,"PopFront");
                 }
             }
         }
@@ -5114,27 +5270,33 @@ Status kek_compiler_SelfCCollectGenericCollectionMethods(struct SelfCProgram* pr
     }
     return (Status_Ok);
 }
-Status kek_compiler_SelfCCollectGenericFunctionUses(struct SelfCProgram* program) {
-    for (usize i=0;i<program->declCount;i++) {
-        struct SelfCDecl* decl=&program->decls[i];
-        Status status=kek_compiler_SelfCCollectGenericFunctionUsesInRange(program,decl->fileIndex,decl->start,decl->end);
+Status kek_compiler_CCollectGenericFunctionUses(struct CProgram* program) {
+    for (usize i=0;i<program->decls.len;i++) {
+        struct CDecl* decl=&program->decls.data[i];
+        if (!decl->reachable) {
+            continue;
+        }
+        Status status=kek_compiler_CCollectGenericFunctionUsesInRange(program,decl->fileIndex,decl->start,decl->end);
         if (status!=Status_Ok) {
             return (status);
         }
     }
-    return (kek_compiler_SelfCCollectGenericCollectionMethods(program));
+    return (kek_compiler_CCollectGenericCollectionMethods(program));
 }
-Status kek_compiler_SelfCCollectTypeUses(struct SelfCProgram* program) {
-    for (usize i=0;i<program->declCount;i++) {
-        struct SelfCDecl* decl=&program->decls[i];
-        Status status=kek_compiler_SelfCCollectTypeUsesInRange(program,decl->fileIndex,decl->start,decl->end);
+Status kek_compiler_CCollectTypeUses(struct CProgram* program) {
+    for (usize i=0;i<program->decls.len;i++) {
+        struct CDecl* decl=&program->decls.data[i];
+        if (!decl->reachable) {
+            continue;
+        }
+        Status status=kek_compiler_CCollectTypeUsesInRange(program,decl->fileIndex,decl->start,decl->end);
         if (status!=Status_Ok) {
             return (status);
         }
     }
     return (Status_Ok);
 }
-Status kek_compiler_SelfCWritePrelude(struct StringBuilder* out) {
+Status kek_compiler_CWritePrelude(struct StringBuilder* out) {
     Status status=StringBuilder_WriteCString(out,"#include <assert.h>");
     if (status==Status_Ok) {
         status=StringBuilder_WriteByte(out,10);
@@ -5237,9 +5399,9 @@ Status kek_compiler_SelfCWritePrelude(struct StringBuilder* out) {
     }
     return (status);
 }
-Status kek_compiler_SelfCWriteDeclarator(struct SelfCProgram* program,struct StringBuilder* out,usize fileIndex,usize typeStart,usize typeEnd,usize nameIndex,bool isArray,usize arrayStart,usize arrayEnd) {
-    struct SelfCTypeInfo info={0};
-    Status status=kek_compiler_SelfCRenderTypeInfo(program,fileIndex,typeStart,typeEnd,&info);
+Status kek_compiler_CWriteDeclarator(struct CProgram* program,struct StringBuilder* out,usize fileIndex,usize typeStart,usize typeEnd,usize nameIndex,bool isArray,usize arrayStart,usize arrayEnd) {
+    struct CTypeInfo info={0};
+    Status status=kek_compiler_CRenderTypeInfo(program,fileIndex,typeStart,typeEnd,&info);
     if (status!=Status_Ok) {
         return (status);
     }
@@ -5248,23 +5410,23 @@ Status kek_compiler_SelfCWriteDeclarator(struct SelfCProgram* program,struct Str
         status=StringBuilder_WriteByte(out,' ');
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteToken(program,out,fileIndex,nameIndex);
+        status=kek_compiler_CWriteToken(program,out,fileIndex,nameIndex);
     }
     if (status==Status_Ok&&isArray) {
         status=StringBuilder_WriteByte(out,'[');
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteTokenRangeRaw(program,out,fileIndex,arrayStart,arrayEnd);
+            status=kek_compiler_CWriteTokenRangeRaw(program,out,fileIndex,arrayStart,arrayEnd);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteByte(out,']');
         }
     }
-    kek_compiler_SelfCTypeInfoDestroy(&info);
+    kek_compiler_CTypeInfoDestroy(&info);
     return (status);
 }
-Status kek_compiler_SelfCWriteFields(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl) {
+Status kek_compiler_CWriteFields(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl) {
     for (usize i=0;i<decl->fieldCount;i++) {
-        struct SelfCField* field=&program->fields[decl->firstField+i];
+        struct CField* field=&program->fields.data[decl->firstField+i];
         Status status=StringBuilder_WriteCString(out,"    ");
         if (status!=Status_Ok) {
             return (status);
@@ -5274,33 +5436,33 @@ Status kek_compiler_SelfCWriteFields(struct SelfCProgram* program,struct StringB
             if (status!=Status_Ok) {
                 return (status);
             }
-            struct SelfCDecl nested={0};
-            nested.kind=SelfCDeclKind_Struct;
+            struct CDecl nested={0};
+            nested.kind=CDeclKind_Struct;
             nested.fileIndex=field->fileIndex;
             nested.bodyStart=field->nestedBodyStart;
             nested.bodyEnd=field->nestedBodyEnd;
-            nested.firstField=program->fieldCount;
+            nested.firstField=program->fields.len;
             nested.fieldCount=0;
             nested.nameIndex=field->nameIndex;
             nested.isGeneric=0;
-            Status parseNested=kek_compiler_SelfCParseFields(program,&nested,field->fileIndex,field->nestedBodyStart,field->nestedBodyEnd);
+            Status parseNested=kek_compiler_CParseFields(program,&nested,field->fileIndex,field->nestedBodyStart,field->nestedBodyEnd);
             if (parseNested!=Status_Ok) {
                 return (parseNested);
             }
-            status=kek_compiler_SelfCWriteFields(program,out,&nested);
+            status=kek_compiler_CWriteFields(program,out,&nested);
             if (status!=Status_Ok) {
                 return (status);
             }
             status=StringBuilder_WriteCString(out,"    } ");
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteToken(program,out,field->fileIndex,field->nameIndex);
+                status=kek_compiler_CWriteToken(program,out,field->fileIndex,field->nameIndex);
             }
             if (status==Status_Ok) {
                 status=StringBuilder_WriteCString(out,";\n");
             }
             return (status);
         }
-        status=kek_compiler_SelfCWriteDeclarator(program,out,field->fileIndex,field->typeStart,field->typeEnd,field->nameIndex,field->isArray,field->arrayStart,field->arrayEnd);
+        status=kek_compiler_CWriteDeclarator(program,out,field->fileIndex,field->typeStart,field->typeEnd,field->nameIndex,field->isArray,field->arrayStart,field->arrayEnd);
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(out,";\n");
         }
@@ -5310,77 +5472,77 @@ Status kek_compiler_SelfCWriteFields(struct SelfCProgram* program,struct StringB
     }
     return (Status_Ok);
 }
-bool kek_compiler_SelfCGenericParamEquals(struct SelfCProgram* program,struct SelfCDecl* decl,usize paramIndex,struct String name) {
+bool kek_compiler_CGenericParamEquals(struct CProgram* program,struct CDecl* decl,usize paramIndex,struct String name) {
     if (!decl->isGeneric) {
         return (0);
     }
-    if (decl->genericStart<kek_compiler_SelfCFileTokenCount(program,decl->fileIndex)) {
+    if (decl->genericStart<kek_compiler_CFileTokenCount(program,decl->fileIndex)) {
         usize index=decl->genericStart+1;
         usize current=0;
         while (index<decl->genericEnd) {
-            if (kek_compiler_SelfCIsPunctuation(program,decl->fileIndex,index,PunctuationKind_Comma)) {
+            if (kek_compiler_CIsPunctuation(program,decl->fileIndex,index,PunctuationKind_Comma)) {
                 index+=1;
                 continue;
             }
             if (current==paramIndex) {
-                struct String paramName=kek_compiler_SelfCTokenText(program,decl->fileIndex,index);
+                struct String paramName=kek_compiler_CTokenText(program,decl->fileIndex,index);
                 return (String_Equals(&paramName,name));
             }
             current+=1;
-            while (index<decl->genericEnd&&!kek_compiler_SelfCIsPunctuation(program,decl->fileIndex,index,PunctuationKind_Comma)) {
+            while (index<decl->genericEnd&&!kek_compiler_CIsPunctuation(program,decl->fileIndex,index,PunctuationKind_Comma)) {
                 index+=1;
             }
         }
     }
-    if (decl->hasReceiver&&decl->receiverStart+1<decl->receiverEnd&&kek_compiler_SelfCIsOperator(program,decl->fileIndex,decl->receiverStart+1,OperatorKind_Less)) {
-        usize genericEnd=kek_compiler_SelfCFindMatching(program,decl->fileIndex,decl->receiverStart+1);
+    if (decl->hasReceiver&&decl->receiverStart+1<decl->receiverEnd&&kek_compiler_CIsOperator(program,decl->fileIndex,decl->receiverStart+1,OperatorKind_Less)) {
+        usize genericEnd=kek_compiler_CFindMatching(program,decl->fileIndex,decl->receiverStart+1);
         usize index=decl->receiverStart+2;
         usize current=0;
         while (index<genericEnd) {
-            if (kek_compiler_SelfCIsPunctuation(program,decl->fileIndex,index,PunctuationKind_Comma)) {
+            if (kek_compiler_CIsPunctuation(program,decl->fileIndex,index,PunctuationKind_Comma)) {
                 index+=1;
                 continue;
             }
             if (current==paramIndex) {
-                struct String paramName=kek_compiler_SelfCTokenText(program,decl->fileIndex,index);
+                struct String paramName=kek_compiler_CTokenText(program,decl->fileIndex,index);
                 return (String_Equals(&paramName,name));
             }
             current+=1;
-            while (index<genericEnd&&!kek_compiler_SelfCIsPunctuation(program,decl->fileIndex,index,PunctuationKind_Comma)) {
+            while (index<genericEnd&&!kek_compiler_CIsPunctuation(program,decl->fileIndex,index,PunctuationKind_Comma)) {
                 index+=1;
             }
         }
     }
     return (0);
 }
-Status kek_compiler_SelfCWriteTypeSuffixSubst(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCTypeUse* use,usize fileIndex,usize start,usize end) {
+Status kek_compiler_CWriteTypeSuffixSubst(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl,struct CTypeUse* use,usize fileIndex,usize start,usize end) {
     if (start>=end) {
         return (Status_Ok);
     }
-    struct String first=kek_compiler_SelfCTokenText(program,fileIndex,start);
+    struct String first=kek_compiler_CTokenText(program,fileIndex,start);
     if (end==start+1) {
-        if (kek_compiler_SelfCGenericParamEquals(program,decl,0,first)) {
+        if (kek_compiler_CGenericParamEquals(program,decl,0,first)) {
             return (StringBuilder_WriteString(out,std_string_OwnedStringView(&use->arg0)));
         }
-        if (kek_compiler_SelfCGenericParamEquals(program,decl,1,first)) {
+        if (kek_compiler_CGenericParamEquals(program,decl,1,first)) {
             return (StringBuilder_WriteString(out,std_string_OwnedStringView(&use->arg1)));
         }
-        if (kek_compiler_SelfCGenericParamEquals(program,decl,2,first)) {
+        if (kek_compiler_CGenericParamEquals(program,decl,2,first)) {
             return (StringBuilder_WriteString(out,std_string_OwnedStringView(&use->arg2)));
         }
-        return (kek_compiler_SelfCWriteSanitized(out,first));
+        return (kek_compiler_CWriteSanitized(out,first));
     }
-    if (start+1<end&&kek_compiler_SelfCIsOperator(program,fileIndex,start+1,OperatorKind_Less)) {
-        Status status=kek_compiler_SelfCWriteSanitized(out,first);
-        usize genericEnd=kek_compiler_SelfCFindMatching(program,fileIndex,start+1);
+    if (start+1<end&&kek_compiler_CIsOperator(program,fileIndex,start+1,OperatorKind_Less)) {
+        Status status=kek_compiler_CWriteSanitized(out,first);
+        usize genericEnd=kek_compiler_CFindMatching(program,fileIndex,start+1);
         usize argStart=start+2;
         while (argStart<genericEnd) {
-            usize argEnd=kek_compiler_SelfCFindTokenAtDepthZero(program,fileIndex,argStart,genericEnd,PunctuationKind_Comma);
+            usize argEnd=kek_compiler_CFindTokenAtDepthZero(program,fileIndex,argStart,genericEnd,PunctuationKind_Comma);
             if (status==Status_Ok) {
                 status=StringBuilder_WriteCString(out,"__");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteTypeSuffixSubst(program,out,decl,use,fileIndex,argStart,argEnd);
+                status=kek_compiler_CWriteTypeSuffixSubst(program,out,decl,use,fileIndex,argStart,argEnd);
             }
             if (status!=Status_Ok||argEnd>=genericEnd) {
                 break;
@@ -5389,28 +5551,28 @@ Status kek_compiler_SelfCWriteTypeSuffixSubst(struct SelfCProgram* program,struc
         }
         return (status);
     }
-    return (kek_compiler_SelfCWriteTypeSuffixFromRange(program,out,fileIndex,start,end));
+    return (kek_compiler_CWriteTypeSuffixFromRange(program,out,fileIndex,start,end));
 }
-Status kek_compiler_SelfCMakeSubstTypeKey(struct SelfCProgram* program,struct SelfCDecl* decl,struct SelfCTypeUse* use,usize fileIndex,usize start,usize end,struct OwnedString* out) {
+Status kek_compiler_CMakeSubstTypeKey(struct CProgram* program,struct CDecl* decl,struct CTypeUse* use,usize fileIndex,usize start,usize end,struct OwnedString* out) {
     struct StringBuilder builder=std_string_StringBuilderNew(program->allocator);
-    Status status=kek_compiler_SelfCWriteTypeSuffixSubst(program,&builder,decl,use,fileIndex,start,end);
+    Status status=kek_compiler_CWriteTypeSuffixSubst(program,&builder,decl,use,fileIndex,start,end);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCDetachBuilder(&builder,out);
+        status=kek_compiler_CDetachBuilder(&builder,out);
     }
     StringBuilder_Destroy(&builder);
     return (status);
 }
-Status kek_compiler_SelfCWriteDeclaratorSubst(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCTypeUse* use,usize fileIndex,usize typeStart,usize typeEnd,usize nameIndex,bool isArray,usize arrayStart,usize arrayEnd) {
-    struct String first=kek_compiler_SelfCTokenText(program,fileIndex,typeStart);
+Status kek_compiler_CWriteDeclaratorSubst(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl,struct CTypeUse* use,usize fileIndex,usize typeStart,usize typeEnd,usize nameIndex,bool isArray,usize arrayStart,usize arrayEnd) {
+    struct String first=kek_compiler_CTokenText(program,fileIndex,typeStart);
     struct OwnedString key={0};
     Status status=Status_Ok;
-    if (String_EqualsCString(&first,"ptr")&&typeStart+1<typeEnd&&kek_compiler_SelfCIsOperator(program,fileIndex,typeStart+1,OperatorKind_Less)) {
-        usize genericEnd=kek_compiler_SelfCFindMatching(program,fileIndex,typeStart+1);
+    if (String_EqualsCString(&first,"ptr")&&typeStart+1<typeEnd&&kek_compiler_CIsOperator(program,fileIndex,typeStart+1,OperatorKind_Less)) {
+        usize genericEnd=kek_compiler_CFindMatching(program,fileIndex,typeStart+1);
         struct OwnedString innerKey={0};
-        status=kek_compiler_SelfCMakeSubstTypeKey(program,decl,use,fileIndex,typeStart+2,genericEnd,&innerKey);
+        status=kek_compiler_CMakeSubstTypeKey(program,decl,use,fileIndex,typeStart+2,genericEnd,&innerKey);
         struct StringBuilder ct=std_string_StringBuilderNew(program->allocator);
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteCTypeFromKey(program,&ct,std_string_OwnedStringView(&innerKey));
+            status=kek_compiler_CWriteCTypeFromKey(program,&ct,std_string_OwnedStringView(&innerKey));
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteByte(&ct,'*');
@@ -5421,9 +5583,9 @@ Status kek_compiler_SelfCWriteDeclaratorSubst(struct SelfCProgram* program,struc
         StringBuilder_Destroy(&ct);
         std_string_DestroyOwnedString(&innerKey);
     } else {
-        status=kek_compiler_SelfCMakeSubstTypeKey(program,decl,use,fileIndex,typeStart,typeEnd,&key);
+        status=kek_compiler_CMakeSubstTypeKey(program,decl,use,fileIndex,typeStart,typeEnd,&key);
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteCTypeFromKey(program,out,std_string_OwnedStringView(&key));
+            status=kek_compiler_CWriteCTypeFromKey(program,out,std_string_OwnedStringView(&key));
         }
         if (status==Status_Ok) {
             std_string_DestroyOwnedString(&key);
@@ -5433,12 +5595,12 @@ Status kek_compiler_SelfCWriteDeclaratorSubst(struct SelfCProgram* program,struc
         status=StringBuilder_WriteByte(out,' ');
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteToken(program,out,fileIndex,nameIndex);
+        status=kek_compiler_CWriteToken(program,out,fileIndex,nameIndex);
     }
     if (status==Status_Ok&&isArray) {
         status=StringBuilder_WriteByte(out,'[');
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteTokenRangeRaw(program,out,fileIndex,arrayStart,arrayEnd);
+            status=kek_compiler_CWriteTokenRangeRaw(program,out,fileIndex,arrayStart,arrayEnd);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteByte(out,']');
@@ -5446,12 +5608,12 @@ Status kek_compiler_SelfCWriteDeclaratorSubst(struct SelfCProgram* program,struc
     }
     return (status);
 }
-Status kek_compiler_SelfCWriteFieldsSubst(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCTypeUse* use) {
+Status kek_compiler_CWriteFieldsSubst(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl,struct CTypeUse* use) {
     for (usize i=0;i<decl->fieldCount;i++) {
-        struct SelfCField* field=&program->fields[decl->firstField+i];
+        struct CField* field=&program->fields.data[decl->firstField+i];
         Status status=StringBuilder_WriteCString(out,"    ");
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteDeclaratorSubst(program,out,decl,use,field->fileIndex,field->typeStart,field->typeEnd,field->nameIndex,field->isArray,field->arrayStart,field->arrayEnd);
+            status=kek_compiler_CWriteDeclaratorSubst(program,out,decl,use,field->fileIndex,field->typeStart,field->typeEnd,field->nameIndex,field->isArray,field->arrayStart,field->arrayEnd);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(out,";\n");
@@ -5462,7 +5624,7 @@ Status kek_compiler_SelfCWriteFieldsSubst(struct SelfCProgram* program,struct St
     }
     return (Status_Ok);
 }
-Status kek_compiler_SelfCWriteStructDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct String specializedName) {
+Status kek_compiler_CWriteStructDecl(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl,struct String specializedName) {
     Status status=StringBuilder_WriteCString(out,"struct ");
     bool hasPacked=0;
     bool hasAligned=0;
@@ -5471,21 +5633,21 @@ Status kek_compiler_SelfCWriteStructDecl(struct SelfCProgram* program,struct Str
         usize scan=decl->start;
         while (scan>0) {
             scan-=1;
-            if (kek_compiler_SelfCIsPunctuation(program,decl->fileIndex,scan,PunctuationKind_LeftBracket)) {
+            if (kek_compiler_CIsPunctuation(program,decl->fileIndex,scan,PunctuationKind_LeftBracket)) {
                 for (usize i=scan;i<decl->start;i++) {
-                    if (kek_compiler_SelfCIsIdentifierText(program,decl->fileIndex,i,"packed")) {
+                    if (kek_compiler_CIsIdentifierText(program,decl->fileIndex,i,"packed")) {
                         hasPacked=1;
                     }
-                    if (kek_compiler_SelfCIsIdentifierText(program,decl->fileIndex,i,"aligned")) {
+                    if (kek_compiler_CIsIdentifierText(program,decl->fileIndex,i,"aligned")) {
                         hasAligned=1;
-                        if (i+2<decl->start&&kek_compiler_SelfCIsPunctuation(program,decl->fileIndex,i+1,PunctuationKind_LeftParen)) {
+                        if (i+2<decl->start&&kek_compiler_CIsPunctuation(program,decl->fileIndex,i+1,PunctuationKind_LeftParen)) {
                             alignedValue=i+2;
                         }
                     }
                 }
                 break;
             }
-            if (kek_compiler_SelfCIsPunctuation(program,decl->fileIndex,scan,PunctuationKind_Semicolon)||kek_compiler_SelfCIsPunctuation(program,decl->fileIndex,scan,PunctuationKind_RightBrace)) {
+            if (kek_compiler_CIsPunctuation(program,decl->fileIndex,scan,PunctuationKind_Semicolon)||kek_compiler_CIsPunctuation(program,decl->fileIndex,scan,PunctuationKind_RightBrace)) {
                 break;
             }
         }
@@ -5503,7 +5665,7 @@ Status kek_compiler_SelfCWriteStructDecl(struct SelfCProgram* program,struct Str
                 status=StringBuilder_WriteCString(out,"aligned(");
             }
             if (status==Status_Ok&&alignedValue!=0) {
-                status=kek_compiler_SelfCWriteToken(program,out,decl->fileIndex,alignedValue);
+                status=kek_compiler_CWriteToken(program,out,decl->fileIndex,alignedValue);
             }
             if (status==Status_Ok) {
                 status=StringBuilder_WriteByte(out,')');
@@ -5519,76 +5681,76 @@ Status kek_compiler_SelfCWriteStructDecl(struct SelfCProgram* program,struct Str
     if (specializedName.len>0) {
         status=StringBuilder_WriteString(out,specializedName);
     } else {
-        status=kek_compiler_SelfCWriteToken(program,out,decl->fileIndex,decl->nameIndex);
+        status=kek_compiler_CWriteToken(program,out,decl->fileIndex,decl->nameIndex);
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out," {\n");
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteFields(program,out,decl);
+        status=kek_compiler_CWriteFields(program,out,decl);
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,"};\n");
     }
     return (status);
 }
-Status kek_compiler_SelfCWriteUnionDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl) {
+Status kek_compiler_CWriteUnionDecl(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl) {
     Status status=StringBuilder_WriteCString(out,"typedef union ");
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteToken(program,out,decl->fileIndex,decl->nameIndex);
+        status=kek_compiler_CWriteToken(program,out,decl->fileIndex,decl->nameIndex);
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out," {\n");
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteFields(program,out,decl);
+        status=kek_compiler_CWriteFields(program,out,decl);
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,"} ");
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteToken(program,out,decl->fileIndex,decl->nameIndex);
+        status=kek_compiler_CWriteToken(program,out,decl->fileIndex,decl->nameIndex);
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,";\n");
     }
     return (status);
 }
-Status kek_compiler_SelfCWriteEnumDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl) {
+Status kek_compiler_CWriteEnumDecl(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl) {
     Status status=StringBuilder_WriteCString(out,"typedef enum ");
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteToken(program,out,decl->fileIndex,decl->nameIndex);
+        status=kek_compiler_CWriteToken(program,out,decl->fileIndex,decl->nameIndex);
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out," {\n");
     }
     usize i=decl->bodyStart;
     while (i<decl->bodyEnd) {
-        if (kek_compiler_SelfCIsPunctuation(program,decl->fileIndex,i,PunctuationKind_Comma)) {
+        if (kek_compiler_CIsPunctuation(program,decl->fileIndex,i,PunctuationKind_Comma)) {
             i+=1;
             continue;
         }
-        if (!kek_compiler_SelfCIsTokenKind(program,decl->fileIndex,i,TokenKind_Identifier)) {
+        if (!kek_compiler_CIsTokenKind(program,decl->fileIndex,i,TokenKind_Identifier)) {
             i+=1;
             continue;
         }
         status=StringBuilder_WriteCString(out,"    ");
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteToken(program,out,decl->fileIndex,decl->nameIndex);
+            status=kek_compiler_CWriteToken(program,out,decl->fileIndex,decl->nameIndex);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteByte(out,'_');
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteToken(program,out,decl->fileIndex,i);
+            status=kek_compiler_CWriteToken(program,out,decl->fileIndex,i);
         }
         i+=1;
-        if (i<decl->bodyEnd&&kek_compiler_SelfCIsOperator(program,decl->fileIndex,i,OperatorKind_Assign)) {
+        if (i<decl->bodyEnd&&kek_compiler_CIsOperator(program,decl->fileIndex,i,OperatorKind_Assign)) {
             status=StringBuilder_WriteByte(out,'=');
             i+=1;
-            while (i<decl->bodyEnd&&!kek_compiler_SelfCIsPunctuation(program,decl->fileIndex,i,PunctuationKind_Comma)) {
+            while (i<decl->bodyEnd&&!kek_compiler_CIsPunctuation(program,decl->fileIndex,i,PunctuationKind_Comma)) {
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteToken(program,out,decl->fileIndex,i);
+                    status=kek_compiler_CWriteToken(program,out,decl->fileIndex,i);
                 }
                 i+=1;
             }
@@ -5602,16 +5764,16 @@ Status kek_compiler_SelfCWriteEnumDecl(struct SelfCProgram* program,struct Strin
     }
     status=StringBuilder_WriteCString(out,"} ");
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteToken(program,out,decl->fileIndex,decl->nameIndex);
+        status=kek_compiler_CWriteToken(program,out,decl->fileIndex,decl->nameIndex);
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,";\n");
     }
     return (status);
 }
-Status kek_compiler_SelfCWriteAliasDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl) {
-    struct SelfCTypeInfo info={0};
-    Status status=kek_compiler_SelfCRenderTypeInfo(program,decl->fileIndex,decl->returnStart,decl->returnEnd,&info);
+Status kek_compiler_CWriteAliasDecl(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl) {
+    struct CTypeInfo info={0};
+    Status status=kek_compiler_CRenderTypeInfo(program,decl->fileIndex,decl->returnStart,decl->returnEnd,&info);
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,"typedef ");
     }
@@ -5622,16 +5784,16 @@ Status kek_compiler_SelfCWriteAliasDecl(struct SelfCProgram* program,struct Stri
         status=StringBuilder_WriteByte(out,' ');
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteToken(program,out,decl->fileIndex,decl->nameIndex);
+        status=kek_compiler_CWriteToken(program,out,decl->fileIndex,decl->nameIndex);
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,";\n");
     }
-    kek_compiler_SelfCTypeInfoDestroy(&info);
+    kek_compiler_CTypeInfoDestroy(&info);
     return (status);
 }
-Status kek_compiler_SelfCWriteExternDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl) {
-    struct SelfCTokenFile* file=&program->tokenFiles[decl->fileIndex];
+Status kek_compiler_CWriteExternDecl(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl) {
+    struct CTokenFile* file=&program->tokenFiles.data[decl->fileIndex];
     struct Token open=file->tokens[decl->bodyStart-1];
     struct Token close=file->tokens[decl->bodyEnd];
     usize start=open.offset+open.length;
@@ -5664,90 +5826,287 @@ Status kek_compiler_SelfCWriteExternDecl(struct SelfCProgram* program,struct Str
     }
     return (status);
 }
-Status kek_compiler_SelfCWriteTypeDeclarations(struct SelfCProgram* program,struct StringBuilder* out) {
-    for (usize i=0;i<program->declCount;i++) {
-        struct SelfCDecl* decl=&program->decls[i];
-        Status status=Status_Ok;
-        if (decl->kind==SelfCDeclKind_ExternC) {
-            status=kek_compiler_SelfCWriteExternDecl(program,out,decl);
-        } else {
-            if (decl->kind==SelfCDeclKind_Alias) {
-                status=kek_compiler_SelfCWriteAliasDecl(program,out,decl);
+Status kek_compiler_CWriteTypeUseDeclaration(struct CProgram* program,struct StringBuilder* out,struct CTypeUse* use) {
+    if (use->emitted) {
+        return (Status_Ok);
+    }
+    struct CDecl* decl=kek_compiler_CFindTypeDecl(program,std_string_OwnedStringView(&use->baseName));
+    if (decl==0||decl->kind!=CDeclKind_Struct) {
+        return (Status_Ok);
+    }
+    Status status=StringBuilder_WriteCString(out,"struct ");
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteString(out,std_string_OwnedStringView(&use->key));
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out," {\n");
+    }
+    if (status==Status_Ok) {
+        status=kek_compiler_CWriteFieldsSubst(program,out,decl,use);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"};\n");
+    }
+    if (status==Status_Ok) {
+        use->emitted=1;
+    }
+    return (status);
+}
+bool kek_compiler_CShouldWritePlainTypeDecl(struct CDecl* decl) {
+    return (decl->kind==CDeclKind_Alias||(decl->kind==CDeclKind_Struct&&!decl->isGeneric)||decl->kind==CDeclKind_Union||decl->kind==CDeclKind_Enum);
+}
+bool kek_compiler_CTypeKeyReady(struct CProgram* program,struct String key) {
+    struct String name=key;
+    while (name.len>0&&name.data[name.len-1]=='*') {
+        name=String_Slice(&name,0,name.len-1);
+    }
+    struct CDecl* decl=kek_compiler_CFindTypeDecl(program,name);
+    if (decl!=0&&!decl->isGeneric) {
+        return (decl->emitted);
+    }
+    for (usize i=0;i<program->typeUses.len;i++) {
+        struct String useKey=std_string_OwnedStringView(&program->typeUses.data[i].key);
+        if (String_Equals(&useKey,name)) {
+            return (program->typeUses.data[i].emitted);
+        }
+    }
+    return (1);
+}
+bool kek_compiler_CTypeRangeReady(struct CProgram* program,usize fileIndex,usize start,usize end) {
+    for (usize i=start;i<end;i++) {
+        struct Token token=program->tokenFiles.data[fileIndex].tokens[i];
+        if (!(token.kind==TokenKind_Identifier||token.kind==TokenKind_Keyword)) {
+            continue;
+        }
+        struct CDecl* decl=kek_compiler_CFindTypeDecl(program,kek_compiler_CTokenText(program,fileIndex,i));
+        if (decl!=0&&decl->isGeneric&&i+1<end&&kek_compiler_CIsOperator(program,fileIndex,i+1,OperatorKind_Less)) {
+            usize genericEnd=kek_compiler_CFindMatching(program,fileIndex,i+1);
+            struct OwnedString key={0};
+            Status status=kek_compiler_CBuildTypeKey(program,fileIndex,i,genericEnd+1,&key);
+            if (status==Status_Ok) {
+                bool ready=kek_compiler_CTypeKeyReady(program,std_string_OwnedStringView(&key));
+                std_string_DestroyOwnedString(&key);
+                if (!ready) {
+                    return (0);
+                }
+            }
+            i=genericEnd;
+            continue;
+        }
+        if (decl==0||decl->isGeneric) {
+            continue;
+        }
+        if (!decl->emitted) {
+            return (0);
+        }
+    }
+    return (1);
+}
+bool kek_compiler_CTypeUseRangeReady(struct CProgram* program,struct CDecl* decl,struct CTypeUse* use,usize fileIndex,usize start,usize end) {
+    for (usize i=start;i<end;i++) {
+        struct Token token=program->tokenFiles.data[fileIndex].tokens[i];
+        if (!(token.kind==TokenKind_Identifier||token.kind==TokenKind_Keyword)) {
+            continue;
+        }
+        struct String name=kek_compiler_CTokenText(program,fileIndex,i);
+        bool genericParam=0;
+        if (use->argCount>=1&&kek_compiler_CGenericParamEquals(program,decl,0,name)) {
+            if (!kek_compiler_CTypeKeyReady(program,std_string_OwnedStringView(&use->arg0))) {
+                return (0);
+            }
+            genericParam=1;
+        }
+        if (!genericParam&&use->argCount>=2&&kek_compiler_CGenericParamEquals(program,decl,1,name)) {
+            if (!kek_compiler_CTypeKeyReady(program,std_string_OwnedStringView(&use->arg1))) {
+                return (0);
+            }
+            genericParam=1;
+        }
+        if (!genericParam&&use->argCount>=3&&kek_compiler_CGenericParamEquals(program,decl,2,name)) {
+            if (!kek_compiler_CTypeKeyReady(program,std_string_OwnedStringView(&use->arg2))) {
+                return (0);
+            }
+            genericParam=1;
+        }
+        if (genericParam) {
+            continue;
+        }
+        struct CDecl* typeDecl=kek_compiler_CFindTypeDecl(program,name);
+        if (typeDecl==0||typeDecl->isGeneric) {
+            continue;
+        }
+        if (!typeDecl->emitted) {
+            return (0);
+        }
+    }
+    return (1);
+}
+bool kek_compiler_CTypeDeclDependenciesReady(struct CProgram* program,struct CDecl* decl) {
+    if (decl->kind==CDeclKind_Alias) {
+        return (kek_compiler_CTypeRangeReady(program,decl->fileIndex,decl->returnStart,decl->returnEnd));
+    }
+    if (decl->kind==CDeclKind_Struct||decl->kind==CDeclKind_Union) {
+        for (usize i=0;i<decl->fieldCount;i++) {
+            struct CField* field=&program->fields.data[decl->firstField+i];
+            if (field->isNestedStruct) {
+                if (!kek_compiler_CTypeRangeReady(program,field->fileIndex,field->nestedBodyStart,field->nestedBodyEnd)) {
+                    return (0);
+                }
             } else {
-                if (decl->kind==SelfCDeclKind_Struct&&!decl->isGeneric) {
-                    status=kek_compiler_SelfCWriteStructDecl(program,out,decl,std_string_StringFromCString(""));
-                } else {
-                    if (decl->kind==SelfCDeclKind_Union) {
-                        status=kek_compiler_SelfCWriteUnionDecl(program,out,decl);
-                    } else {
-                        if (decl->kind==SelfCDeclKind_Enum) {
-                            status=kek_compiler_SelfCWriteEnumDecl(program,out,decl);
-                        }
-                    }
+                if (!kek_compiler_CTypeRangeReady(program,field->fileIndex,field->typeStart,field->typeEnd)) {
+                    return (0);
                 }
             }
         }
-        if (status!=Status_Ok) {
-            return (status);
+    }
+    return (1);
+}
+bool kek_compiler_CTypeUseDependenciesReady(struct CProgram* program,struct CTypeUse* use) {
+    if (use->argCount>=1&&!kek_compiler_CTypeKeyReady(program,std_string_OwnedStringView(&use->arg0))) {
+        return (0);
+    }
+    if (use->argCount>=2&&!kek_compiler_CTypeKeyReady(program,std_string_OwnedStringView(&use->arg1))) {
+        return (0);
+    }
+    if (use->argCount>=3&&!kek_compiler_CTypeKeyReady(program,std_string_OwnedStringView(&use->arg2))) {
+        return (0);
+    }
+    struct CDecl* decl=kek_compiler_CFindTypeDecl(program,std_string_OwnedStringView(&use->baseName));
+    if (decl==0||decl->kind!=CDeclKind_Struct) {
+        return (1);
+    }
+    for (usize i=0;i<decl->fieldCount;i++) {
+        struct CField* field=&program->fields.data[decl->firstField+i];
+        if (field->isNestedStruct) {
+            if (!kek_compiler_CTypeUseRangeReady(program,decl,use,field->fileIndex,field->nestedBodyStart,field->nestedBodyEnd)) {
+                return (0);
+            }
+        } else {
+            if (!kek_compiler_CTypeUseRangeReady(program,decl,use,field->fileIndex,field->typeStart,field->typeEnd)) {
+                return (0);
+            }
         }
     }
-    for (usize i=0;i<program->typeUseCount;i++) {
-        struct SelfCTypeUse* use=&program->typeUses[i];
-        struct SelfCDecl* decl=kek_compiler_SelfCFindTypeDecl(program,std_string_OwnedStringView(&use->baseName));
-        if (decl!=0&&decl->kind==SelfCDeclKind_Struct) {
-            Status status=StringBuilder_WriteCString(out,"struct ");
-            if (status==Status_Ok) {
-                status=StringBuilder_WriteString(out,std_string_OwnedStringView(&use->key));
+    return (1);
+}
+Status kek_compiler_CWritePlainTypeDeclaration(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl) {
+    Status status=Status_Ok;
+    if (decl->kind==CDeclKind_Alias) {
+        status=kek_compiler_CWriteAliasDecl(program,out,decl);
+    } else {
+        if (decl->kind==CDeclKind_Struct&&!decl->isGeneric) {
+            status=kek_compiler_CWriteStructDecl(program,out,decl,std_string_StringFromCString(""));
+        } else {
+            if (decl->kind==CDeclKind_Union) {
+                status=kek_compiler_CWriteUnionDecl(program,out,decl);
+            } else {
+                if (decl->kind==CDeclKind_Enum) {
+                    status=kek_compiler_CWriteEnumDecl(program,out,decl);
+                }
             }
-            if (status==Status_Ok) {
-                status=StringBuilder_WriteCString(out," {\n");
+        }
+    }
+    if (status==Status_Ok) {
+        decl->emitted=1;
+    }
+    return (status);
+}
+Status kek_compiler_CWriteTypeDeclarations(struct CProgram* program,struct StringBuilder* out) {
+    for (usize i=0;i<program->decls.len;i++) {
+        struct CDecl* decl=&program->decls.data[i];
+        if (decl->kind==CDeclKind_ExternC) {
+            Status status=kek_compiler_CWriteExternDecl(program,out,decl);
+            if (status!=Status_Ok) {
+                return (status);
             }
-            if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteFieldsSubst(program,out,decl,use);
+            decl->emitted=1;
+        }
+    }
+    bool progress=1;
+    while (progress) {
+        progress=0;
+        for (usize i=0;i<program->decls.len;i++) {
+            struct CDecl* decl=&program->decls.data[i];
+            if (!decl->reachable||decl->emitted||!kek_compiler_CShouldWritePlainTypeDecl(decl)) {
+                continue;
             }
-            if (status==Status_Ok) {
-                status=StringBuilder_WriteCString(out,"};\n");
+            if (!kek_compiler_CTypeDeclDependenciesReady(program,decl)) {
+                continue;
             }
+            Status status=kek_compiler_CWritePlainTypeDeclaration(program,out,decl);
+            if (status!=Status_Ok) {
+                return (status);
+            }
+            progress=1;
+        }
+        for (usize i=0;i<program->typeUses.len;i++) {
+            struct CTypeUse* use=&program->typeUses.data[i];
+            if (use->emitted||!kek_compiler_CTypeUseDependenciesReady(program,use)) {
+                continue;
+            }
+            Status status=kek_compiler_CWriteTypeUseDeclaration(program,out,use);
+            if (status!=Status_Ok) {
+                return (status);
+            }
+            if (use->emitted) {
+                progress=1;
+            }
+        }
+    }
+    for (usize i=0;i<program->decls.len;i++) {
+        struct CDecl* decl=&program->decls.data[i];
+        if (decl->reachable&&!decl->emitted&&kek_compiler_CShouldWritePlainTypeDecl(decl)) {
+            Status status=kek_compiler_CWritePlainTypeDeclaration(program,out,decl);
             if (status!=Status_Ok) {
                 return (status);
             }
         }
     }
+    for (usize i=0;i<program->typeUses.len;i++) {
+        struct CTypeUse* use=&program->typeUses.data[i];
+        Status status=kek_compiler_CWriteTypeUseDeclaration(program,out,use);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+    }
     return (Status_Ok);
 }
-Status kek_compiler_SelfCEnvInit(struct SelfCProgram* program,struct SelfCEnv* env) {
-    env->localCount=0;
+Status kek_compiler_CEnvInit(struct CProgram* program,struct CEnv* env) {
+    env->locals=std_array_ArrayNew__CLocal(program->allocator);
     env->hasThis=0;
     env->deferCounter=0;
     env->eachCounter=0;
-    Status status=kek_compiler_SelfCMakeOwnedEmpty(program,&env->returnTypeKey);
+    Status status=kek_compiler_CMakeOwnedEmpty(program,&env->returnTypeKey);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCMakeOwnedEmpty(program,&env->returnCType);
+        status=kek_compiler_CMakeOwnedEmpty(program,&env->returnCType);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCMakeOwnedEmpty(program,&env->thisTypeKey);
+        status=kek_compiler_CMakeOwnedEmpty(program,&env->thisTypeKey);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCMakeOwnedEmpty(program,&env->thisCType);
+        status=kek_compiler_CMakeOwnedEmpty(program,&env->thisCType);
     }
     return (status);
 }
-Status kek_compiler_SelfCEnvDestroy(struct SelfCEnv* env) {
-    for (usize i=0;i<env->localCount;i++) {
-        std_string_DestroyOwnedString(&env->locals[i].name);
-        std_string_DestroyOwnedString(&env->locals[i].typeKey);
-        std_string_DestroyOwnedString(&env->locals[i].cType);
-        std_string_DestroyOwnedString(&env->locals[i].arrayLen);
+Status kek_compiler_CEnvDestroy(struct CEnv* env) {
+    for (usize i=0;i<env->locals.len;i++) {
+        std_string_DestroyOwnedString(&env->locals.data[i].name);
+        std_string_DestroyOwnedString(&env->locals.data[i].typeKey);
+        std_string_DestroyOwnedString(&env->locals.data[i].cType);
+        std_string_DestroyOwnedString(&env->locals.data[i].arrayLen);
     }
+    struct Array__CLocal locals=env->locals;
+    Status status=Array__CLocal_Destroy(&locals);
+    env->locals=locals;
     std_string_DestroyOwnedString(&env->returnTypeKey);
     std_string_DestroyOwnedString(&env->returnCType);
     std_string_DestroyOwnedString(&env->thisTypeKey);
     std_string_DestroyOwnedString(&env->thisCType);
-    return (Status_Ok);
+    return (status);
 }
-struct SelfCLocal* kek_compiler_SelfCEnvFind(struct SelfCEnv* env,struct String name) {
-    for (usize i=env->localCount;i>0;i--) {
-        struct SelfCLocal* local=&env->locals[i-1];
+struct CLocal* kek_compiler_CEnvFind(struct CEnv* env,struct String name) {
+    for (usize i=env->locals.len;i>0;i--) {
+        struct CLocal* local=&env->locals.data[i-1];
         struct String localName=std_string_OwnedStringView(&local->name);
         if (String_Equals(&localName,name)) {
             return (local);
@@ -5755,117 +6114,118 @@ struct SelfCLocal* kek_compiler_SelfCEnvFind(struct SelfCEnv* env,struct String 
     }
     return (0);
 }
-Status kek_compiler_SelfCEnvAdd(struct SelfCProgram* program,struct SelfCEnv* env,struct String name,struct String typeKey,struct String cType,bool isArray,struct String arrayLen,bool isPointer) {
-    if (env->localCount>=(sizeof(env->locals)/sizeof((env->locals)[0]))) {
-        return (kek_compiler_SelfCAddDiagnostic(program,"too many locals"));
+Status kek_compiler_CEnvAdd(struct CProgram* program,struct CEnv* env,struct String name,struct String typeKey,struct String cType,bool isArray,struct String arrayLen,bool isPointer) {
+    Status status=kek_compiler_CReserveLocals(env,1);
+    if (status!=Status_Ok) {
+        return (status);
     }
-    struct SelfCLocal* local=&env->locals[env->localCount];
-    Status status=kek_compiler_SelfCCloneString(program,name,&local->name);
+    struct CLocal* local=&env->locals.data[env->locals.len];
+    status=kek_compiler_CCloneString(program,name,&local->name);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCCloneString(program,typeKey,&local->typeKey);
-    }
-    if (status==Status_Ok) {
-        status=kek_compiler_SelfCCloneString(program,cType,&local->cType);
+        status=kek_compiler_CCloneString(program,typeKey,&local->typeKey);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCCloneString(program,arrayLen,&local->arrayLen);
+        status=kek_compiler_CCloneString(program,cType,&local->cType);
+    }
+    if (status==Status_Ok) {
+        status=kek_compiler_CCloneString(program,arrayLen,&local->arrayLen);
     }
     local->isArray=isArray;
     local->isPointer=isPointer;
     if (status==Status_Ok) {
-        env->localCount+=1;
+        env->locals.len+=1;
     }
     return (status);
 }
-Status kek_compiler_SelfCExprInitEmpty(struct SelfCProgram* program,struct SelfCExpr* expr) {
-    Status status=kek_compiler_SelfCMakeOwnedEmpty(program,&expr->text);
+Status kek_compiler_CExprInitEmpty(struct CProgram* program,struct CExpr* expr) {
+    Status status=kek_compiler_CMakeOwnedEmpty(program,&expr->text);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCMakeOwnedEmpty(program,&expr->typeKey);
+        status=kek_compiler_CMakeOwnedEmpty(program,&expr->typeKey);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCMakeOwnedEmpty(program,&expr->cType);
+        status=kek_compiler_CMakeOwnedEmpty(program,&expr->cType);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCMakeOwnedEmpty(program,&expr->arrayLen);
+        status=kek_compiler_CMakeOwnedEmpty(program,&expr->arrayLen);
     }
     expr->isArray=0;
     expr->isLvalue=0;
     expr->isPointer=0;
     return (status);
 }
-Status kek_compiler_SelfCExprDestroy(struct SelfCExpr* expr) {
+Status kek_compiler_CExprDestroy(struct CExpr* expr) {
     std_string_DestroyOwnedString(&expr->text);
     std_string_DestroyOwnedString(&expr->typeKey);
     std_string_DestroyOwnedString(&expr->cType);
     std_string_DestroyOwnedString(&expr->arrayLen);
     return (Status_Ok);
 }
-Status kek_compiler_SelfCExprSetText(struct SelfCProgram* program,struct SelfCExpr* expr,struct String text) {
+Status kek_compiler_CExprSetText(struct CProgram* program,struct CExpr* expr,struct String text) {
     struct OwnedString owned={0};
-    Status status=kek_compiler_SelfCCloneString(program,text,&owned);
+    Status status=kek_compiler_CCloneString(program,text,&owned);
     if (status!=Status_Ok) {
         return (status);
     }
-    return (kek_compiler_SelfCReplaceOwned(&expr->text,owned));
+    return (kek_compiler_CReplaceOwned(&expr->text,owned));
 }
-Status kek_compiler_SelfCExprSetCString(struct SelfCProgram* program,struct SelfCExpr* expr,str text) {
+Status kek_compiler_CExprSetCString(struct CProgram* program,struct CExpr* expr,str text) {
     struct OwnedString owned={0};
-    Status status=kek_compiler_SelfCCloneCString(program,text,&owned);
+    Status status=kek_compiler_CCloneCString(program,text,&owned);
     if (status!=Status_Ok) {
         return (status);
     }
-    return (kek_compiler_SelfCReplaceOwned(&expr->text,owned));
+    return (kek_compiler_CReplaceOwned(&expr->text,owned));
 }
-Status kek_compiler_SelfCExprSetType(struct SelfCProgram* program,struct SelfCExpr* expr,struct String key,struct String cType,bool isPointer) {
+Status kek_compiler_CExprSetType(struct CProgram* program,struct CExpr* expr,struct String key,struct String cType,bool isPointer) {
     struct OwnedString keyOwned={0};
-    Status status=kek_compiler_SelfCCloneString(program,key,&keyOwned);
+    Status status=kek_compiler_CCloneString(program,key,&keyOwned);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCReplaceOwned(&expr->typeKey,keyOwned);
+        status=kek_compiler_CReplaceOwned(&expr->typeKey,keyOwned);
     }
     struct OwnedString cOwned={0};
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCCloneString(program,cType,&cOwned);
+        status=kek_compiler_CCloneString(program,cType,&cOwned);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCReplaceOwned(&expr->cType,cOwned);
+        status=kek_compiler_CReplaceOwned(&expr->cType,cOwned);
     }
     expr->isPointer=isPointer;
     return (status);
 }
-Status kek_compiler_SelfCExprFromBuilder(struct SelfCExpr* expr,struct StringBuilder* builder) {
+Status kek_compiler_CExprFromBuilder(struct CExpr* expr,struct StringBuilder* builder) {
     struct OwnedString owned={0};
-    Status status=kek_compiler_SelfCDetachBuilder(builder,&owned);
+    Status status=kek_compiler_CDetachBuilder(builder,&owned);
     if (status!=Status_Ok) {
         return (status);
     }
-    return (kek_compiler_SelfCReplaceOwned(&expr->text,owned));
+    return (kek_compiler_CReplaceOwned(&expr->text,owned));
 }
-u8 kek_compiler_SelfCOperatorPrecedence(struct SelfCProgram* program,usize fileIndex,usize index) {
-    if (kek_compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_Assign)||kek_compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_PlusAssign)||kek_compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_MinusAssign)) {
+u8 kek_compiler_COperatorPrecedence(struct CProgram* program,usize fileIndex,usize index) {
+    if (kek_compiler_CIsOperator(program,fileIndex,index,OperatorKind_Assign)||kek_compiler_CIsOperator(program,fileIndex,index,OperatorKind_PlusAssign)||kek_compiler_CIsOperator(program,fileIndex,index,OperatorKind_MinusAssign)) {
         return (1);
     }
-    if (kek_compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_LogicalOr)) {
+    if (kek_compiler_CIsOperator(program,fileIndex,index,OperatorKind_LogicalOr)) {
         return (2);
     }
-    if (kek_compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_LogicalAnd)) {
+    if (kek_compiler_CIsOperator(program,fileIndex,index,OperatorKind_LogicalAnd)) {
         return (3);
     }
-    if (kek_compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_Equal)||kek_compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_NotEqual)||kek_compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_Less)||kek_compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_LessEqual)||kek_compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_Greater)||kek_compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_GreaterEqual)) {
+    if (kek_compiler_CIsOperator(program,fileIndex,index,OperatorKind_Equal)||kek_compiler_CIsOperator(program,fileIndex,index,OperatorKind_NotEqual)||kek_compiler_CIsOperator(program,fileIndex,index,OperatorKind_Less)||kek_compiler_CIsOperator(program,fileIndex,index,OperatorKind_LessEqual)||kek_compiler_CIsOperator(program,fileIndex,index,OperatorKind_Greater)||kek_compiler_CIsOperator(program,fileIndex,index,OperatorKind_GreaterEqual)) {
         return (4);
     }
-    if (kek_compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_Plus)||kek_compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_Minus)) {
+    if (kek_compiler_CIsOperator(program,fileIndex,index,OperatorKind_Plus)||kek_compiler_CIsOperator(program,fileIndex,index,OperatorKind_Minus)) {
         return (5);
     }
-    if (kek_compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_Multiply)||kek_compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_Divide)||kek_compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_Modulo)) {
+    if (kek_compiler_CIsOperator(program,fileIndex,index,OperatorKind_Multiply)||kek_compiler_CIsOperator(program,fileIndex,index,OperatorKind_Divide)||kek_compiler_CIsOperator(program,fileIndex,index,OperatorKind_Modulo)) {
         return (6);
     }
     return (0);
 }
-bool kek_compiler_SelfCOperatorRightAssociative(struct SelfCProgram* program,usize fileIndex,usize index) {
-    return (kek_compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_Assign)||kek_compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_PlusAssign)||kek_compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_MinusAssign));
+bool kek_compiler_COperatorRightAssociative(struct CProgram* program,usize fileIndex,usize index) {
+    return (kek_compiler_CIsOperator(program,fileIndex,index,OperatorKind_Assign)||kek_compiler_CIsOperator(program,fileIndex,index,OperatorKind_PlusAssign)||kek_compiler_CIsOperator(program,fileIndex,index,OperatorKind_MinusAssign));
 }
-Status kek_compiler_SelfCWriteNumberToken(struct SelfCProgram* program,struct StringBuilder* out,usize fileIndex,usize index) {
-    struct String text=kek_compiler_SelfCTokenText(program,fileIndex,index);
+Status kek_compiler_CWriteNumberToken(struct CProgram* program,struct StringBuilder* out,usize fileIndex,usize index) {
+    struct String text=kek_compiler_CTokenText(program,fileIndex,index);
     if (text.len>2&&text.data[0]=='0'&&(text.data[1]=='b'||text.data[1]=='B')) {
         u64 value=0;
         for (usize i=2;i<text.len;i++) {
@@ -5892,45 +6252,45 @@ Status kek_compiler_SelfCWriteNumberToken(struct SelfCProgram* program,struct St
     }
     return (Status_Ok);
 }
-struct SelfCDecl* kek_compiler_SelfCFindFieldDecl(struct SelfCProgram* program,struct String typeKey) {
-    for (usize i=0;i<program->declCount;i++) {
-        struct SelfCDecl* decl=&program->decls[i];
-        if ((decl->kind==SelfCDeclKind_Struct||decl->kind==SelfCDeclKind_Union)&&kek_compiler_SelfCDeclNameMatches(program,decl,typeKey)) {
+struct CDecl* kek_compiler_CFindFieldDecl(struct CProgram* program,struct String typeKey) {
+    for (usize i=0;i<program->decls.len;i++) {
+        struct CDecl* decl=&program->decls.data[i];
+        if ((decl->kind==CDeclKind_Struct||decl->kind==CDeclKind_Union)&&kek_compiler_CDeclNameMatches(program,decl,typeKey)) {
             return (decl);
         }
     }
-    for (usize i=0;i<program->typeUseCount;i++) {
-        struct String useKey=std_string_OwnedStringView(&program->typeUses[i].key);
+    for (usize i=0;i<program->typeUses.len;i++) {
+        struct String useKey=std_string_OwnedStringView(&program->typeUses.data[i].key);
         if (String_Equals(&useKey,typeKey)) {
-            return (kek_compiler_SelfCFindTypeDecl(program,std_string_OwnedStringView(&program->typeUses[i].baseName)));
+            return (kek_compiler_CFindTypeDecl(program,std_string_OwnedStringView(&program->typeUses.data[i].baseName)));
         }
     }
     return (0);
 }
-Status kek_compiler_SelfCFieldType(struct SelfCProgram* program,struct String typeKey,struct String fieldName,struct SelfCTypeInfo* outInfo) {
-    kek_compiler_SelfCTypeInfoInitEmpty(program,outInfo);
-    struct SelfCDecl* decl=kek_compiler_SelfCFindFieldDecl(program,typeKey);
+Status kek_compiler_CFieldType(struct CProgram* program,struct String typeKey,struct String fieldName,struct CTypeInfo* outInfo) {
+    kek_compiler_CTypeInfoInitEmpty(program,outInfo);
+    struct CDecl* decl=kek_compiler_CFindFieldDecl(program,typeKey);
     if (decl==0) {
         return (Status_Ok);
     }
     for (usize i=0;i<decl->fieldCount;i++) {
-        struct SelfCField* field=&program->fields[decl->firstField+i];
-        struct String fieldToken=kek_compiler_SelfCTokenText(program,field->fileIndex,field->nameIndex);
+        struct CField* field=&program->fields.data[decl->firstField+i];
+        struct String fieldToken=kek_compiler_CTokenText(program,field->fileIndex,field->nameIndex);
         if (String_Equals(&fieldToken,fieldName)) {
-            kek_compiler_SelfCTypeInfoDestroy(outInfo);
-            return (kek_compiler_SelfCRenderTypeInfo(program,field->fileIndex,field->typeStart,field->typeEnd,outInfo));
+            kek_compiler_CTypeInfoDestroy(outInfo);
+            return (kek_compiler_CRenderTypeInfo(program,field->fileIndex,field->typeStart,field->typeEnd,outInfo));
         }
     }
     return (Status_Ok);
 }
-struct SelfCDecl* kek_compiler_SelfCFindMethod(struct SelfCProgram* program,struct String receiverType,struct String name,bool isOperator,u8 operatorCode,usize argCount) {
-    for (usize i=0;i<program->declCount;i++) {
-        struct SelfCDecl* decl=&program->decls[i];
-        if (decl->kind!=SelfCDeclKind_Function||!decl->hasReceiver) {
+struct CDecl* kek_compiler_CFindMethod(struct CProgram* program,struct String receiverType,struct String name,bool isOperator,u8 operatorCode,usize argCount) {
+    for (usize i=0;i<program->decls.len;i++) {
+        struct CDecl* decl=&program->decls.data[i];
+        if (decl->kind!=CDeclKind_Function||!decl->hasReceiver) {
             continue;
         }
         struct StringBuilder receiver=std_string_StringBuilderNew(program->allocator);
-        Status status=kek_compiler_SelfCWriteTypeSuffixFromRange(program,&receiver,decl->fileIndex,decl->receiverStart,decl->receiverEnd);
+        Status status=kek_compiler_CWriteTypeSuffixFromRange(program,&receiver,decl->fileIndex,decl->receiverStart,decl->receiverEnd);
         if (status!=Status_Ok) {
             StringBuilder_Destroy(&receiver);
             continue;
@@ -5946,7 +6306,7 @@ struct SelfCDecl* kek_compiler_SelfCFindMethod(struct SelfCProgram* program,stru
                 return (decl);
             }
         } else {
-            struct String methodName=kek_compiler_SelfCTokenText(program,decl->fileIndex,decl->nameIndex);
+            struct String methodName=kek_compiler_CTokenText(program,decl->fileIndex,decl->nameIndex);
             if (!decl->isOperator&&String_Equals(&methodName,name)) {
                 return (decl);
             }
@@ -5954,73 +6314,73 @@ struct SelfCDecl* kek_compiler_SelfCFindMethod(struct SelfCProgram* program,stru
     }
     return (0);
 }
-Status kek_compiler_SelfCParserInit(struct SelfCProgram* program,struct SelfCEnv* env,usize fileIndex,usize start,usize end,struct String expectedKey,struct String expectedCType,bool expectedIsArray,struct SelfCExprParser* parser) {
+Status kek_compiler_CParserInit(struct CProgram* program,struct CEnv* env,usize fileIndex,usize start,usize end,struct String expectedKey,struct String expectedCType,bool expectedIsArray,struct CExprParser* parser) {
     parser->program=program;
     parser->env=env;
     parser->fileIndex=fileIndex;
     parser->pos=start;
     parser->end=end;
     parser->expectedIsArray=expectedIsArray;
-    Status status=kek_compiler_SelfCCloneString(program,expectedKey,&parser->expectedTypeKey);
+    Status status=kek_compiler_CCloneString(program,expectedKey,&parser->expectedTypeKey);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCCloneString(program,expectedCType,&parser->expectedCType);
+        status=kek_compiler_CCloneString(program,expectedCType,&parser->expectedCType);
     }
     return (status);
 }
-Status kek_compiler_SelfCParserDestroy(struct SelfCExprParser* parser) {
+Status kek_compiler_CParserDestroy(struct CExprParser* parser) {
     std_string_DestroyOwnedString(&parser->expectedTypeKey);
     std_string_DestroyOwnedString(&parser->expectedCType);
     return (Status_Ok);
 }
-Status kek_compiler_SelfCCompileExpressionRange(struct SelfCProgram* program,struct SelfCEnv* env,usize fileIndex,usize start,usize end,struct String expectedKey,struct String expectedCType,bool expectedIsArray,struct SelfCExpr* out) {
-    struct SelfCExprParser parser={0};
-    Status status=kek_compiler_SelfCParserInit(program,env,fileIndex,start,end,expectedKey,expectedCType,expectedIsArray,&parser);
+Status kek_compiler_CCompileExpressionRange(struct CProgram* program,struct CEnv* env,usize fileIndex,usize start,usize end,struct String expectedKey,struct String expectedCType,bool expectedIsArray,struct CExpr* out) {
+    struct CExprParser parser={0};
+    Status status=kek_compiler_CParserInit(program,env,fileIndex,start,end,expectedKey,expectedCType,expectedIsArray,&parser);
     if (status!=Status_Ok) {
         return (status);
     }
-    status=kek_compiler_SelfCCompileExpression(&parser,1,out);
-    kek_compiler_SelfCParserDestroy(&parser);
+    status=kek_compiler_CCompileExpression(&parser,1,out);
+    kek_compiler_CParserDestroy(&parser);
     return (status);
 }
-Status kek_compiler_SelfCWriteInitializerList(struct SelfCExprParser* parser,usize start,usize end,struct StringBuilder* out) {
+Status kek_compiler_CWriteInitializerList(struct CExprParser* parser,usize start,usize end,struct StringBuilder* out) {
     Status status=StringBuilder_WriteByte(out,'{');
     usize itemStart=start;
     while (itemStart<end) {
-        if (kek_compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,itemStart,PunctuationKind_Comma)) {
+        if (kek_compiler_CIsPunctuation(parser->program,parser->fileIndex,itemStart,PunctuationKind_Comma)) {
             itemStart+=1;
             continue;
         }
-        usize itemEnd=kek_compiler_SelfCFindTokenAtDepthZero(parser->program,parser->fileIndex,itemStart,end,PunctuationKind_Comma);
-        if (itemStart+1<itemEnd&&kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,itemStart+1,OperatorKind_Assign)&&kek_compiler_SelfCIsTokenKind(parser->program,parser->fileIndex,itemStart,TokenKind_Identifier)) {
+        usize itemEnd=kek_compiler_CFindTokenAtDepthZero(parser->program,parser->fileIndex,itemStart,end,PunctuationKind_Comma);
+        if (itemStart+1<itemEnd&&kek_compiler_CIsOperator(parser->program,parser->fileIndex,itemStart+1,OperatorKind_Assign)&&kek_compiler_CIsTokenKind(parser->program,parser->fileIndex,itemStart,TokenKind_Identifier)) {
             if (status==Status_Ok) {
                 status=StringBuilder_WriteByte(out,'.');
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteToken(parser->program,out,parser->fileIndex,itemStart);
+                status=kek_compiler_CWriteToken(parser->program,out,parser->fileIndex,itemStart);
             }
             if (status==Status_Ok) {
                 status=StringBuilder_WriteByte(out,'=');
             }
-            struct SelfCExpr value={0};
+            struct CExpr value={0};
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCCompileExpressionRange(parser->program,parser->env,parser->fileIndex,itemStart+2,itemEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&value);
+                status=kek_compiler_CCompileExpressionRange(parser->program,parser->env,parser->fileIndex,itemStart+2,itemEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&value);
             }
             if (status==Status_Ok) {
                 status=StringBuilder_WriteString(out,std_string_OwnedStringView(&value.text));
             }
             if (status==Status_Ok) {
-                kek_compiler_SelfCExprDestroy(&value);
+                kek_compiler_CExprDestroy(&value);
             }
         } else {
-            struct SelfCExpr value={0};
+            struct CExpr value={0};
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCCompileExpressionRange(parser->program,parser->env,parser->fileIndex,itemStart,itemEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&value);
+                status=kek_compiler_CCompileExpressionRange(parser->program,parser->env,parser->fileIndex,itemStart,itemEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&value);
             }
             if (status==Status_Ok) {
                 status=StringBuilder_WriteString(out,std_string_OwnedStringView(&value.text));
             }
             if (status==Status_Ok) {
-                kek_compiler_SelfCExprDestroy(&value);
+                kek_compiler_CExprDestroy(&value);
             }
         }
         if (status!=Status_Ok) {
@@ -6037,8 +6397,8 @@ Status kek_compiler_SelfCWriteInitializerList(struct SelfCExprParser* parser,usi
     }
     return (status);
 }
-Status kek_compiler_SelfCExprFromLiteralBlock(struct SelfCExprParser* parser,usize blockStart,usize blockEnd,struct SelfCExpr* out) {
-    Status status=kek_compiler_SelfCExprInitEmpty(parser->program,out);
+Status kek_compiler_CExprFromLiteralBlock(struct CExprParser* parser,usize blockStart,usize blockEnd,struct CExpr* out) {
+    Status status=kek_compiler_CExprInitEmpty(parser->program,out);
     if (status!=Status_Ok) {
         return (status);
     }
@@ -6055,19 +6415,19 @@ Status kek_compiler_SelfCExprFromLiteralBlock(struct SelfCExprParser* parser,usi
         }
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteInitializerList(parser,blockStart+1,blockEnd,&builder);
+        status=kek_compiler_CWriteInitializerList(parser,blockStart+1,blockEnd,&builder);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCExprFromBuilder(out,&builder);
+        status=kek_compiler_CExprFromBuilder(out,&builder);
     }
     StringBuilder_Destroy(&builder);
     if (status==Status_Ok&&expectedKey.len>0) {
-        status=kek_compiler_SelfCExprSetType(parser->program,out,expectedKey,expectedCType,0);
+        status=kek_compiler_CExprSetType(parser->program,out,expectedKey,expectedCType,0);
     }
     return (status);
 }
-Status kek_compiler_SelfCCompilePrimary(struct SelfCExprParser* parser,struct SelfCExpr* out) {
-    Status status=kek_compiler_SelfCExprInitEmpty(parser->program,out);
+Status kek_compiler_CCompilePrimary(struct CExprParser* parser,struct CExpr* out) {
+    Status status=kek_compiler_CExprInitEmpty(parser->program,out);
     if (status!=Status_Ok) {
         return (status);
     }
@@ -6075,48 +6435,48 @@ Status kek_compiler_SelfCCompilePrimary(struct SelfCExprParser* parser,struct Se
         return (Status_Ok);
     }
     usize index=parser->pos;
-    struct Token token=parser->program[0].tokenFiles[parser->fileIndex].tokens[index];
+    struct Token token=parser->program[0].tokenFiles.data[parser->fileIndex].tokens[index];
     if (token.kind==TokenKind_Number) {
         struct StringBuilder builder=std_string_StringBuilderNew(parser->program[0].allocator);
-        status=kek_compiler_SelfCWriteNumberToken(parser->program,&builder,parser->fileIndex,index);
+        status=kek_compiler_CWriteNumberToken(parser->program,&builder,parser->fileIndex,index);
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCExprFromBuilder(out,&builder);
+            status=kek_compiler_CExprFromBuilder(out,&builder);
         }
         StringBuilder_Destroy(&builder);
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCExprSetType(parser->program,out,std_string_StringFromCString("int"),std_string_StringFromCString("int"),0);
+            status=kek_compiler_CExprSetType(parser->program,out,std_string_StringFromCString("int"),std_string_StringFromCString("int"),0);
         }
         parser->pos+=1;
         return (status);
     }
     if (token.kind==TokenKind_String||token.kind==TokenKind_Char) {
-        status=kek_compiler_SelfCExprSetText(parser->program,out,kek_compiler_SelfCTokenText(parser->program,parser->fileIndex,index));
+        status=kek_compiler_CExprSetText(parser->program,out,kek_compiler_CTokenText(parser->program,parser->fileIndex,index));
         if (status==Status_Ok) {
             if (token.kind==TokenKind_String) {
-                status=kek_compiler_SelfCExprSetType(parser->program,out,std_string_StringFromCString("str"),std_string_StringFromCString("str"),1);
+                status=kek_compiler_CExprSetType(parser->program,out,std_string_StringFromCString("str"),std_string_StringFromCString("str"),1);
             } else {
-                status=kek_compiler_SelfCExprSetType(parser->program,out,std_string_StringFromCString("int"),std_string_StringFromCString("int"),0);
+                status=kek_compiler_CExprSetType(parser->program,out,std_string_StringFromCString("int"),std_string_StringFromCString("int"),0);
             }
         }
         parser->pos+=1;
         return (status);
     }
-    if (kek_compiler_SelfCIsKeyword(parser->program,parser->fileIndex,index,KeywordKind_True)||kek_compiler_SelfCIsKeyword(parser->program,parser->fileIndex,index,KeywordKind_False)) {
-        if (kek_compiler_SelfCIsKeyword(parser->program,parser->fileIndex,index,KeywordKind_True)) {
-            status=kek_compiler_SelfCExprSetCString(parser->program,out,"1");
+    if (kek_compiler_CIsKeyword(parser->program,parser->fileIndex,index,KeywordKind_True)||kek_compiler_CIsKeyword(parser->program,parser->fileIndex,index,KeywordKind_False)) {
+        if (kek_compiler_CIsKeyword(parser->program,parser->fileIndex,index,KeywordKind_True)) {
+            status=kek_compiler_CExprSetCString(parser->program,out,"1");
         } else {
-            status=kek_compiler_SelfCExprSetCString(parser->program,out,"0");
+            status=kek_compiler_CExprSetCString(parser->program,out,"0");
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCExprSetType(parser->program,out,std_string_StringFromCString("bool"),std_string_StringFromCString("bool"),0);
+            status=kek_compiler_CExprSetType(parser->program,out,std_string_StringFromCString("bool"),std_string_StringFromCString("bool"),0);
         }
         parser->pos+=1;
         return (status);
     }
-    if (kek_compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,index,PunctuationKind_LeftParen)) {
-        usize match=kek_compiler_SelfCFindMatching(parser->program,parser->fileIndex,index);
-        struct SelfCExpr inner={0};
-        status=kek_compiler_SelfCCompileExpressionRange(parser->program,parser->env,parser->fileIndex,index+1,match,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&inner);
+    if (kek_compiler_CIsPunctuation(parser->program,parser->fileIndex,index,PunctuationKind_LeftParen)) {
+        usize match=kek_compiler_CFindMatching(parser->program,parser->fileIndex,index);
+        struct CExpr inner={0};
+        status=kek_compiler_CCompileExpressionRange(parser->program,parser->env,parser->fileIndex,index+1,match,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&inner);
         struct StringBuilder builder=std_string_StringBuilderNew(parser->program[0].allocator);
         if (status==Status_Ok) {
             status=StringBuilder_WriteByte(&builder,'(');
@@ -6128,37 +6488,37 @@ Status kek_compiler_SelfCCompilePrimary(struct SelfCExprParser* parser,struct Se
             status=StringBuilder_WriteByte(&builder,')');
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCExprFromBuilder(out,&builder);
+            status=kek_compiler_CExprFromBuilder(out,&builder);
         }
         StringBuilder_Destroy(&builder);
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCExprSetType(parser->program,out,std_string_OwnedStringView(&inner.typeKey),std_string_OwnedStringView(&inner.cType),inner.isPointer);
+            status=kek_compiler_CExprSetType(parser->program,out,std_string_OwnedStringView(&inner.typeKey),std_string_OwnedStringView(&inner.cType),inner.isPointer);
             out->isArray=inner.isArray;
             out->isLvalue=inner.isLvalue;
             out->isPointer=inner.isPointer;
         }
-        kek_compiler_SelfCExprDestroy(&inner);
+        kek_compiler_CExprDestroy(&inner);
         parser->pos=match+1;
         return (status);
     }
-    if (kek_compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,index,PunctuationKind_LeftBrace)) {
-        usize match=kek_compiler_SelfCFindMatching(parser->program,parser->fileIndex,index);
-        status=kek_compiler_SelfCExprFromLiteralBlock(parser,index,match,out);
+    if (kek_compiler_CIsPunctuation(parser->program,parser->fileIndex,index,PunctuationKind_LeftBrace)) {
+        usize match=kek_compiler_CFindMatching(parser->program,parser->fileIndex,index);
+        status=kek_compiler_CExprFromLiteralBlock(parser,index,match,out);
         parser->pos=match+1;
         return (status);
     }
-    if (kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,index,OperatorKind_Scope)) {
+    if (kek_compiler_CIsOperator(parser->program,parser->fileIndex,index,OperatorKind_Scope)) {
         if (index+1<parser->end) {
-            status=kek_compiler_SelfCExprSetText(parser->program,out,kek_compiler_SelfCTokenText(parser->program,parser->fileIndex,index+1));
+            status=kek_compiler_CExprSetText(parser->program,out,kek_compiler_CTokenText(parser->program,parser->fileIndex,index+1));
             parser->pos=index+2;
             return (status);
         }
     }
     if (token.kind==TokenKind_Identifier||token.kind==TokenKind_Keyword) {
-        if (index+2<parser->end&&kek_compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,index+1,PunctuationKind_Colon)&&kek_compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,index+2,PunctuationKind_LeftBrace)) {
-            usize blockEnd=kek_compiler_SelfCFindMatching(parser->program,parser->fileIndex,index+2);
-            struct SelfCTypeInfo typeInfo={0};
-            status=kek_compiler_SelfCRenderTypeInfo(parser->program,parser->fileIndex,index,index+1,&typeInfo);
+        if (index+2<parser->end&&kek_compiler_CIsPunctuation(parser->program,parser->fileIndex,index+1,PunctuationKind_Colon)&&kek_compiler_CIsPunctuation(parser->program,parser->fileIndex,index+2,PunctuationKind_LeftBrace)) {
+            usize blockEnd=kek_compiler_CFindMatching(parser->program,parser->fileIndex,index+2);
+            struct CTypeInfo typeInfo={0};
+            status=kek_compiler_CRenderTypeInfo(parser->program,parser->fileIndex,index,index+1,&typeInfo);
             struct StringBuilder builder=std_string_StringBuilderNew(parser->program[0].allocator);
             if (status==Status_Ok) {
                 status=StringBuilder_WriteByte(&builder,'(');
@@ -6170,28 +6530,28 @@ Status kek_compiler_SelfCCompilePrimary(struct SelfCExprParser* parser,struct Se
                 status=StringBuilder_WriteByte(&builder,')');
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteInitializerList(parser,index+3,blockEnd,&builder);
+                status=kek_compiler_CWriteInitializerList(parser,index+3,blockEnd,&builder);
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCExprFromBuilder(out,&builder);
+                status=kek_compiler_CExprFromBuilder(out,&builder);
             }
             StringBuilder_Destroy(&builder);
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCExprSetType(parser->program,out,std_string_OwnedStringView(&typeInfo.key),std_string_OwnedStringView(&typeInfo.cType),typeInfo.isPointer);
+                status=kek_compiler_CExprSetType(parser->program,out,std_string_OwnedStringView(&typeInfo.key),std_string_OwnedStringView(&typeInfo.cType),typeInfo.isPointer);
             }
-            kek_compiler_SelfCTypeInfoDestroy(&typeInfo);
+            kek_compiler_CTypeInfoDestroy(&typeInfo);
             parser->pos=blockEnd+1;
             return (status);
         }
-        if (kek_compiler_SelfCIsIdentifierText(parser->program,parser->fileIndex,index,"cast")&&index+1<parser->end&&kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,index+1,OperatorKind_Less)) {
-            usize genericEnd=kek_compiler_SelfCFindMatching(parser->program,parser->fileIndex,index+1);
+        if (kek_compiler_CIsIdentifierText(parser->program,parser->fileIndex,index,"cast")&&index+1<parser->end&&kek_compiler_CIsOperator(parser->program,parser->fileIndex,index+1,OperatorKind_Less)) {
+            usize genericEnd=kek_compiler_CFindMatching(parser->program,parser->fileIndex,index+1);
             usize groupStart=genericEnd+1;
-            usize groupEnd=kek_compiler_SelfCFindMatching(parser->program,parser->fileIndex,groupStart);
-            struct SelfCTypeInfo typeInfo={0};
-            status=kek_compiler_SelfCRenderTypeInfo(parser->program,parser->fileIndex,index+2,genericEnd,&typeInfo);
-            struct SelfCExpr value={0};
+            usize groupEnd=kek_compiler_CFindMatching(parser->program,parser->fileIndex,groupStart);
+            struct CTypeInfo typeInfo={0};
+            status=kek_compiler_CRenderTypeInfo(parser->program,parser->fileIndex,index+2,genericEnd,&typeInfo);
+            struct CExpr value={0};
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCCompileExpressionRange(parser->program,parser->env,parser->fileIndex,groupStart+1,groupEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&value);
+                status=kek_compiler_CCompileExpressionRange(parser->program,parser->env,parser->fileIndex,groupStart+1,groupEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&value);
             }
             struct StringBuilder builder=std_string_StringBuilderNew(parser->program[0].allocator);
             if (status==Status_Ok) {
@@ -6210,29 +6570,29 @@ Status kek_compiler_SelfCCompilePrimary(struct SelfCExprParser* parser,struct Se
                 status=StringBuilder_WriteCString(&builder,"))");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCExprFromBuilder(out,&builder);
+                status=kek_compiler_CExprFromBuilder(out,&builder);
             }
             StringBuilder_Destroy(&builder);
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCExprSetType(parser->program,out,std_string_OwnedStringView(&typeInfo.key),std_string_OwnedStringView(&typeInfo.cType),typeInfo.isPointer);
+                status=kek_compiler_CExprSetType(parser->program,out,std_string_OwnedStringView(&typeInfo.key),std_string_OwnedStringView(&typeInfo.cType),typeInfo.isPointer);
             }
-            kek_compiler_SelfCExprDestroy(&value);
-            kek_compiler_SelfCTypeInfoDestroy(&typeInfo);
+            kek_compiler_CExprDestroy(&value);
+            kek_compiler_CTypeInfoDestroy(&typeInfo);
             parser->pos=groupEnd+1;
             return (status);
         }
-        if ((kek_compiler_SelfCIsIdentifierText(parser->program,parser->fileIndex,index,"sizeof")||kek_compiler_SelfCIsIdentifierText(parser->program,parser->fileIndex,index,"alignof"))&&index+1<parser->end&&kek_compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,index+1,PunctuationKind_LeftParen)) {
-            usize groupEnd=kek_compiler_SelfCFindMatching(parser->program,parser->fileIndex,index+1);
+        if ((kek_compiler_CIsIdentifierText(parser->program,parser->fileIndex,index,"sizeof")||kek_compiler_CIsIdentifierText(parser->program,parser->fileIndex,index,"alignof"))&&index+1<parser->end&&kek_compiler_CIsPunctuation(parser->program,parser->fileIndex,index+1,PunctuationKind_LeftParen)) {
+            usize groupEnd=kek_compiler_CFindMatching(parser->program,parser->fileIndex,index+1);
             struct StringBuilder builder=std_string_StringBuilderNew(parser->program[0].allocator);
-            bool isAlign=kek_compiler_SelfCIsIdentifierText(parser->program,parser->fileIndex,index,"alignof");
+            bool isAlign=kek_compiler_CIsIdentifierText(parser->program,parser->fileIndex,index,"alignof");
             if (isAlign) {
                 status=StringBuilder_WriteCString(&builder,"_Alignof(");
             } else {
                 status=StringBuilder_WriteCString(&builder,"sizeof(");
             }
-            struct SelfCTypeInfo typeInfo={0};
+            struct CTypeInfo typeInfo={0};
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCRenderTypeInfo(parser->program,parser->fileIndex,index+2,groupEnd,&typeInfo);
+                status=kek_compiler_CRenderTypeInfo(parser->program,parser->fileIndex,index+2,groupEnd,&typeInfo);
             }
             if (status==Status_Ok) {
                 status=StringBuilder_WriteString(&builder,std_string_OwnedStringView(&typeInfo.cType));
@@ -6241,21 +6601,21 @@ Status kek_compiler_SelfCCompilePrimary(struct SelfCExprParser* parser,struct Se
                 status=StringBuilder_WriteByte(&builder,')');
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCExprFromBuilder(out,&builder);
+                status=kek_compiler_CExprFromBuilder(out,&builder);
             }
             StringBuilder_Destroy(&builder);
-            kek_compiler_SelfCTypeInfoDestroy(&typeInfo);
+            kek_compiler_CTypeInfoDestroy(&typeInfo);
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCExprSetType(parser->program,out,std_string_StringFromCString("usize"),std_string_StringFromCString("usize"),0);
+                status=kek_compiler_CExprSetType(parser->program,out,std_string_StringFromCString("usize"),std_string_StringFromCString("usize"),0);
             }
             parser->pos=groupEnd+1;
             return (status);
         }
-        if (kek_compiler_SelfCIsIdentifierText(parser->program,parser->fileIndex,index,"offsetof")&&index+1<parser->end&&kek_compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,index+1,PunctuationKind_LeftParen)) {
-            usize groupEnd=kek_compiler_SelfCFindMatching(parser->program,parser->fileIndex,index+1);
-            usize comma=kek_compiler_SelfCFindTokenAtDepthZero(parser->program,parser->fileIndex,index+2,groupEnd,PunctuationKind_Comma);
-            struct SelfCTypeInfo typeInfo={0};
-            status=kek_compiler_SelfCRenderTypeInfo(parser->program,parser->fileIndex,index+2,comma,&typeInfo);
+        if (kek_compiler_CIsIdentifierText(parser->program,parser->fileIndex,index,"offsetof")&&index+1<parser->end&&kek_compiler_CIsPunctuation(parser->program,parser->fileIndex,index+1,PunctuationKind_LeftParen)) {
+            usize groupEnd=kek_compiler_CFindMatching(parser->program,parser->fileIndex,index+1);
+            usize comma=kek_compiler_CFindTokenAtDepthZero(parser->program,parser->fileIndex,index+2,groupEnd,PunctuationKind_Comma);
+            struct CTypeInfo typeInfo={0};
+            status=kek_compiler_CRenderTypeInfo(parser->program,parser->fileIndex,index+2,comma,&typeInfo);
             struct StringBuilder builder=std_string_StringBuilderNew(parser->program[0].allocator);
             if (status==Status_Ok) {
                 status=StringBuilder_WriteCString(&builder,"offsetof(");
@@ -6267,50 +6627,50 @@ Status kek_compiler_SelfCCompilePrimary(struct SelfCExprParser* parser,struct Se
                 status=StringBuilder_WriteByte(&builder,',');
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteTokenRangeRaw(parser->program,&builder,parser->fileIndex,comma+1,groupEnd);
+                status=kek_compiler_CWriteTokenRangeRaw(parser->program,&builder,parser->fileIndex,comma+1,groupEnd);
             }
             if (status==Status_Ok) {
                 status=StringBuilder_WriteByte(&builder,')');
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCExprFromBuilder(out,&builder);
+                status=kek_compiler_CExprFromBuilder(out,&builder);
             }
             StringBuilder_Destroy(&builder);
-            kek_compiler_SelfCTypeInfoDestroy(&typeInfo);
+            kek_compiler_CTypeInfoDestroy(&typeInfo);
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCExprSetType(parser->program,out,std_string_StringFromCString("usize"),std_string_StringFromCString("usize"),0);
+                status=kek_compiler_CExprSetType(parser->program,out,std_string_StringFromCString("usize"),std_string_StringFromCString("usize"),0);
             }
             parser->pos=groupEnd+1;
             return (status);
         }
         struct StringBuilder builder=std_string_StringBuilderNew(parser->program[0].allocator);
-        if (index+2<parser->end&&kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,index+1,OperatorKind_Scope)) {
-            struct String scopeName=kek_compiler_SelfCTokenText(parser->program,parser->fileIndex,index);
-            struct String name=kek_compiler_SelfCTokenText(parser->program,parser->fileIndex,index+2);
-            struct SelfCDecl* scopedDecl=kek_compiler_SelfCFindFunctionDeclByName(parser->program,name,scopeName);
+        if (index+2<parser->end&&kek_compiler_CIsOperator(parser->program,parser->fileIndex,index+1,OperatorKind_Scope)) {
+            struct String scopeName=kek_compiler_CTokenText(parser->program,parser->fileIndex,index);
+            struct String name=kek_compiler_CTokenText(parser->program,parser->fileIndex,index+2);
+            struct CDecl* scopedDecl=kek_compiler_CFindFunctionDeclByName(parser->program,name,scopeName);
             if (scopedDecl!=0) {
-                status=kek_compiler_SelfCWriteDeclCName(parser->program,&builder,scopedDecl);
+                status=kek_compiler_CWriteDeclCName(parser->program,&builder,scopedDecl);
             } else {
-                status=kek_compiler_SelfCWriteToken(parser->program,&builder,parser->fileIndex,index);
+                status=kek_compiler_CWriteToken(parser->program,&builder,parser->fileIndex,index);
                 if (status==Status_Ok) {
                     status=StringBuilder_WriteByte(&builder,'_');
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteToken(parser->program,&builder,parser->fileIndex,index+2);
+                    status=kek_compiler_CWriteToken(parser->program,&builder,parser->fileIndex,index+2);
                 }
             }
             parser->pos=index+3;
-            if (parser->pos<parser->end&&kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,parser->pos,OperatorKind_Less)) {
-                usize gEnd=kek_compiler_SelfCFindMatching(parser->program,parser->fileIndex,parser->pos);
-                if (gEnd+1<parser->end&&kek_compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,gEnd+1,PunctuationKind_LeftParen)) {
+            if (parser->pos<parser->end&&kek_compiler_CIsOperator(parser->program,parser->fileIndex,parser->pos,OperatorKind_Less)) {
+                usize gEnd=kek_compiler_CFindMatching(parser->program,parser->fileIndex,parser->pos);
+                if (gEnd+1<parser->end&&kek_compiler_CIsPunctuation(parser->program,parser->fileIndex,gEnd+1,PunctuationKind_LeftParen)) {
                     usize argStart=parser->pos+1;
                     while (argStart<gEnd) {
-                        usize argEnd=kek_compiler_SelfCFindTokenAtDepthZero(parser->program,parser->fileIndex,argStart,gEnd,PunctuationKind_Comma);
+                        usize argEnd=kek_compiler_CFindTokenAtDepthZero(parser->program,parser->fileIndex,argStart,gEnd,PunctuationKind_Comma);
                         if (status==Status_Ok) {
                             status=StringBuilder_WriteCString(&builder,"__");
                         }
                         if (status==Status_Ok) {
-                            status=kek_compiler_SelfCWriteTypeSuffixFromRange(parser->program,&builder,parser->fileIndex,argStart,argEnd);
+                            status=kek_compiler_CWriteTypeSuffixFromRange(parser->program,&builder,parser->fileIndex,argStart,argEnd);
                         }
                         if (argEnd>=gEnd) {
                             break;
@@ -6321,19 +6681,19 @@ Status kek_compiler_SelfCCompilePrimary(struct SelfCExprParser* parser,struct Se
                 }
             }
         } else {
-            status=kek_compiler_SelfCWriteToken(parser->program,&builder,parser->fileIndex,index);
+            status=kek_compiler_CWriteToken(parser->program,&builder,parser->fileIndex,index);
             parser->pos=index+1;
-            if (parser->pos<parser->end&&kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,parser->pos,OperatorKind_Less)) {
-                usize gEnd=kek_compiler_SelfCFindMatching(parser->program,parser->fileIndex,parser->pos);
-                if (gEnd+1<parser->end&&kek_compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,gEnd+1,PunctuationKind_LeftParen)) {
+            if (parser->pos<parser->end&&kek_compiler_CIsOperator(parser->program,parser->fileIndex,parser->pos,OperatorKind_Less)) {
+                usize gEnd=kek_compiler_CFindMatching(parser->program,parser->fileIndex,parser->pos);
+                if (gEnd+1<parser->end&&kek_compiler_CIsPunctuation(parser->program,parser->fileIndex,gEnd+1,PunctuationKind_LeftParen)) {
                     usize argStart=parser->pos+1;
                     while (argStart<gEnd) {
-                        usize argEnd=kek_compiler_SelfCFindTokenAtDepthZero(parser->program,parser->fileIndex,argStart,gEnd,PunctuationKind_Comma);
+                        usize argEnd=kek_compiler_CFindTokenAtDepthZero(parser->program,parser->fileIndex,argStart,gEnd,PunctuationKind_Comma);
                         if (status==Status_Ok) {
                             status=StringBuilder_WriteCString(&builder,"__");
                         }
                         if (status==Status_Ok) {
-                            status=kek_compiler_SelfCWriteTypeSuffixFromRange(parser->program,&builder,parser->fileIndex,argStart,argEnd);
+                            status=kek_compiler_CWriteTypeSuffixFromRange(parser->program,&builder,parser->fileIndex,argStart,argEnd);
                         }
                         if (argEnd>=gEnd) {
                             break;
@@ -6345,35 +6705,35 @@ Status kek_compiler_SelfCCompilePrimary(struct SelfCExprParser* parser,struct Se
             }
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCExprFromBuilder(out,&builder);
+            status=kek_compiler_CExprFromBuilder(out,&builder);
         }
         StringBuilder_Destroy(&builder);
-        struct SelfCLocal* local=kek_compiler_SelfCEnvFind(parser->env,kek_compiler_SelfCTokenText(parser->program,parser->fileIndex,index));
+        struct CLocal* local=kek_compiler_CEnvFind(parser->env,kek_compiler_CTokenText(parser->program,parser->fileIndex,index));
         if (status==Status_Ok&&local!=0) {
-            status=kek_compiler_SelfCExprSetType(parser->program,out,std_string_OwnedStringView(&local->typeKey),std_string_OwnedStringView(&local->cType),local->isPointer);
+            status=kek_compiler_CExprSetType(parser->program,out,std_string_OwnedStringView(&local->typeKey),std_string_OwnedStringView(&local->cType),local->isPointer);
             out->isArray=local->isArray;
             out->isPointer=local->isPointer;
             out->isLvalue=1;
             struct OwnedString arrLen={0};
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCCloneString(parser->program,std_string_OwnedStringView(&local->arrayLen),&arrLen);
+                status=kek_compiler_CCloneString(parser->program,std_string_OwnedStringView(&local->arrayLen),&arrLen);
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCReplaceOwned(&out->arrayLen,arrLen);
+                status=kek_compiler_CReplaceOwned(&out->arrayLen,arrLen);
             }
         } else {
             if (status==Status_Ok) {
-                struct SelfCDecl* functionDecl=kek_compiler_SelfCFindFunctionDeclByName(parser->program,kek_compiler_SelfCTokenText(parser->program,parser->fileIndex,index),std_string_StringFromCString(""));
+                struct CDecl* functionDecl=kek_compiler_CFindFunctionDeclByName(parser->program,kek_compiler_CTokenText(parser->program,parser->fileIndex,index),std_string_StringFromCString(""));
                 if (functionDecl!=0) {
                     struct StringBuilder functionName=std_string_StringBuilderNew(parser->program[0].allocator);
-                    status=kek_compiler_SelfCWriteDeclCName(parser->program,&functionName,functionDecl);
+                    status=kek_compiler_CWriteDeclCName(parser->program,&functionName,functionDecl);
                     struct String currentName=std_string_OwnedStringView(&out->text);
                     struct Result__usize suffixStart=String_FindByte(&currentName,'_');
                     if (status==Status_Ok&&suffixStart.status==Status_Ok&&suffixStart.value+1<currentName.len&&currentName.data[suffixStart.value+1]=='_') {
                         status=StringBuilder_WriteString(&functionName,String_Slice(&currentName,suffixStart.value,currentName.len-suffixStart.value));
                     }
                     if (status==Status_Ok) {
-                        status=kek_compiler_SelfCExprFromBuilder(out,&functionName);
+                        status=kek_compiler_CExprFromBuilder(out,&functionName);
                     }
                     StringBuilder_Destroy(&functionName);
                 }
@@ -6384,31 +6744,31 @@ Status kek_compiler_SelfCCompilePrimary(struct SelfCExprParser* parser,struct Se
     parser->pos+=1;
     return (Status_Ok);
 }
-Status kek_compiler_SelfCWriteCallArgs(struct SelfCExprParser* parser,usize start,usize end,struct StringBuilder* out) {
+Status kek_compiler_CWriteCallArgs(struct CExprParser* parser,usize start,usize end,struct StringBuilder* out) {
     usize itemStart=start;
     bool first=1;
     Status status=Status_Ok;
     while (itemStart<end) {
-        if (kek_compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,itemStart,PunctuationKind_Comma)) {
+        if (kek_compiler_CIsPunctuation(parser->program,parser->fileIndex,itemStart,PunctuationKind_Comma)) {
             itemStart+=1;
             continue;
         }
-        usize itemEnd=kek_compiler_SelfCFindTokenAtDepthZero(parser->program,parser->fileIndex,itemStart,end,PunctuationKind_Comma);
+        usize itemEnd=kek_compiler_CFindTokenAtDepthZero(parser->program,parser->fileIndex,itemStart,end,PunctuationKind_Comma);
         usize exprStart=itemStart;
-        usize assign=kek_compiler_SelfCFindTokenAtDepthZero(parser->program,parser->fileIndex,itemStart,itemEnd,PunctuationKind_Colon);
+        usize assign=kek_compiler_CFindTokenAtDepthZero(parser->program,parser->fileIndex,itemStart,itemEnd,PunctuationKind_Colon);
         if (assign<itemEnd) {
             exprStart=assign+1;
         } else {
             for (usize i=itemStart;i<itemEnd;i++) {
-                if (kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,i,OperatorKind_Assign)) {
+                if (kek_compiler_CIsOperator(parser->program,parser->fileIndex,i,OperatorKind_Assign)) {
                     exprStart=i+1;
                     break;
                 }
             }
         }
-        struct SelfCExpr arg={0};
+        struct CExpr arg={0};
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCCompileExpressionRange(parser->program,parser->env,parser->fileIndex,exprStart,itemEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&arg);
+            status=kek_compiler_CCompileExpressionRange(parser->program,parser->env,parser->fileIndex,exprStart,itemEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&arg);
         }
         if (status==Status_Ok&&!first) {
             status=StringBuilder_WriteByte(out,',');
@@ -6417,7 +6777,7 @@ Status kek_compiler_SelfCWriteCallArgs(struct SelfCExprParser* parser,usize star
             status=StringBuilder_WriteString(out,std_string_OwnedStringView(&arg.text));
         }
         if (status==Status_Ok) {
-            kek_compiler_SelfCExprDestroy(&arg);
+            kek_compiler_CExprDestroy(&arg);
         }
         first=0;
         if (status!=Status_Ok||itemEnd>=end) {
@@ -6427,14 +6787,14 @@ Status kek_compiler_SelfCWriteCallArgs(struct SelfCExprParser* parser,usize star
     }
     return (status);
 }
-usize kek_compiler_SelfCCountCallArgs(struct SelfCProgram* program,usize fileIndex,usize start,usize end) {
+usize kek_compiler_CCountCallArgs(struct CProgram* program,usize fileIndex,usize start,usize end) {
     if (start>=end) {
         return (0);
     }
     usize count=1;
     usize i=start;
     while (i<end) {
-        usize comma=kek_compiler_SelfCFindTokenAtDepthZero(program,fileIndex,i,end,PunctuationKind_Comma);
+        usize comma=kek_compiler_CFindTokenAtDepthZero(program,fileIndex,i,end,PunctuationKind_Comma);
         if (comma>=end) {
             break;
         }
@@ -6443,15 +6803,15 @@ usize kek_compiler_SelfCCountCallArgs(struct SelfCProgram* program,usize fileInd
     }
     return (count);
 }
-Status kek_compiler_SelfCApplyPostfix(struct SelfCExprParser* parser,struct SelfCExpr* expr) {
+Status kek_compiler_CApplyPostfix(struct CExprParser* parser,struct CExpr* expr) {
     while (parser->pos<parser->end) {
-        if (kek_compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,parser->pos,PunctuationKind_LeftParen)) {
+        if (kek_compiler_CIsPunctuation(parser->program,parser->fileIndex,parser->pos,PunctuationKind_LeftParen)) {
             usize groupStart=parser->pos;
-            usize groupEnd=kek_compiler_SelfCFindMatching(parser->program,parser->fileIndex,groupStart);
+            usize groupEnd=kek_compiler_CFindMatching(parser->program,parser->fileIndex,groupStart);
             struct String funcText=std_string_OwnedStringView(&expr->text);
             if (String_EqualsCString(&funcText,"len")) {
-                struct SelfCExpr arg={0};
-                Status status=kek_compiler_SelfCCompileExpressionRange(parser->program,parser->env,parser->fileIndex,groupStart+1,groupEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&arg);
+                struct CExpr arg={0};
+                Status status=kek_compiler_CCompileExpressionRange(parser->program,parser->env,parser->fileIndex,groupStart+1,groupEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&arg);
                 struct StringBuilder lenBuilder=std_string_StringBuilderNew(parser->program[0].allocator);
                 if (status==Status_Ok) {
                     if (arg.isArray) {
@@ -6485,12 +6845,12 @@ Status kek_compiler_SelfCApplyPostfix(struct SelfCExprParser* parser,struct Self
                     }
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCExprFromBuilder(expr,&lenBuilder);
+                    status=kek_compiler_CExprFromBuilder(expr,&lenBuilder);
                 }
                 StringBuilder_Destroy(&lenBuilder);
-                kek_compiler_SelfCExprDestroy(&arg);
+                kek_compiler_CExprDestroy(&arg);
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCExprSetType(parser->program,expr,std_string_StringFromCString("usize"),std_string_StringFromCString("usize"),0);
+                    status=kek_compiler_CExprSetType(parser->program,expr,std_string_StringFromCString("usize"),std_string_StringFromCString("usize"),0);
                 }
                 parser->pos=groupEnd+1;
                 if (status!=Status_Ok) {
@@ -6504,9 +6864,9 @@ Status kek_compiler_SelfCApplyPostfix(struct SelfCExprParser* parser,struct Self
                 status=StringBuilder_WriteByte(&builder,'(');
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteCallArgs(parser,groupStart+1,groupEnd,&builder);
+                status=kek_compiler_CWriteCallArgs(parser,groupStart+1,groupEnd,&builder);
             }
-            usize argCount=kek_compiler_SelfCCountCallArgs(parser->program,parser->fileIndex,groupStart+1,groupEnd);
+            usize argCount=kek_compiler_CCountCallArgs(parser->program,parser->fileIndex,groupStart+1,groupEnd);
             if (status==Status_Ok&&String_EqualsCString(&funcText,"add")&&argCount==1) {
                 status=StringBuilder_WriteCString(&builder,",0");
             }
@@ -6514,7 +6874,7 @@ Status kek_compiler_SelfCApplyPostfix(struct SelfCExprParser* parser,struct Self
                 status=StringBuilder_WriteByte(&builder,')');
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCExprFromBuilder(expr,&builder);
+                status=kek_compiler_CExprFromBuilder(expr,&builder);
             }
             StringBuilder_Destroy(&builder);
             expr->isLvalue=0;
@@ -6524,11 +6884,11 @@ Status kek_compiler_SelfCApplyPostfix(struct SelfCExprParser* parser,struct Self
             }
             continue;
         }
-        if (kek_compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,parser->pos,PunctuationKind_LeftBracket)) {
+        if (kek_compiler_CIsPunctuation(parser->program,parser->fileIndex,parser->pos,PunctuationKind_LeftBracket)) {
             usize indexStart=parser->pos;
-            usize indexEnd=kek_compiler_SelfCFindMatching(parser->program,parser->fileIndex,indexStart);
-            struct SelfCExpr indexExpr={0};
-            Status status=kek_compiler_SelfCCompileExpressionRange(parser->program,parser->env,parser->fileIndex,indexStart+1,indexEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&indexExpr);
+            usize indexEnd=kek_compiler_CFindMatching(parser->program,parser->fileIndex,indexStart);
+            struct CExpr indexExpr={0};
+            Status status=kek_compiler_CCompileExpressionRange(parser->program,parser->env,parser->fileIndex,indexStart+1,indexEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&indexExpr);
             struct StringBuilder builder=std_string_StringBuilderNew(parser->program[0].allocator);
             if (status==Status_Ok) {
                 status=StringBuilder_WriteString(&builder,std_string_OwnedStringView(&expr->text));
@@ -6543,25 +6903,25 @@ Status kek_compiler_SelfCApplyPostfix(struct SelfCExprParser* parser,struct Self
                 status=StringBuilder_WriteByte(&builder,']');
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCExprFromBuilder(expr,&builder);
+                status=kek_compiler_CExprFromBuilder(expr,&builder);
             }
             StringBuilder_Destroy(&builder);
-            kek_compiler_SelfCExprDestroy(&indexExpr);
+            kek_compiler_CExprDestroy(&indexExpr);
             expr->isLvalue=1;
             expr->isArray=0;
             struct String indexedKey=std_string_OwnedStringView(&expr->typeKey);
             if (indexedKey.len>0&&indexedKey.data[indexedKey.len-1]=='*') {
                 struct OwnedString newKey={0};
-                status=kek_compiler_SelfCCloneString(parser->program,String_Slice(&indexedKey,0,indexedKey.len-1),&newKey);
+                status=kek_compiler_CCloneString(parser->program,String_Slice(&indexedKey,0,indexedKey.len-1),&newKey);
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCReplaceOwned(&expr->typeKey,newKey);
+                    status=kek_compiler_CReplaceOwned(&expr->typeKey,newKey);
                 }
                 struct OwnedString newCType={0};
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCMakeCTypeFromKey(parser->program,std_string_OwnedStringView(&expr->typeKey),&newCType);
+                    status=kek_compiler_CMakeCTypeFromKey(parser->program,std_string_OwnedStringView(&expr->typeKey),&newCType);
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCReplaceOwned(&expr->cType,newCType);
+                    status=kek_compiler_CReplaceOwned(&expr->cType,newCType);
                 }
                 expr->isPointer=0;
             }
@@ -6571,22 +6931,22 @@ Status kek_compiler_SelfCApplyPostfix(struct SelfCExprParser* parser,struct Self
             }
             continue;
         }
-        if (kek_compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,parser->pos,PunctuationKind_Dot)) {
+        if (kek_compiler_CIsPunctuation(parser->program,parser->fileIndex,parser->pos,PunctuationKind_Dot)) {
             usize nameIndex=parser->pos+1;
-            struct String fieldName=kek_compiler_SelfCTokenText(parser->program,parser->fileIndex,nameIndex);
-            if (nameIndex+1<parser->end&&kek_compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,nameIndex+1,PunctuationKind_LeftParen)) {
+            struct String fieldName=kek_compiler_CTokenText(parser->program,parser->fileIndex,nameIndex);
+            if (nameIndex+1<parser->end&&kek_compiler_CIsPunctuation(parser->program,parser->fileIndex,nameIndex+1,PunctuationKind_LeftParen)) {
                 usize groupStart=nameIndex+1;
-                usize groupEnd=kek_compiler_SelfCFindMatching(parser->program,parser->fileIndex,groupStart);
+                usize groupEnd=kek_compiler_CFindMatching(parser->program,parser->fileIndex,groupStart);
                 struct String receiverKey=std_string_OwnedStringView(&expr->typeKey);
                 struct String methodReceiverKey=receiverKey;
                 if (expr->isPointer&&receiverKey.len>0&&receiverKey.data[receiverKey.len-1]=='*') {
                     methodReceiverKey=String_Slice(&receiverKey,0,receiverKey.len-1);
                 }
-                struct SelfCDecl* method=kek_compiler_SelfCFindMethod(parser->program,methodReceiverKey,fieldName,0,0,0);
+                struct CDecl* method=kek_compiler_CFindMethod(parser->program,methodReceiverKey,fieldName,0,0,0);
                 struct StringBuilder builder=std_string_StringBuilderNew(parser->program[0].allocator);
                 Status status=Status_Ok;
                 if (method!=0) {
-                    status=kek_compiler_SelfCWriteDeclCName(parser->program,&builder,method);
+                    status=kek_compiler_CWriteDeclCName(parser->program,&builder,method);
                 } else {
                     status=StringBuilder_WriteString(&builder,methodReceiverKey);
                     if (status==Status_Ok) {
@@ -6610,27 +6970,27 @@ Status kek_compiler_SelfCApplyPostfix(struct SelfCExprParser* parser,struct Self
                         status=StringBuilder_WriteByte(&builder,',');
                     }
                     if (status==Status_Ok) {
-                        status=kek_compiler_SelfCWriteCallArgs(parser,groupStart+1,groupEnd,&builder);
+                        status=kek_compiler_CWriteCallArgs(parser,groupStart+1,groupEnd,&builder);
                     }
                 }
                 if (status==Status_Ok) {
                     status=StringBuilder_WriteByte(&builder,')');
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCExprFromBuilder(expr,&builder);
+                    status=kek_compiler_CExprFromBuilder(expr,&builder);
                 }
                 StringBuilder_Destroy(&builder);
                 expr->isLvalue=0;
                 if (method!=0) {
-                    struct SelfCTypeInfo returnInfo={0};
+                    struct CTypeInfo returnInfo={0};
                     if (status==Status_Ok) {
-                        status=kek_compiler_SelfCRenderTypeInfo(parser->program,method->fileIndex,method->returnStart,method->returnEnd,&returnInfo);
+                        status=kek_compiler_CRenderTypeInfo(parser->program,method->fileIndex,method->returnStart,method->returnEnd,&returnInfo);
                     }
                     if (status==Status_Ok) {
-                        status=kek_compiler_SelfCExprSetType(parser->program,expr,std_string_OwnedStringView(&returnInfo.key),std_string_OwnedStringView(&returnInfo.cType),returnInfo.isPointer);
+                        status=kek_compiler_CExprSetType(parser->program,expr,std_string_OwnedStringView(&returnInfo.key),std_string_OwnedStringView(&returnInfo.cType),returnInfo.isPointer);
                     }
                     if (status==Status_Ok) {
-                        kek_compiler_SelfCTypeInfoDestroy(&returnInfo);
+                        kek_compiler_CTypeInfoDestroy(&returnInfo);
                     }
                 }
                 parser->pos=groupEnd+1;
@@ -6653,18 +7013,18 @@ Status kek_compiler_SelfCApplyPostfix(struct SelfCExprParser* parser,struct Self
                 status=StringBuilder_WriteString(&builder,fieldName);
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCExprFromBuilder(expr,&builder);
+                status=kek_compiler_CExprFromBuilder(expr,&builder);
             }
             StringBuilder_Destroy(&builder);
-            struct SelfCTypeInfo fieldType={0};
+            struct CTypeInfo fieldType={0};
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCFieldType(parser->program,std_string_OwnedStringView(&expr->typeKey),fieldName,&fieldType);
+                status=kek_compiler_CFieldType(parser->program,std_string_OwnedStringView(&expr->typeKey),fieldName,&fieldType);
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCExprSetType(parser->program,expr,std_string_OwnedStringView(&fieldType.key),std_string_OwnedStringView(&fieldType.cType),fieldType.isPointer);
+                status=kek_compiler_CExprSetType(parser->program,expr,std_string_OwnedStringView(&fieldType.key),std_string_OwnedStringView(&fieldType.cType),fieldType.isPointer);
             }
             if (status==Status_Ok) {
-                kek_compiler_SelfCTypeInfoDestroy(&fieldType);
+                kek_compiler_CTypeInfoDestroy(&fieldType);
             }
             expr->isLvalue=1;
             parser->pos=nameIndex+1;
@@ -6677,34 +7037,34 @@ Status kek_compiler_SelfCApplyPostfix(struct SelfCExprParser* parser,struct Self
     }
     return (Status_Ok);
 }
-Status kek_compiler_SelfCCompileUnary(struct SelfCExprParser* parser,struct SelfCExpr* out) {
-    if (parser->pos<parser->end&&(kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,parser->pos,OperatorKind_Minus)||kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,parser->pos,OperatorKind_LogicalNot)||kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,parser->pos,OperatorKind_BitwiseNot)||kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,parser->pos,OperatorKind_BitwiseAnd)||kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,parser->pos,OperatorKind_Multiply))) {
+Status kek_compiler_CCompileUnary(struct CExprParser* parser,struct CExpr* out) {
+    if (parser->pos<parser->end&&(kek_compiler_CIsOperator(parser->program,parser->fileIndex,parser->pos,OperatorKind_Minus)||kek_compiler_CIsOperator(parser->program,parser->fileIndex,parser->pos,OperatorKind_LogicalNot)||kek_compiler_CIsOperator(parser->program,parser->fileIndex,parser->pos,OperatorKind_BitwiseNot)||kek_compiler_CIsOperator(parser->program,parser->fileIndex,parser->pos,OperatorKind_BitwiseAnd)||kek_compiler_CIsOperator(parser->program,parser->fileIndex,parser->pos,OperatorKind_Multiply))) {
         usize op=parser->pos;
         parser->pos+=1;
-        struct SelfCExpr inner={0};
-        Status status=kek_compiler_SelfCCompileUnary(parser,&inner);
+        struct CExpr inner={0};
+        Status status=kek_compiler_CCompileUnary(parser,&inner);
         struct StringBuilder builder=std_string_StringBuilderNew(parser->program[0].allocator);
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteToken(parser->program,&builder,parser->fileIndex,op);
+            status=kek_compiler_CWriteToken(parser->program,&builder,parser->fileIndex,op);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteString(&builder,std_string_OwnedStringView(&inner.text));
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCExprInitEmpty(parser->program,out);
+            status=kek_compiler_CExprInitEmpty(parser->program,out);
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCExprFromBuilder(out,&builder);
+            status=kek_compiler_CExprFromBuilder(out,&builder);
         }
         StringBuilder_Destroy(&builder);
         if (status==Status_Ok) {
-            struct SelfCDecl* unaryMethod=0;
-            if (kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,op,OperatorKind_Minus)) {
-                unaryMethod=kek_compiler_SelfCFindMethod(parser->program,std_string_OwnedStringView(&inner.typeKey),std_string_StringFromCString(""),1,kek_compiler_SelfCOperatorCode(parser->program,parser->fileIndex,op),0);
+            struct CDecl* unaryMethod=0;
+            if (kek_compiler_CIsOperator(parser->program,parser->fileIndex,op,OperatorKind_Minus)) {
+                unaryMethod=kek_compiler_CFindMethod(parser->program,std_string_OwnedStringView(&inner.typeKey),std_string_StringFromCString(""),1,kek_compiler_COperatorCode(parser->program,parser->fileIndex,op),0);
             }
             if (unaryMethod!=0) {
                 struct StringBuilder call=std_string_StringBuilderNew(parser->program[0].allocator);
-                status=kek_compiler_SelfCWriteDeclCName(parser->program,&call,unaryMethod);
+                status=kek_compiler_CWriteDeclCName(parser->program,&call,unaryMethod);
                 if (status==Status_Ok) {
                     status=StringBuilder_WriteCString(&call,"(&");
                 }
@@ -6715,11 +7075,11 @@ Status kek_compiler_SelfCCompileUnary(struct SelfCExprParser* parser,struct Self
                     status=StringBuilder_WriteByte(&call,')');
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCExprFromBuilder(out,&call);
+                    status=kek_compiler_CExprFromBuilder(out,&call);
                 }
                 StringBuilder_Destroy(&call);
             } else {
-                if (kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,op,OperatorKind_BitwiseAnd)) {
+                if (kek_compiler_CIsOperator(parser->program,parser->fileIndex,op,OperatorKind_BitwiseAnd)) {
                     struct StringBuilder key=std_string_StringBuilderNew(parser->program[0].allocator);
                     status=StringBuilder_WriteString(&key,std_string_OwnedStringView(&inner.typeKey));
                     if (status==Status_Ok) {
@@ -6727,7 +7087,7 @@ Status kek_compiler_SelfCCompileUnary(struct SelfCExprParser* parser,struct Self
                     }
                     struct OwnedString keyOwned={0};
                     if (status==Status_Ok) {
-                        status=kek_compiler_SelfCDetachBuilder(&key,&keyOwned);
+                        status=kek_compiler_CDetachBuilder(&key,&keyOwned);
                     }
                     StringBuilder_Destroy(&key);
                     struct OwnedString cOwned={0};
@@ -6738,46 +7098,46 @@ Status kek_compiler_SelfCCompileUnary(struct SelfCExprParser* parser,struct Self
                             status=StringBuilder_WriteByte(&ct,'*');
                         }
                         if (status==Status_Ok) {
-                            status=kek_compiler_SelfCDetachBuilder(&ct,&cOwned);
+                            status=kek_compiler_CDetachBuilder(&ct,&cOwned);
                         }
                         StringBuilder_Destroy(&ct);
                     }
                     if (status==Status_Ok) {
-                        status=kek_compiler_SelfCExprSetType(parser->program,out,std_string_OwnedStringView(&keyOwned),std_string_OwnedStringView(&cOwned),1);
+                        status=kek_compiler_CExprSetType(parser->program,out,std_string_OwnedStringView(&keyOwned),std_string_OwnedStringView(&cOwned),1);
                         std_string_DestroyOwnedString(&keyOwned);
                         std_string_DestroyOwnedString(&cOwned);
                     }
                 } else {
-                    status=kek_compiler_SelfCExprSetType(parser->program,out,std_string_OwnedStringView(&inner.typeKey),std_string_OwnedStringView(&inner.cType),inner.isPointer);
+                    status=kek_compiler_CExprSetType(parser->program,out,std_string_OwnedStringView(&inner.typeKey),std_string_OwnedStringView(&inner.cType),inner.isPointer);
                 }
             }
         }
-        kek_compiler_SelfCExprDestroy(&inner);
+        kek_compiler_CExprDestroy(&inner);
         return (status);
     }
-    Status status=kek_compiler_SelfCCompilePrimary(parser,out);
+    Status status=kek_compiler_CCompilePrimary(parser,out);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCApplyPostfix(parser,out);
+        status=kek_compiler_CApplyPostfix(parser,out);
     }
     return (status);
 }
-Status kek_compiler_SelfCCompileBinaryOperation(struct SelfCExprParser* parser,struct SelfCExpr* left,usize operatorIndex,struct SelfCExpr* right,struct SelfCExpr* out) {
-    Status status=kek_compiler_SelfCExprInitEmpty(parser->program,out);
+Status kek_compiler_CCompileBinaryOperation(struct CExprParser* parser,struct CExpr* left,usize operatorIndex,struct CExpr* right,struct CExpr* out) {
+    Status status=kek_compiler_CExprInitEmpty(parser->program,out);
     if (status!=Status_Ok) {
         return (status);
     }
-    u8 opCode=kek_compiler_SelfCOperatorCode(parser->program,parser->fileIndex,operatorIndex);
-    struct SelfCDecl* method=0;
+    u8 opCode=kek_compiler_COperatorCode(parser->program,parser->fileIndex,operatorIndex);
+    struct CDecl* method=0;
     usize operatorArgCount=1;
-    if (kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_PlusAssign)||kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_MinusAssign)) {
+    if (kek_compiler_CIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_PlusAssign)||kek_compiler_CIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_MinusAssign)) {
         operatorArgCount=1;
     }
     if (opCode!=0&&std_string_OwnedStringView(&left->typeKey).len>0) {
-        method=kek_compiler_SelfCFindMethod(parser->program,std_string_OwnedStringView(&left->typeKey),std_string_StringFromCString(""),1,opCode,operatorArgCount);
+        method=kek_compiler_CFindMethod(parser->program,std_string_OwnedStringView(&left->typeKey),std_string_StringFromCString(""),1,opCode,operatorArgCount);
     }
     if (method!=0) {
         struct StringBuilder builder=std_string_StringBuilderNew(parser->program[0].allocator);
-        status=kek_compiler_SelfCWriteDeclCName(parser->program,&builder,method);
+        status=kek_compiler_CWriteDeclCName(parser->program,&builder,method);
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(&builder,"(&");
         }
@@ -6794,17 +7154,17 @@ Status kek_compiler_SelfCCompileBinaryOperation(struct SelfCExprParser* parser,s
             status=StringBuilder_WriteByte(&builder,')');
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCExprFromBuilder(out,&builder);
+            status=kek_compiler_CExprFromBuilder(out,&builder);
         }
         StringBuilder_Destroy(&builder);
         if (status==Status_Ok) {
-            struct SelfCTypeInfo returnInfo={0};
-            status=kek_compiler_SelfCRenderTypeInfo(parser->program,method->fileIndex,method->returnStart,method->returnEnd,&returnInfo);
+            struct CTypeInfo returnInfo={0};
+            status=kek_compiler_CRenderTypeInfo(parser->program,method->fileIndex,method->returnStart,method->returnEnd,&returnInfo);
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCExprSetType(parser->program,out,std_string_OwnedStringView(&returnInfo.key),std_string_OwnedStringView(&returnInfo.cType),returnInfo.isPointer);
+                status=kek_compiler_CExprSetType(parser->program,out,std_string_OwnedStringView(&returnInfo.key),std_string_OwnedStringView(&returnInfo.cType),returnInfo.isPointer);
             }
             if (status==Status_Ok) {
-                kek_compiler_SelfCTypeInfoDestroy(&returnInfo);
+                kek_compiler_CTypeInfoDestroy(&returnInfo);
             }
         }
         return (status);
@@ -6812,51 +7172,51 @@ Status kek_compiler_SelfCCompileBinaryOperation(struct SelfCExprParser* parser,s
     struct StringBuilder builder=std_string_StringBuilderNew(parser->program[0].allocator);
     status=StringBuilder_WriteString(&builder,std_string_OwnedStringView(&left->text));
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteToken(parser->program,&builder,parser->fileIndex,operatorIndex);
+        status=kek_compiler_CWriteToken(parser->program,&builder,parser->fileIndex,operatorIndex);
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteString(&builder,std_string_OwnedStringView(&right->text));
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCExprFromBuilder(out,&builder);
+        status=kek_compiler_CExprFromBuilder(out,&builder);
     }
     StringBuilder_Destroy(&builder);
     if (status==Status_Ok) {
-        if (kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_Equal)||kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_NotEqual)||kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_Less)||kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_LessEqual)||kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_Greater)||kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_GreaterEqual)||kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_LogicalAnd)||kek_compiler_SelfCIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_LogicalOr)) {
-            status=kek_compiler_SelfCExprSetType(parser->program,out,std_string_StringFromCString("bool"),std_string_StringFromCString("bool"),0);
+        if (kek_compiler_CIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_Equal)||kek_compiler_CIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_NotEqual)||kek_compiler_CIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_Less)||kek_compiler_CIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_LessEqual)||kek_compiler_CIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_Greater)||kek_compiler_CIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_GreaterEqual)||kek_compiler_CIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_LogicalAnd)||kek_compiler_CIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_LogicalOr)) {
+            status=kek_compiler_CExprSetType(parser->program,out,std_string_StringFromCString("bool"),std_string_StringFromCString("bool"),0);
         } else {
-            status=kek_compiler_SelfCExprSetType(parser->program,out,std_string_OwnedStringView(&left->typeKey),std_string_OwnedStringView(&left->cType),left->isPointer);
+            status=kek_compiler_CExprSetType(parser->program,out,std_string_OwnedStringView(&left->typeKey),std_string_OwnedStringView(&left->cType),left->isPointer);
         }
     }
     return (status);
 }
-Status kek_compiler_SelfCCompileExpression(struct SelfCExprParser* parser,u8 minPrecedence,struct SelfCExpr* out) {
-    struct SelfCExpr left={0};
-    Status status=kek_compiler_SelfCCompileUnary(parser,&left);
+Status kek_compiler_CCompileExpression(struct CExprParser* parser,u8 minPrecedence,struct CExpr* out) {
+    struct CExpr left={0};
+    Status status=kek_compiler_CCompileUnary(parser,&left);
     if (status!=Status_Ok) {
         return (status);
     }
     while (parser->pos<parser->end) {
-        u8 precedence=kek_compiler_SelfCOperatorPrecedence(parser->program,parser->fileIndex,parser->pos);
+        u8 precedence=kek_compiler_COperatorPrecedence(parser->program,parser->fileIndex,parser->pos);
         if (precedence==0||precedence<minPrecedence) {
             break;
         }
         usize op=parser->pos;
         parser->pos+=1;
         u8 nextMin=precedence+1;
-        if (kek_compiler_SelfCOperatorRightAssociative(parser->program,parser->fileIndex,op)) {
+        if (kek_compiler_COperatorRightAssociative(parser->program,parser->fileIndex,op)) {
             nextMin=precedence;
         }
-        struct SelfCExpr right={0};
-        status=kek_compiler_SelfCCompileExpression(parser,nextMin,&right);
+        struct CExpr right={0};
+        status=kek_compiler_CCompileExpression(parser,nextMin,&right);
         if (status!=Status_Ok) {
-            kek_compiler_SelfCExprDestroy(&left);
+            kek_compiler_CExprDestroy(&left);
             return (status);
         }
-        struct SelfCExpr combined={0};
-        status=kek_compiler_SelfCCompileBinaryOperation(parser,&left,op,&right,&combined);
-        kek_compiler_SelfCExprDestroy(&left);
-        kek_compiler_SelfCExprDestroy(&right);
+        struct CExpr combined={0};
+        status=kek_compiler_CCompileBinaryOperation(parser,&left,op,&right,&combined);
+        kek_compiler_CExprDestroy(&left);
+        kek_compiler_CExprDestroy(&right);
         if (status!=Status_Ok) {
             return (status);
         }
@@ -6865,7 +7225,7 @@ Status kek_compiler_SelfCCompileExpression(struct SelfCExprParser* parser,u8 min
     out[0]=left;
     return (Status_Ok);
 }
-Status kek_compiler_SelfCWriteIndent(struct StringBuilder* out,usize indent) {
+Status kek_compiler_CWriteIndent(struct StringBuilder* out,usize indent) {
     for (usize i=0;i<indent;i++) {
         Status status=StringBuilder_WriteCString(out,"    ");
         if (status!=Status_Ok) {
@@ -6874,56 +7234,56 @@ Status kek_compiler_SelfCWriteIndent(struct StringBuilder* out,usize indent) {
     }
     return (Status_Ok);
 }
-usize kek_compiler_SelfCFindStatementSemicolon(struct SelfCProgram* program,usize fileIndex,usize start,usize end) {
+usize kek_compiler_CFindStatementSemicolon(struct CProgram* program,usize fileIndex,usize start,usize end) {
     usize i=start;
     while (i<end) {
-        if (kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftParen)||kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBrace)||kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBracket)) {
-            i=kek_compiler_SelfCSkipDelimited(program,fileIndex,i);
+        if (kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_LeftParen)||kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBrace)||kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBracket)) {
+            i=kek_compiler_CSkipDelimited(program,fileIndex,i);
             continue;
         }
-        if (kek_compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_Semicolon)) {
+        if (kek_compiler_CIsPunctuation(program,fileIndex,i,PunctuationKind_Semicolon)) {
             return (i);
         }
         i+=1;
     }
     return (end);
 }
-Status kek_compiler_SelfCArrayLenString(struct SelfCProgram* program,usize fileIndex,usize start,usize end,struct OwnedString* out) {
+Status kek_compiler_CArrayLenString(struct CProgram* program,usize fileIndex,usize start,usize end,struct OwnedString* out) {
     struct StringBuilder builder=std_string_StringBuilderNew(program->allocator);
-    Status status=kek_compiler_SelfCWriteTokenRangeRaw(program,&builder,fileIndex,start,end);
+    Status status=kek_compiler_CWriteTokenRangeRaw(program,&builder,fileIndex,start,end);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCDetachBuilder(&builder,out);
+        status=kek_compiler_CDetachBuilder(&builder,out);
     }
     StringBuilder_Destroy(&builder);
     return (status);
 }
-bool kek_compiler_SelfCFieldDefaultIsZero(struct SelfCProgram* program,struct SelfCField* field) {
+bool kek_compiler_CFieldDefaultIsZero(struct CProgram* program,struct CField* field) {
     if (!field->hasDefault) {
         return (1);
     }
     if (field->defaultEnd!=field->defaultStart+1) {
         return (0);
     }
-    if (kek_compiler_SelfCIsTokenKind(program,field->fileIndex,field->defaultStart,TokenKind_Number)&&kek_compiler_SelfCTokenEquals(program,field->fileIndex,field->defaultStart,"0")) {
+    if (kek_compiler_CIsTokenKind(program,field->fileIndex,field->defaultStart,TokenKind_Number)&&kek_compiler_CTokenEquals(program,field->fileIndex,field->defaultStart,"0")) {
         return (1);
     }
-    if (kek_compiler_SelfCIsIdentifierText(program,field->fileIndex,field->defaultStart,"false")) {
+    if (kek_compiler_CIsIdentifierText(program,field->fileIndex,field->defaultStart,"false")) {
         return (1);
     }
     return (0);
 }
-Status kek_compiler_SelfCWriteDefaultInitializer(struct SelfCProgram* program,struct StringBuilder* out,struct String typeKey) {
-    struct SelfCDecl* decl=kek_compiler_SelfCFindFieldDecl(program,typeKey);
-    if (decl!=0&&decl->kind==SelfCDeclKind_Union) {
+Status kek_compiler_CWriteDefaultInitializer(struct CProgram* program,struct StringBuilder* out,struct String typeKey) {
+    struct CDecl* decl=kek_compiler_CFindFieldDecl(program,typeKey);
+    if (decl!=0&&decl->kind==CDeclKind_Union) {
         return (StringBuilder_WriteCString(out,"{0}"));
     }
-    if (decl==0||decl->kind!=SelfCDeclKind_Struct) {
+    if (decl==0||decl->kind!=CDeclKind_Struct) {
         return (StringBuilder_WriteCString(out,"0"));
     }
     bool hasNonZeroDefault=0;
     for (usize i=0;i<decl->fieldCount;i++) {
-        struct SelfCField* field=&program->fields[decl->firstField+i];
-        if (field->hasDefault&&!kek_compiler_SelfCFieldDefaultIsZero(program,field)) {
+        struct CField* field=&program->fields.data[decl->firstField+i];
+        if (field->hasDefault&&!kek_compiler_CFieldDefaultIsZero(program,field)) {
             hasNonZeroDefault=1;
             break;
         }
@@ -6934,8 +7294,8 @@ Status kek_compiler_SelfCWriteDefaultInitializer(struct SelfCProgram* program,st
     Status status=StringBuilder_WriteByte(out,'{');
     bool first=1;
     for (usize i=0;i<decl->fieldCount;i++) {
-        struct SelfCField* field=&program->fields[decl->firstField+i];
-        if (!field->hasDefault||kek_compiler_SelfCFieldDefaultIsZero(program,field)) {
+        struct CField* field=&program->fields.data[decl->firstField+i];
+        if (!field->hasDefault||kek_compiler_CFieldDefaultIsZero(program,field)) {
             continue;
         }
         if (!first&&status==Status_Ok) {
@@ -6945,24 +7305,24 @@ Status kek_compiler_SelfCWriteDefaultInitializer(struct SelfCProgram* program,st
             status=StringBuilder_WriteByte(out,'.');
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteToken(program,out,field->fileIndex,field->nameIndex);
+            status=kek_compiler_CWriteToken(program,out,field->fileIndex,field->nameIndex);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteByte(out,'=');
         }
-        struct SelfCExpr defaultExpr={0};
-        struct SelfCEnv emptyEnv={0};
-        kek_compiler_SelfCEnvInit(program,&emptyEnv);
+        struct CExpr defaultExpr={0};
+        struct CEnv emptyEnv={0};
+        kek_compiler_CEnvInit(program,&emptyEnv);
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCCompileExpressionRange(program,&emptyEnv,field->fileIndex,field->defaultStart,field->defaultEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&defaultExpr);
+            status=kek_compiler_CCompileExpressionRange(program,&emptyEnv,field->fileIndex,field->defaultStart,field->defaultEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&defaultExpr);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteString(out,std_string_OwnedStringView(&defaultExpr.text));
         }
         if (status==Status_Ok) {
-            kek_compiler_SelfCExprDestroy(&defaultExpr);
+            kek_compiler_CExprDestroy(&defaultExpr);
         }
-        kek_compiler_SelfCEnvDestroy(&emptyEnv);
+        kek_compiler_CEnvDestroy(&emptyEnv);
         first=0;
         if (status!=Status_Ok) {
             return (status);
@@ -6973,8 +7333,8 @@ Status kek_compiler_SelfCWriteDefaultInitializer(struct SelfCProgram* program,st
     }
     return (status);
 }
-Status kek_compiler_SelfCWriteVarDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize semicolon,usize indent) {
-    usize colon=kek_compiler_SelfCFindTopLevelColon(program,fileIndex,start,semicolon);
+Status kek_compiler_CWriteVarDecl(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize semicolon,usize indent) {
+    usize colon=kek_compiler_CFindTopLevelColon(program,fileIndex,start,semicolon);
     if (colon>=semicolon) {
         return (Status_Invalid);
     }
@@ -6983,13 +7343,13 @@ Status kek_compiler_SelfCWriteVarDecl(struct SelfCProgram* program,struct String
     bool isArray=0;
     usize arrayStart=semicolon;
     usize arrayEnd=semicolon;
-    if (afterName<semicolon&&kek_compiler_SelfCIsPunctuation(program,fileIndex,afterName,PunctuationKind_LeftBracket)) {
+    if (afterName<semicolon&&kek_compiler_CIsPunctuation(program,fileIndex,afterName,PunctuationKind_LeftBracket)) {
         isArray=1;
         arrayStart=afterName+1;
-        arrayEnd=kek_compiler_SelfCFindMatching(program,fileIndex,afterName);
+        arrayEnd=kek_compiler_CFindMatching(program,fileIndex,afterName);
         afterName=arrayEnd+1;
-        while (afterName<semicolon&&kek_compiler_SelfCIsPunctuation(program,fileIndex,afterName,PunctuationKind_LeftBracket)) {
-            afterName=kek_compiler_SelfCFindMatching(program,fileIndex,afterName)+1;
+        while (afterName<semicolon&&kek_compiler_CIsPunctuation(program,fileIndex,afterName,PunctuationKind_LeftBracket)) {
+            afterName=kek_compiler_CFindMatching(program,fileIndex,afterName)+1;
         }
     }
     usize arraySuffixStart=nameIndex+1;
@@ -6997,18 +7357,18 @@ Status kek_compiler_SelfCWriteVarDecl(struct SelfCProgram* program,struct String
     usize initStart=semicolon;
     bool hasInit=0;
     for (usize i=afterName;i<semicolon;i++) {
-        if (kek_compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Assign)) {
+        if (kek_compiler_CIsOperator(program,fileIndex,i,OperatorKind_Assign)) {
             initStart=i+1;
             hasInit=1;
             break;
         }
     }
-    struct SelfCTypeInfo typeInfo={0};
-    Status status=kek_compiler_SelfCRenderTypeInfo(program,fileIndex,start,colon,&typeInfo);
+    struct CTypeInfo typeInfo={0};
+    Status status=kek_compiler_CRenderTypeInfo(program,fileIndex,start,colon,&typeInfo);
     if (status!=Status_Ok) {
         return (status);
     }
-    status=kek_compiler_SelfCWriteIndent(out,indent);
+    status=kek_compiler_CWriteIndent(out,indent);
     if (status==Status_Ok) {
         status=StringBuilder_WriteString(out,std_string_OwnedStringView(&typeInfo.cType));
     }
@@ -7016,25 +7376,25 @@ Status kek_compiler_SelfCWriteVarDecl(struct SelfCProgram* program,struct String
         status=StringBuilder_WriteByte(out,' ');
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteToken(program,out,fileIndex,nameIndex);
+        status=kek_compiler_CWriteToken(program,out,fileIndex,nameIndex);
     }
     struct OwnedString arrayLen={0};
     if (isArray) {
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteTokenRangeRaw(program,out,fileIndex,arraySuffixStart,arraySuffixEnd);
+            status=kek_compiler_CWriteTokenRangeRaw(program,out,fileIndex,arraySuffixStart,arraySuffixEnd);
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCArrayLenString(program,fileIndex,arrayStart,arrayEnd,&arrayLen);
+            status=kek_compiler_CArrayLenString(program,fileIndex,arrayStart,arrayEnd,&arrayLen);
         }
     } else {
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCMakeOwnedEmpty(program,&arrayLen);
+            status=kek_compiler_CMakeOwnedEmpty(program,&arrayLen);
         }
     }
     if (hasInit) {
-        struct SelfCExpr init={0};
+        struct CExpr init={0};
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCCompileExpressionRange(program,env,fileIndex,initStart,semicolon,std_string_OwnedStringView(&typeInfo.key),std_string_OwnedStringView(&typeInfo.cType),isArray,&init);
+            status=kek_compiler_CCompileExpressionRange(program,env,fileIndex,initStart,semicolon,std_string_OwnedStringView(&typeInfo.key),std_string_OwnedStringView(&typeInfo.cType),isArray,&init);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteByte(out,'=');
@@ -7043,7 +7403,7 @@ Status kek_compiler_SelfCWriteVarDecl(struct SelfCProgram* program,struct String
             status=StringBuilder_WriteString(out,std_string_OwnedStringView(&init.text));
         }
         if (status==Status_Ok) {
-            kek_compiler_SelfCExprDestroy(&init);
+            kek_compiler_CExprDestroy(&init);
         }
     } else {
         if (!isArray) {
@@ -7051,7 +7411,7 @@ Status kek_compiler_SelfCWriteVarDecl(struct SelfCProgram* program,struct String
                 status=StringBuilder_WriteByte(out,'=');
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteDefaultInitializer(program,out,std_string_OwnedStringView(&typeInfo.key));
+                status=kek_compiler_CWriteDefaultInitializer(program,out,std_string_OwnedStringView(&typeInfo.key));
             }
         }
     }
@@ -7059,22 +7419,22 @@ Status kek_compiler_SelfCWriteVarDecl(struct SelfCProgram* program,struct String
         status=StringBuilder_WriteCString(out,";\n");
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCEnvAdd(program,env,kek_compiler_SelfCTokenText(program,fileIndex,nameIndex),std_string_OwnedStringView(&typeInfo.key),std_string_OwnedStringView(&typeInfo.cType),isArray,std_string_OwnedStringView(&arrayLen),typeInfo.isPointer);
+        status=kek_compiler_CEnvAdd(program,env,kek_compiler_CTokenText(program,fileIndex,nameIndex),std_string_OwnedStringView(&typeInfo.key),std_string_OwnedStringView(&typeInfo.cType),isArray,std_string_OwnedStringView(&arrayLen),typeInfo.isPointer);
     }
     std_string_DestroyOwnedString(&arrayLen);
-    kek_compiler_SelfCTypeInfoDestroy(&typeInfo);
+    kek_compiler_CTypeInfoDestroy(&typeInfo);
     return (status);
 }
-Status kek_compiler_SelfCWriteExprStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize semicolon,usize indent) {
+Status kek_compiler_CWriteExprStatement(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize semicolon,usize indent) {
     if (start>=semicolon) {
         return (Status_Ok);
     }
-    if (start+2==semicolon&&kek_compiler_SelfCIsOperator(program,fileIndex,start+1,OperatorKind_Plus)&&kek_compiler_SelfCIsOperator(program,fileIndex,start+2,OperatorKind_Plus)) {
+    if (start+2==semicolon&&kek_compiler_CIsOperator(program,fileIndex,start+1,OperatorKind_Plus)&&kek_compiler_CIsOperator(program,fileIndex,start+2,OperatorKind_Plus)) {
     }
-    struct SelfCExpr expr={0};
-    Status status=kek_compiler_SelfCCompileExpressionRange(program,env,fileIndex,start,semicolon,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&expr);
+    struct CExpr expr={0};
+    Status status=kek_compiler_CCompileExpressionRange(program,env,fileIndex,start,semicolon,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&expr);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteIndent(out,indent);
+        status=kek_compiler_CWriteIndent(out,indent);
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteString(out,std_string_OwnedStringView(&expr.text));
@@ -7082,18 +7442,18 @@ Status kek_compiler_SelfCWriteExprStatement(struct SelfCProgram* program,struct 
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,";\n");
     }
-    kek_compiler_SelfCExprDestroy(&expr);
+    kek_compiler_CExprDestroy(&expr);
     return (status);
 }
-Status kek_compiler_SelfCWriteIfStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent) {
-    usize groupStart=kek_compiler_SelfCFindNextGroup(program,fileIndex,start,kek_compiler_SelfCFileTokenCount(program,fileIndex));
-    usize groupEnd=kek_compiler_SelfCFindMatching(program,fileIndex,groupStart);
+Status kek_compiler_CWriteIfStatement(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize* outNext,usize indent) {
+    usize groupStart=kek_compiler_CFindNextGroup(program,fileIndex,start,kek_compiler_CFileTokenCount(program,fileIndex));
+    usize groupEnd=kek_compiler_CFindMatching(program,fileIndex,groupStart);
     usize blockStart=groupEnd+1;
     usize blockEnd=blockStart;
-    struct SelfCExpr cond={0};
-    Status status=kek_compiler_SelfCCompileExpressionRange(program,env,fileIndex,groupStart+1,groupEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&cond);
+    struct CExpr cond={0};
+    Status status=kek_compiler_CCompileExpressionRange(program,env,fileIndex,groupStart+1,groupEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&cond);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteIndent(out,indent);
+        status=kek_compiler_CWriteIndent(out,indent);
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,"if (");
@@ -7104,53 +7464,53 @@ Status kek_compiler_SelfCWriteIfStatement(struct SelfCProgram* program,struct St
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,") ");
     }
-    kek_compiler_SelfCExprDestroy(&cond);
-    if (blockStart<kek_compiler_SelfCFileTokenCount(program,fileIndex)&&kek_compiler_SelfCIsPunctuation(program,fileIndex,blockStart,PunctuationKind_LeftBrace)) {
-        blockEnd=kek_compiler_SelfCFindMatching(program,fileIndex,blockStart);
+    kek_compiler_CExprDestroy(&cond);
+    if (blockStart<kek_compiler_CFileTokenCount(program,fileIndex)&&kek_compiler_CIsPunctuation(program,fileIndex,blockStart,PunctuationKind_LeftBrace)) {
+        blockEnd=kek_compiler_CFindMatching(program,fileIndex,blockStart);
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(out,"{\n");
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteBlock(program,out,env,fileIndex,blockStart+1,blockEnd,indent+1);
+            status=kek_compiler_CWriteBlock(program,out,env,fileIndex,blockStart+1,blockEnd,indent+1);
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteIndent(out,indent);
+            status=kek_compiler_CWriteIndent(out,indent);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(out,"}");
         }
         outNext[0]=blockEnd+1;
     } else {
-        usize semicolon=kek_compiler_SelfCFindStatementSemicolon(program,fileIndex,blockStart,kek_compiler_SelfCFileTokenCount(program,fileIndex));
+        usize semicolon=kek_compiler_CFindStatementSemicolon(program,fileIndex,blockStart,kek_compiler_CFileTokenCount(program,fileIndex));
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(out,"{\n");
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteExprStatement(program,out,env,fileIndex,blockStart,semicolon,indent+1);
+            status=kek_compiler_CWriteExprStatement(program,out,env,fileIndex,blockStart,semicolon,indent+1);
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteIndent(out,indent);
+            status=kek_compiler_CWriteIndent(out,indent);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(out,"}");
         }
         outNext[0]=semicolon+1;
     }
-    if (outNext[0]<kek_compiler_SelfCFileTokenCount(program,fileIndex)&&kek_compiler_SelfCIsKeyword(program,fileIndex,outNext[0],KeywordKind_Else)) {
+    if (outNext[0]<kek_compiler_CFileTokenCount(program,fileIndex)&&kek_compiler_CIsKeyword(program,fileIndex,outNext[0],KeywordKind_Else)) {
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(out," else ");
         }
         usize elseStart=outNext[0]+1;
-        if (elseStart<kek_compiler_SelfCFileTokenCount(program,fileIndex)&&kek_compiler_SelfCIsPunctuation(program,fileIndex,elseStart,PunctuationKind_LeftBrace)) {
-            usize elseEnd=kek_compiler_SelfCFindMatching(program,fileIndex,elseStart);
+        if (elseStart<kek_compiler_CFileTokenCount(program,fileIndex)&&kek_compiler_CIsPunctuation(program,fileIndex,elseStart,PunctuationKind_LeftBrace)) {
+            usize elseEnd=kek_compiler_CFindMatching(program,fileIndex,elseStart);
             if (status==Status_Ok) {
                 status=StringBuilder_WriteCString(out,"{\n");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteBlock(program,out,env,fileIndex,elseStart+1,elseEnd,indent+1);
+                status=kek_compiler_CWriteBlock(program,out,env,fileIndex,elseStart+1,elseEnd,indent+1);
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteIndent(out,indent);
+                status=kek_compiler_CWriteIndent(out,indent);
             }
             if (status==Status_Ok) {
                 status=StringBuilder_WriteCString(out,"}");
@@ -7160,12 +7520,12 @@ Status kek_compiler_SelfCWriteIfStatement(struct SelfCProgram* program,struct St
             if (status==Status_Ok) {
                 status=StringBuilder_WriteCString(out,"{\n");
             }
-            usize semicolon=kek_compiler_SelfCFindStatementSemicolon(program,fileIndex,elseStart,kek_compiler_SelfCFileTokenCount(program,fileIndex));
+            usize semicolon=kek_compiler_CFindStatementSemicolon(program,fileIndex,elseStart,kek_compiler_CFileTokenCount(program,fileIndex));
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteExprStatement(program,out,env,fileIndex,elseStart,semicolon,indent+1);
+                status=kek_compiler_CWriteExprStatement(program,out,env,fileIndex,elseStart,semicolon,indent+1);
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteIndent(out,indent);
+                status=kek_compiler_CWriteIndent(out,indent);
             }
             if (status==Status_Ok) {
                 status=StringBuilder_WriteCString(out,"}");
@@ -7178,15 +7538,15 @@ Status kek_compiler_SelfCWriteIfStatement(struct SelfCProgram* program,struct St
     }
     return (status);
 }
-Status kek_compiler_SelfCWriteWhileStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent) {
-    usize groupStart=kek_compiler_SelfCFindNextGroup(program,fileIndex,start,kek_compiler_SelfCFileTokenCount(program,fileIndex));
-    usize groupEnd=kek_compiler_SelfCFindMatching(program,fileIndex,groupStart);
+Status kek_compiler_CWriteWhileStatement(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize* outNext,usize indent) {
+    usize groupStart=kek_compiler_CFindNextGroup(program,fileIndex,start,kek_compiler_CFileTokenCount(program,fileIndex));
+    usize groupEnd=kek_compiler_CFindMatching(program,fileIndex,groupStart);
     usize blockStart=groupEnd+1;
-    usize blockEnd=kek_compiler_SelfCFindMatching(program,fileIndex,blockStart);
-    struct SelfCExpr cond={0};
-    Status status=kek_compiler_SelfCCompileExpressionRange(program,env,fileIndex,groupStart+1,groupEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&cond);
+    usize blockEnd=kek_compiler_CFindMatching(program,fileIndex,blockStart);
+    struct CExpr cond={0};
+    Status status=kek_compiler_CCompileExpressionRange(program,env,fileIndex,groupStart+1,groupEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&cond);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteIndent(out,indent);
+        status=kek_compiler_CWriteIndent(out,indent);
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,"while (");
@@ -7197,12 +7557,12 @@ Status kek_compiler_SelfCWriteWhileStatement(struct SelfCProgram* program,struct
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,") {\n");
     }
-    kek_compiler_SelfCExprDestroy(&cond);
+    kek_compiler_CExprDestroy(&cond);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteBlock(program,out,env,fileIndex,blockStart+1,blockEnd,indent+1);
+        status=kek_compiler_CWriteBlock(program,out,env,fileIndex,blockStart+1,blockEnd,indent+1);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteIndent(out,indent);
+        status=kek_compiler_CWriteIndent(out,indent);
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,"}\n");
@@ -7210,25 +7570,25 @@ Status kek_compiler_SelfCWriteWhileStatement(struct SelfCProgram* program,struct
     outNext[0]=blockEnd+1;
     return (status);
 }
-Status kek_compiler_SelfCWriteDoStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent) {
+Status kek_compiler_CWriteDoStatement(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize* outNext,usize indent) {
     usize blockStart=start+1;
-    usize blockEnd=kek_compiler_SelfCFindMatching(program,fileIndex,blockStart);
+    usize blockEnd=kek_compiler_CFindMatching(program,fileIndex,blockStart);
     usize whileIndex=blockEnd+1;
-    usize groupStart=kek_compiler_SelfCFindNextGroup(program,fileIndex,whileIndex,kek_compiler_SelfCFileTokenCount(program,fileIndex));
-    usize groupEnd=kek_compiler_SelfCFindMatching(program,fileIndex,groupStart);
-    struct SelfCExpr cond={0};
-    Status status=kek_compiler_SelfCCompileExpressionRange(program,env,fileIndex,groupStart+1,groupEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&cond);
+    usize groupStart=kek_compiler_CFindNextGroup(program,fileIndex,whileIndex,kek_compiler_CFileTokenCount(program,fileIndex));
+    usize groupEnd=kek_compiler_CFindMatching(program,fileIndex,groupStart);
+    struct CExpr cond={0};
+    Status status=kek_compiler_CCompileExpressionRange(program,env,fileIndex,groupStart+1,groupEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&cond);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteIndent(out,indent);
+        status=kek_compiler_CWriteIndent(out,indent);
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,"do {\n");
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteBlock(program,out,env,fileIndex,blockStart+1,blockEnd,indent+1);
+        status=kek_compiler_CWriteBlock(program,out,env,fileIndex,blockStart+1,blockEnd,indent+1);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteIndent(out,indent);
+        status=kek_compiler_CWriteIndent(out,indent);
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,"} while (");
@@ -7239,26 +7599,26 @@ Status kek_compiler_SelfCWriteDoStatement(struct SelfCProgram* program,struct St
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,");\n");
     }
-    kek_compiler_SelfCExprDestroy(&cond);
+    kek_compiler_CExprDestroy(&cond);
     outNext[0]=groupEnd+2;
     return (status);
 }
-Status kek_compiler_SelfCWriteForStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent) {
-    usize groupStart=kek_compiler_SelfCFindNextGroup(program,fileIndex,start,kek_compiler_SelfCFileTokenCount(program,fileIndex));
-    usize groupEnd=kek_compiler_SelfCFindMatching(program,fileIndex,groupStart);
-    usize firstSemi=kek_compiler_SelfCFindTokenAtDepthZero(program,fileIndex,groupStart+1,groupEnd,PunctuationKind_Semicolon);
-    usize secondSemi=kek_compiler_SelfCFindTokenAtDepthZero(program,fileIndex,firstSemi+1,groupEnd,PunctuationKind_Semicolon);
+Status kek_compiler_CWriteForStatement(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize* outNext,usize indent) {
+    usize groupStart=kek_compiler_CFindNextGroup(program,fileIndex,start,kek_compiler_CFileTokenCount(program,fileIndex));
+    usize groupEnd=kek_compiler_CFindMatching(program,fileIndex,groupStart);
+    usize firstSemi=kek_compiler_CFindTokenAtDepthZero(program,fileIndex,groupStart+1,groupEnd,PunctuationKind_Semicolon);
+    usize secondSemi=kek_compiler_CFindTokenAtDepthZero(program,fileIndex,firstSemi+1,groupEnd,PunctuationKind_Semicolon);
     usize blockStart=groupEnd+1;
-    usize blockEnd=kek_compiler_SelfCFindMatching(program,fileIndex,blockStart);
-    Status status=kek_compiler_SelfCWriteIndent(out,indent);
+    usize blockEnd=kek_compiler_CFindMatching(program,fileIndex,blockStart);
+    Status status=kek_compiler_CWriteIndent(out,indent);
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,"for (");
     }
-    usize colon=kek_compiler_SelfCFindTopLevelColon(program,fileIndex,groupStart+1,firstSemi);
+    usize colon=kek_compiler_CFindTopLevelColon(program,fileIndex,groupStart+1,firstSemi);
     if (colon<firstSemi) {
-        struct SelfCTypeInfo typeInfo={0};
+        struct CTypeInfo typeInfo={0};
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCRenderTypeInfo(program,fileIndex,groupStart+1,colon,&typeInfo);
+            status=kek_compiler_CRenderTypeInfo(program,fileIndex,groupStart+1,colon,&typeInfo);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteString(out,std_string_OwnedStringView(&typeInfo.cType));
@@ -7267,19 +7627,19 @@ Status kek_compiler_SelfCWriteForStatement(struct SelfCProgram* program,struct S
             status=StringBuilder_WriteByte(out,' ');
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteToken(program,out,fileIndex,colon+1);
+            status=kek_compiler_CWriteToken(program,out,fileIndex,colon+1);
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCEnvAdd(program,env,kek_compiler_SelfCTokenText(program,fileIndex,colon+1),std_string_OwnedStringView(&typeInfo.key),std_string_OwnedStringView(&typeInfo.cType),0,std_string_StringFromCString(""),typeInfo.isPointer);
+            status=kek_compiler_CEnvAdd(program,env,kek_compiler_CTokenText(program,fileIndex,colon+1),std_string_OwnedStringView(&typeInfo.key),std_string_OwnedStringView(&typeInfo.cType),0,std_string_StringFromCString(""),typeInfo.isPointer);
         }
         usize eq=colon+2;
-        while (eq<firstSemi&&!kek_compiler_SelfCIsOperator(program,fileIndex,eq,OperatorKind_Assign)) {
+        while (eq<firstSemi&&!kek_compiler_CIsOperator(program,fileIndex,eq,OperatorKind_Assign)) {
             eq+=1;
         }
         if (eq<firstSemi) {
-            struct SelfCExpr init={0};
+            struct CExpr init={0};
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCCompileExpressionRange(program,env,fileIndex,eq+1,firstSemi,std_string_OwnedStringView(&typeInfo.key),std_string_OwnedStringView(&typeInfo.cType),0,&init);
+                status=kek_compiler_CCompileExpressionRange(program,env,fileIndex,eq+1,firstSemi,std_string_OwnedStringView(&typeInfo.key),std_string_OwnedStringView(&typeInfo.cType),0,&init);
             }
             if (status==Status_Ok) {
                 status=StringBuilder_WriteByte(out,'=');
@@ -7288,28 +7648,28 @@ Status kek_compiler_SelfCWriteForStatement(struct SelfCProgram* program,struct S
                 status=StringBuilder_WriteString(out,std_string_OwnedStringView(&init.text));
             }
             if (status==Status_Ok) {
-                kek_compiler_SelfCExprDestroy(&init);
+                kek_compiler_CExprDestroy(&init);
             }
         }
-        kek_compiler_SelfCTypeInfoDestroy(&typeInfo);
+        kek_compiler_CTypeInfoDestroy(&typeInfo);
     } else {
-        struct SelfCExpr initExpr={0};
+        struct CExpr initExpr={0};
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCCompileExpressionRange(program,env,fileIndex,groupStart+1,firstSemi,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&initExpr);
+            status=kek_compiler_CCompileExpressionRange(program,env,fileIndex,groupStart+1,firstSemi,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&initExpr);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteString(out,std_string_OwnedStringView(&initExpr.text));
         }
         if (status==Status_Ok) {
-            kek_compiler_SelfCExprDestroy(&initExpr);
+            kek_compiler_CExprDestroy(&initExpr);
         }
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteByte(out,';');
     }
-    struct SelfCExpr cond={0};
+    struct CExpr cond={0};
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCCompileExpressionRange(program,env,fileIndex,firstSemi+1,secondSemi,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&cond);
+        status=kek_compiler_CCompileExpressionRange(program,env,fileIndex,firstSemi+1,secondSemi,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&cond);
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteString(out,std_string_OwnedStringView(&cond.text));
@@ -7318,32 +7678,32 @@ Status kek_compiler_SelfCWriteForStatement(struct SelfCProgram* program,struct S
         status=StringBuilder_WriteByte(out,';');
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteTokenRangeRaw(program,out,fileIndex,secondSemi+1,groupEnd);
+        status=kek_compiler_CWriteTokenRangeRaw(program,out,fileIndex,secondSemi+1,groupEnd);
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,") {\n");
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteBlock(program,out,env,fileIndex,blockStart+1,blockEnd,indent+1);
+        status=kek_compiler_CWriteBlock(program,out,env,fileIndex,blockStart+1,blockEnd,indent+1);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteIndent(out,indent);
+        status=kek_compiler_CWriteIndent(out,indent);
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,"}\n");
     }
-    kek_compiler_SelfCExprDestroy(&cond);
+    kek_compiler_CExprDestroy(&cond);
     outNext[0]=blockEnd+1;
     return (status);
 }
-Status kek_compiler_SelfCWriteEachStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent) {
+Status kek_compiler_CWriteEachStatement(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize* outNext,usize indent) {
     usize genericStart=start+1;
-    usize genericEnd=kek_compiler_SelfCFindMatching(program,fileIndex,genericStart);
+    usize genericEnd=kek_compiler_CFindMatching(program,fileIndex,genericStart);
     usize groupStart=genericEnd+1;
-    usize groupEnd=kek_compiler_SelfCFindMatching(program,fileIndex,groupStart);
+    usize groupEnd=kek_compiler_CFindMatching(program,fileIndex,groupStart);
     usize blockStart=groupEnd+1;
-    usize blockEnd=kek_compiler_SelfCFindMatching(program,fileIndex,blockStart);
-    usize comma=kek_compiler_SelfCFindTokenAtDepthZero(program,fileIndex,genericStart+1,genericEnd,PunctuationKind_Comma);
+    usize blockEnd=kek_compiler_CFindMatching(program,fileIndex,blockStart);
+    usize comma=kek_compiler_CFindTokenAtDepthZero(program,fileIndex,genericStart+1,genericEnd,PunctuationKind_Comma);
     usize valueTypeStart=genericStart+1;
     usize valueTypeEnd=genericEnd;
     usize valueNameIndex=genericStart+1;
@@ -7353,56 +7713,56 @@ Status kek_compiler_SelfCWriteEachStatement(struct SelfCProgram* program,struct 
     usize indexNameIndex=genericStart+1;
     if (comma<genericEnd) {
         hasIndex=1;
-        usize indexColon=kek_compiler_SelfCFindTopLevelColon(program,fileIndex,genericStart+1,comma);
+        usize indexColon=kek_compiler_CFindTopLevelColon(program,fileIndex,genericStart+1,comma);
         indexTypeStart=genericStart+1;
         indexTypeEnd=indexColon;
         indexNameIndex=indexColon+1;
-        usize valueColon=kek_compiler_SelfCFindTopLevelColon(program,fileIndex,comma+1,genericEnd);
+        usize valueColon=kek_compiler_CFindTopLevelColon(program,fileIndex,comma+1,genericEnd);
         valueTypeStart=comma+1;
         valueTypeEnd=valueColon;
         valueNameIndex=valueColon+1;
     } else {
-        usize valueColon=kek_compiler_SelfCFindTopLevelColon(program,fileIndex,genericStart+1,genericEnd);
+        usize valueColon=kek_compiler_CFindTopLevelColon(program,fileIndex,genericStart+1,genericEnd);
         valueTypeStart=genericStart+1;
         valueTypeEnd=valueColon;
         valueNameIndex=valueColon+1;
     }
-    struct SelfCTypeInfo valueType={0};
-    Status status=kek_compiler_SelfCRenderTypeInfo(program,fileIndex,valueTypeStart,valueTypeEnd,&valueType);
+    struct CTypeInfo valueType={0};
+    Status status=kek_compiler_CRenderTypeInfo(program,fileIndex,valueTypeStart,valueTypeEnd,&valueType);
     if (status!=Status_Ok) {
         return (status);
     }
-    if (groupStart+2<groupEnd&&kek_compiler_SelfCIsIdentifierText(program,fileIndex,groupStart+1,"range")) {
+    if (groupStart+2<groupEnd&&kek_compiler_CIsIdentifierText(program,fileIndex,groupStart+1,"range")) {
         usize rangeGroup=groupStart+4;
-        while (rangeGroup<groupEnd&&!kek_compiler_SelfCIsPunctuation(program,fileIndex,rangeGroup,PunctuationKind_LeftParen)) {
+        while (rangeGroup<groupEnd&&!kek_compiler_CIsPunctuation(program,fileIndex,rangeGroup,PunctuationKind_LeftParen)) {
             rangeGroup+=1;
         }
-        usize rangeEnd=kek_compiler_SelfCFindMatching(program,fileIndex,rangeGroup);
-        usize firstComma=kek_compiler_SelfCFindTokenAtDepthZero(program,fileIndex,rangeGroup+1,rangeEnd,PunctuationKind_Comma);
-        usize secondComma=kek_compiler_SelfCFindTokenAtDepthZero(program,fileIndex,firstComma+1,rangeEnd,PunctuationKind_Comma);
-        struct SelfCExpr beginExpr={0};
-        struct SelfCExpr endExpr={0};
-        struct SelfCExpr stepExpr={0};
-        status=kek_compiler_SelfCCompileExpressionRange(program,env,fileIndex,rangeGroup+1,firstComma,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&beginExpr);
+        usize rangeEnd=kek_compiler_CFindMatching(program,fileIndex,rangeGroup);
+        usize firstComma=kek_compiler_CFindTokenAtDepthZero(program,fileIndex,rangeGroup+1,rangeEnd,PunctuationKind_Comma);
+        usize secondComma=kek_compiler_CFindTokenAtDepthZero(program,fileIndex,firstComma+1,rangeEnd,PunctuationKind_Comma);
+        struct CExpr beginExpr={0};
+        struct CExpr endExpr={0};
+        struct CExpr stepExpr={0};
+        status=kek_compiler_CCompileExpressionRange(program,env,fileIndex,rangeGroup+1,firstComma,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&beginExpr);
         usize rangeValueEnd=rangeEnd;
         if (secondComma<rangeEnd) {
             rangeValueEnd=secondComma;
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCCompileExpressionRange(program,env,fileIndex,firstComma+1,rangeValueEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&endExpr);
+            status=kek_compiler_CCompileExpressionRange(program,env,fileIndex,firstComma+1,rangeValueEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&endExpr);
         }
         if (secondComma<rangeEnd) {
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCCompileExpressionRange(program,env,fileIndex,secondComma+1,rangeEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&stepExpr);
+                status=kek_compiler_CCompileExpressionRange(program,env,fileIndex,secondComma+1,rangeEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&stepExpr);
             }
         } else {
             if (status==Status_Ok) {
-                kek_compiler_SelfCExprInitEmpty(program,&stepExpr);
-                status=kek_compiler_SelfCExprSetCString(program,&stepExpr,"1");
+                kek_compiler_CExprInitEmpty(program,&stepExpr);
+                status=kek_compiler_CExprSetCString(program,&stepExpr,"1");
             }
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteIndent(out,indent);
+            status=kek_compiler_CWriteIndent(out,indent);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(out,"for (");
@@ -7414,7 +7774,7 @@ Status kek_compiler_SelfCWriteEachStatement(struct SelfCProgram* program,struct 
             status=StringBuilder_WriteByte(out,' ');
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteToken(program,out,fileIndex,valueNameIndex);
+            status=kek_compiler_CWriteToken(program,out,fileIndex,valueNameIndex);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteByte(out,'=');
@@ -7426,7 +7786,7 @@ Status kek_compiler_SelfCWriteEachStatement(struct SelfCProgram* program,struct 
             status=StringBuilder_WriteByte(out,';');
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteToken(program,out,fileIndex,valueNameIndex);
+            status=kek_compiler_CWriteToken(program,out,fileIndex,valueNameIndex);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteByte(out,'<');
@@ -7438,7 +7798,7 @@ Status kek_compiler_SelfCWriteEachStatement(struct SelfCProgram* program,struct 
             status=StringBuilder_WriteByte(out,';');
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteToken(program,out,fileIndex,valueNameIndex);
+            status=kek_compiler_CWriteToken(program,out,fileIndex,valueNameIndex);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(out,"+=");
@@ -7450,33 +7810,33 @@ Status kek_compiler_SelfCWriteEachStatement(struct SelfCProgram* program,struct 
             status=StringBuilder_WriteCString(out,") {\n");
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCEnvAdd(program,env,kek_compiler_SelfCTokenText(program,fileIndex,valueNameIndex),std_string_OwnedStringView(&valueType.key),std_string_OwnedStringView(&valueType.cType),0,std_string_StringFromCString(""),valueType.isPointer);
+            status=kek_compiler_CEnvAdd(program,env,kek_compiler_CTokenText(program,fileIndex,valueNameIndex),std_string_OwnedStringView(&valueType.key),std_string_OwnedStringView(&valueType.cType),0,std_string_StringFromCString(""),valueType.isPointer);
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteBlock(program,out,env,fileIndex,blockStart+1,blockEnd,indent+1);
+            status=kek_compiler_CWriteBlock(program,out,env,fileIndex,blockStart+1,blockEnd,indent+1);
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteIndent(out,indent);
+            status=kek_compiler_CWriteIndent(out,indent);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(out,"}\n");
         }
-        kek_compiler_SelfCExprDestroy(&beginExpr);
-        kek_compiler_SelfCExprDestroy(&endExpr);
-        kek_compiler_SelfCExprDestroy(&stepExpr);
+        kek_compiler_CExprDestroy(&beginExpr);
+        kek_compiler_CExprDestroy(&endExpr);
+        kek_compiler_CExprDestroy(&stepExpr);
     } else {
-        struct SelfCExpr arrayExpr={0};
-        status=kek_compiler_SelfCCompileExpressionRange(program,env,fileIndex,groupStart+1,groupEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&arrayExpr);
+        struct CExpr arrayExpr={0};
+        status=kek_compiler_CCompileExpressionRange(program,env,fileIndex,groupStart+1,groupEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&arrayExpr);
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteIndent(out,indent);
+            status=kek_compiler_CWriteIndent(out,indent);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(out,"for (");
         }
         if (hasIndex) {
-            struct SelfCTypeInfo indexType={0};
+            struct CTypeInfo indexType={0};
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCRenderTypeInfo(program,fileIndex,indexTypeStart,indexTypeEnd,&indexType);
+                status=kek_compiler_CRenderTypeInfo(program,fileIndex,indexTypeStart,indexTypeEnd,&indexType);
             }
             if (status==Status_Ok) {
                 status=StringBuilder_WriteString(out,std_string_OwnedStringView(&indexType.cType));
@@ -7485,13 +7845,13 @@ Status kek_compiler_SelfCWriteEachStatement(struct SelfCProgram* program,struct 
                 status=StringBuilder_WriteByte(out,' ');
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteToken(program,out,fileIndex,indexNameIndex);
+                status=kek_compiler_CWriteToken(program,out,fileIndex,indexNameIndex);
             }
             if (status==Status_Ok) {
                 status=StringBuilder_WriteCString(out,"=0;");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteToken(program,out,fileIndex,indexNameIndex);
+                status=kek_compiler_CWriteToken(program,out,fileIndex,indexNameIndex);
             }
             if (status==Status_Ok) {
                 status=StringBuilder_WriteByte(out,'<');
@@ -7503,15 +7863,15 @@ Status kek_compiler_SelfCWriteEachStatement(struct SelfCProgram* program,struct 
                 status=StringBuilder_WriteByte(out,';');
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteToken(program,out,fileIndex,indexNameIndex);
+                status=kek_compiler_CWriteToken(program,out,fileIndex,indexNameIndex);
             }
             if (status==Status_Ok) {
                 status=StringBuilder_WriteCString(out,"++) {\n");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCEnvAdd(program,env,kek_compiler_SelfCTokenText(program,fileIndex,indexNameIndex),std_string_OwnedStringView(&indexType.key),std_string_OwnedStringView(&indexType.cType),0,std_string_StringFromCString(""),indexType.isPointer);
+                status=kek_compiler_CEnvAdd(program,env,kek_compiler_CTokenText(program,fileIndex,indexNameIndex),std_string_OwnedStringView(&indexType.key),std_string_OwnedStringView(&indexType.cType),0,std_string_StringFromCString(""),indexType.isPointer);
             }
-            kek_compiler_SelfCTypeInfoDestroy(&indexType);
+            kek_compiler_CTypeInfoDestroy(&indexType);
         } else {
             if (status==Status_Ok) {
                 status=StringBuilder_WriteCString(out,"usize __kek_each_idx=0;__kek_each_idx<");
@@ -7524,7 +7884,7 @@ Status kek_compiler_SelfCWriteEachStatement(struct SelfCProgram* program,struct 
             }
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteIndent(out,indent+1);
+            status=kek_compiler_CWriteIndent(out,indent+1);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteString(out,std_string_OwnedStringView(&valueType.cType));
@@ -7533,7 +7893,7 @@ Status kek_compiler_SelfCWriteEachStatement(struct SelfCProgram* program,struct 
             status=StringBuilder_WriteByte(out,' ');
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteToken(program,out,fileIndex,valueNameIndex);
+            status=kek_compiler_CWriteToken(program,out,fileIndex,valueNameIndex);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteByte(out,'=');
@@ -7546,7 +7906,7 @@ Status kek_compiler_SelfCWriteEachStatement(struct SelfCProgram* program,struct 
         }
         if (hasIndex) {
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteToken(program,out,fileIndex,indexNameIndex);
+                status=kek_compiler_CWriteToken(program,out,fileIndex,indexNameIndex);
             }
         } else {
             if (status==Status_Ok) {
@@ -7557,32 +7917,32 @@ Status kek_compiler_SelfCWriteEachStatement(struct SelfCProgram* program,struct 
             status=StringBuilder_WriteCString(out,"];\n");
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCEnvAdd(program,env,kek_compiler_SelfCTokenText(program,fileIndex,valueNameIndex),std_string_OwnedStringView(&valueType.key),std_string_OwnedStringView(&valueType.cType),0,std_string_StringFromCString(""),valueType.isPointer);
+            status=kek_compiler_CEnvAdd(program,env,kek_compiler_CTokenText(program,fileIndex,valueNameIndex),std_string_OwnedStringView(&valueType.key),std_string_OwnedStringView(&valueType.cType),0,std_string_StringFromCString(""),valueType.isPointer);
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteBlock(program,out,env,fileIndex,blockStart+1,blockEnd,indent+1);
+            status=kek_compiler_CWriteBlock(program,out,env,fileIndex,blockStart+1,blockEnd,indent+1);
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteIndent(out,indent);
+            status=kek_compiler_CWriteIndent(out,indent);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(out,"}\n");
         }
-        kek_compiler_SelfCExprDestroy(&arrayExpr);
+        kek_compiler_CExprDestroy(&arrayExpr);
     }
-    kek_compiler_SelfCTypeInfoDestroy(&valueType);
+    kek_compiler_CTypeInfoDestroy(&valueType);
     outNext[0]=blockEnd+1;
     return (status);
 }
-Status kek_compiler_SelfCWriteSwitchStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent) {
-    usize groupStart=kek_compiler_SelfCFindNextGroup(program,fileIndex,start,kek_compiler_SelfCFileTokenCount(program,fileIndex));
-    usize groupEnd=kek_compiler_SelfCFindMatching(program,fileIndex,groupStart);
+Status kek_compiler_CWriteSwitchStatement(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize* outNext,usize indent) {
+    usize groupStart=kek_compiler_CFindNextGroup(program,fileIndex,start,kek_compiler_CFileTokenCount(program,fileIndex));
+    usize groupEnd=kek_compiler_CFindMatching(program,fileIndex,groupStart);
     usize blockStart=groupEnd+1;
-    usize blockEnd=kek_compiler_SelfCFindMatching(program,fileIndex,blockStart);
-    struct SelfCExpr value={0};
-    Status status=kek_compiler_SelfCCompileExpressionRange(program,env,fileIndex,groupStart+1,groupEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&value);
+    usize blockEnd=kek_compiler_CFindMatching(program,fileIndex,blockStart);
+    struct CExpr value={0};
+    Status status=kek_compiler_CCompileExpressionRange(program,env,fileIndex,groupStart+1,groupEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&value);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteIndent(out,indent);
+        status=kek_compiler_CWriteIndent(out,indent);
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,"switch (");
@@ -7593,16 +7953,16 @@ Status kek_compiler_SelfCWriteSwitchStatement(struct SelfCProgram* program,struc
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,") {\n");
     }
-    kek_compiler_SelfCExprDestroy(&value);
+    kek_compiler_CExprDestroy(&value);
     usize i=blockStart+1;
     while (i<blockEnd&&status==Status_Ok) {
-        if (kek_compiler_SelfCIsKeyword(program,fileIndex,i,KeywordKind_Case)) {
+        if (kek_compiler_CIsKeyword(program,fileIndex,i,KeywordKind_Case)) {
             usize caseGroup=i+1;
-            usize caseGroupEnd=kek_compiler_SelfCFindMatching(program,fileIndex,caseGroup);
-            struct SelfCExpr caseExpr={0};
-            status=kek_compiler_SelfCCompileExpressionRange(program,env,fileIndex,caseGroup+1,caseGroupEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&caseExpr);
+            usize caseGroupEnd=kek_compiler_CFindMatching(program,fileIndex,caseGroup);
+            struct CExpr caseExpr={0};
+            status=kek_compiler_CCompileExpressionRange(program,env,fileIndex,caseGroup+1,caseGroupEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&caseExpr);
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteIndent(out,indent+1);
+                status=kek_compiler_CWriteIndent(out,indent+1);
             }
             if (status==Status_Ok) {
                 status=StringBuilder_WriteCString(out,"case ");
@@ -7613,36 +7973,36 @@ Status kek_compiler_SelfCWriteSwitchStatement(struct SelfCProgram* program,struc
             if (status==Status_Ok) {
                 status=StringBuilder_WriteCString(out,": ");
             }
-            kek_compiler_SelfCExprDestroy(&caseExpr);
+            kek_compiler_CExprDestroy(&caseExpr);
             usize caseBlock=caseGroupEnd+1;
-            if (caseBlock<blockEnd&&kek_compiler_SelfCIsPunctuation(program,fileIndex,caseBlock,PunctuationKind_Colon)) {
+            if (caseBlock<blockEnd&&kek_compiler_CIsPunctuation(program,fileIndex,caseBlock,PunctuationKind_Colon)) {
                 caseBlock+=1;
             }
-            if (caseBlock<blockEnd&&kek_compiler_SelfCIsPunctuation(program,fileIndex,caseBlock,PunctuationKind_LeftBrace)) {
-                usize caseBlockEnd=kek_compiler_SelfCFindMatching(program,fileIndex,caseBlock);
+            if (caseBlock<blockEnd&&kek_compiler_CIsPunctuation(program,fileIndex,caseBlock,PunctuationKind_LeftBrace)) {
+                usize caseBlockEnd=kek_compiler_CFindMatching(program,fileIndex,caseBlock);
                 if (status==Status_Ok) {
                     status=StringBuilder_WriteCString(out,"{\n");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteBlock(program,out,env,fileIndex,caseBlock+1,caseBlockEnd,indent+2);
+                    status=kek_compiler_CWriteBlock(program,out,env,fileIndex,caseBlock+1,caseBlockEnd,indent+2);
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteIndent(out,indent+1);
+                    status=kek_compiler_CWriteIndent(out,indent+1);
                 }
                 if (status==Status_Ok) {
                     status=StringBuilder_WriteCString(out,"}\n");
                 }
                 i=caseBlockEnd+1;
             } else {
-                usize semicolon=kek_compiler_SelfCFindStatementSemicolon(program,fileIndex,caseBlock,blockEnd);
+                usize semicolon=kek_compiler_CFindStatementSemicolon(program,fileIndex,caseBlock,blockEnd);
                 if (status==Status_Ok) {
                     status=StringBuilder_WriteCString(out,"{\n");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteExprStatement(program,out,env,fileIndex,caseBlock,semicolon,indent+2);
+                    status=kek_compiler_CWriteExprStatement(program,out,env,fileIndex,caseBlock,semicolon,indent+2);
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteIndent(out,indent+1);
+                    status=kek_compiler_CWriteIndent(out,indent+1);
                 }
                 if (status==Status_Ok) {
                     status=StringBuilder_WriteCString(out,"}\n");
@@ -7651,40 +8011,40 @@ Status kek_compiler_SelfCWriteSwitchStatement(struct SelfCProgram* program,struc
             }
             continue;
         }
-        if (kek_compiler_SelfCIsKeyword(program,fileIndex,i,KeywordKind_Default)) {
-            status=kek_compiler_SelfCWriteIndent(out,indent+1);
+        if (kek_compiler_CIsKeyword(program,fileIndex,i,KeywordKind_Default)) {
+            status=kek_compiler_CWriteIndent(out,indent+1);
             if (status==Status_Ok) {
                 status=StringBuilder_WriteCString(out,"default: ");
             }
             usize bodyStart=i+1;
-            if (bodyStart<blockEnd&&kek_compiler_SelfCIsPunctuation(program,fileIndex,bodyStart,PunctuationKind_Colon)) {
+            if (bodyStart<blockEnd&&kek_compiler_CIsPunctuation(program,fileIndex,bodyStart,PunctuationKind_Colon)) {
                 bodyStart+=1;
             }
-            if (bodyStart<blockEnd&&kek_compiler_SelfCIsPunctuation(program,fileIndex,bodyStart,PunctuationKind_LeftBrace)) {
-                usize bodyEnd=kek_compiler_SelfCFindMatching(program,fileIndex,bodyStart);
+            if (bodyStart<blockEnd&&kek_compiler_CIsPunctuation(program,fileIndex,bodyStart,PunctuationKind_LeftBrace)) {
+                usize bodyEnd=kek_compiler_CFindMatching(program,fileIndex,bodyStart);
                 if (status==Status_Ok) {
                     status=StringBuilder_WriteCString(out,"{\n");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteBlock(program,out,env,fileIndex,bodyStart+1,bodyEnd,indent+2);
+                    status=kek_compiler_CWriteBlock(program,out,env,fileIndex,bodyStart+1,bodyEnd,indent+2);
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteIndent(out,indent+1);
+                    status=kek_compiler_CWriteIndent(out,indent+1);
                 }
                 if (status==Status_Ok) {
                     status=StringBuilder_WriteCString(out,"}\n");
                 }
                 i=bodyEnd+1;
             } else {
-                usize semicolon=kek_compiler_SelfCFindStatementSemicolon(program,fileIndex,bodyStart,blockEnd);
+                usize semicolon=kek_compiler_CFindStatementSemicolon(program,fileIndex,bodyStart,blockEnd);
                 if (status==Status_Ok) {
                     status=StringBuilder_WriteCString(out,"{\n");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteExprStatement(program,out,env,fileIndex,bodyStart,semicolon,indent+2);
+                    status=kek_compiler_CWriteExprStatement(program,out,env,fileIndex,bodyStart,semicolon,indent+2);
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteIndent(out,indent+1);
+                    status=kek_compiler_CWriteIndent(out,indent+1);
                 }
                 if (status==Status_Ok) {
                     status=StringBuilder_WriteCString(out,"}\n");
@@ -7696,7 +8056,7 @@ Status kek_compiler_SelfCWriteSwitchStatement(struct SelfCProgram* program,struc
         i+=1;
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteIndent(out,indent);
+        status=kek_compiler_CWriteIndent(out,indent);
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,"}\n");
@@ -7704,15 +8064,15 @@ Status kek_compiler_SelfCWriteSwitchStatement(struct SelfCProgram* program,struc
     outNext[0]=blockEnd+1;
     return (status);
 }
-Status kek_compiler_SelfCWriteReturnStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize semicolon,usize indent) {
-    Status status=kek_compiler_SelfCWriteIndent(out,indent);
+Status kek_compiler_CWriteReturnStatement(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize semicolon,usize indent) {
+    Status status=kek_compiler_CWriteIndent(out,indent);
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,"return");
     }
     if (start+1<semicolon) {
-        struct SelfCExpr value={0};
+        struct CExpr value={0};
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCCompileExpressionRange(program,env,fileIndex,start+1,semicolon,std_string_OwnedStringView(&env->returnTypeKey),std_string_OwnedStringView(&env->returnCType),0,&value);
+            status=kek_compiler_CCompileExpressionRange(program,env,fileIndex,start+1,semicolon,std_string_OwnedStringView(&env->returnTypeKey),std_string_OwnedStringView(&env->returnCType),0,&value);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteByte(out,' ');
@@ -7721,7 +8081,7 @@ Status kek_compiler_SelfCWriteReturnStatement(struct SelfCProgram* program,struc
             status=StringBuilder_WriteString(out,std_string_OwnedStringView(&value.text));
         }
         if (status==Status_Ok) {
-            kek_compiler_SelfCExprDestroy(&value);
+            kek_compiler_CExprDestroy(&value);
         }
     }
     if (status==Status_Ok) {
@@ -7729,18 +8089,18 @@ Status kek_compiler_SelfCWriteReturnStatement(struct SelfCProgram* program,struc
     }
     return (status);
 }
-Status kek_compiler_SelfCWriteSingleStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent) {
-    if (kek_compiler_SelfCIsPunctuation(program,fileIndex,start,PunctuationKind_LeftBrace)) {
-        usize blockEnd=kek_compiler_SelfCFindMatching(program,fileIndex,start);
-        Status status=kek_compiler_SelfCWriteIndent(out,indent);
+Status kek_compiler_CWriteSingleStatement(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize* outNext,usize indent) {
+    if (kek_compiler_CIsPunctuation(program,fileIndex,start,PunctuationKind_LeftBrace)) {
+        usize blockEnd=kek_compiler_CFindMatching(program,fileIndex,start);
+        Status status=kek_compiler_CWriteIndent(out,indent);
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(out,"{\n");
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteBlock(program,out,env,fileIndex,start+1,blockEnd,indent+1);
+            status=kek_compiler_CWriteBlock(program,out,env,fileIndex,start+1,blockEnd,indent+1);
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteIndent(out,indent);
+            status=kek_compiler_CWriteIndent(out,indent);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(out,"}\n");
@@ -7748,61 +8108,61 @@ Status kek_compiler_SelfCWriteSingleStatement(struct SelfCProgram* program,struc
         outNext[0]=blockEnd+1;
         return (status);
     }
-    if (kek_compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_If)) {
-        return (kek_compiler_SelfCWriteIfStatement(program,out,env,fileIndex,start,outNext,indent));
+    if (kek_compiler_CIsKeyword(program,fileIndex,start,KeywordKind_If)) {
+        return (kek_compiler_CWriteIfStatement(program,out,env,fileIndex,start,outNext,indent));
     }
-    if (kek_compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_While)) {
-        return (kek_compiler_SelfCWriteWhileStatement(program,out,env,fileIndex,start,outNext,indent));
+    if (kek_compiler_CIsKeyword(program,fileIndex,start,KeywordKind_While)) {
+        return (kek_compiler_CWriteWhileStatement(program,out,env,fileIndex,start,outNext,indent));
     }
-    if (kek_compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_Do)) {
-        return (kek_compiler_SelfCWriteDoStatement(program,out,env,fileIndex,start,outNext,indent));
+    if (kek_compiler_CIsKeyword(program,fileIndex,start,KeywordKind_Do)) {
+        return (kek_compiler_CWriteDoStatement(program,out,env,fileIndex,start,outNext,indent));
     }
-    if (kek_compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_For)) {
-        return (kek_compiler_SelfCWriteForStatement(program,out,env,fileIndex,start,outNext,indent));
+    if (kek_compiler_CIsKeyword(program,fileIndex,start,KeywordKind_For)) {
+        return (kek_compiler_CWriteForStatement(program,out,env,fileIndex,start,outNext,indent));
     }
-    if (kek_compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_Each)) {
-        return (kek_compiler_SelfCWriteEachStatement(program,out,env,fileIndex,start,outNext,indent));
+    if (kek_compiler_CIsKeyword(program,fileIndex,start,KeywordKind_Each)) {
+        return (kek_compiler_CWriteEachStatement(program,out,env,fileIndex,start,outNext,indent));
     }
-    if (kek_compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_Switch)) {
-        return (kek_compiler_SelfCWriteSwitchStatement(program,out,env,fileIndex,start,outNext,indent));
+    if (kek_compiler_CIsKeyword(program,fileIndex,start,KeywordKind_Switch)) {
+        return (kek_compiler_CWriteSwitchStatement(program,out,env,fileIndex,start,outNext,indent));
     }
-    usize semicolon=kek_compiler_SelfCFindStatementSemicolon(program,fileIndex,start,kek_compiler_SelfCFileTokenCount(program,fileIndex));
-    if (kek_compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_Return)) {
+    usize semicolon=kek_compiler_CFindStatementSemicolon(program,fileIndex,start,kek_compiler_CFileTokenCount(program,fileIndex));
+    if (kek_compiler_CIsKeyword(program,fileIndex,start,KeywordKind_Return)) {
         outNext[0]=semicolon+1;
-        return (kek_compiler_SelfCWriteReturnStatement(program,out,env,fileIndex,start,semicolon,indent));
+        return (kek_compiler_CWriteReturnStatement(program,out,env,fileIndex,start,semicolon,indent));
     }
-    if (kek_compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_Break)) {
+    if (kek_compiler_CIsKeyword(program,fileIndex,start,KeywordKind_Break)) {
         outNext[0]=semicolon+1;
-        Status status=kek_compiler_SelfCWriteIndent(out,indent);
+        Status status=kek_compiler_CWriteIndent(out,indent);
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(out,"break;\n");
         }
         return (status);
     }
-    if (kek_compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_Continue)) {
+    if (kek_compiler_CIsKeyword(program,fileIndex,start,KeywordKind_Continue)) {
         outNext[0]=semicolon+1;
-        Status status=kek_compiler_SelfCWriteIndent(out,indent);
+        Status status=kek_compiler_CWriteIndent(out,indent);
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(out,"continue;\n");
         }
         return (status);
     }
-    if (kek_compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_Unreachable)) {
+    if (kek_compiler_CIsKeyword(program,fileIndex,start,KeywordKind_Unreachable)) {
         outNext[0]=semicolon+1;
-        Status status=kek_compiler_SelfCWriteIndent(out,indent);
+        Status status=kek_compiler_CWriteIndent(out,indent);
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(out,"__builtin_unreachable();\n");
         }
         return (status);
     }
-    if (kek_compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_Panic)) {
+    if (kek_compiler_CIsKeyword(program,fileIndex,start,KeywordKind_Panic)) {
         outNext[0]=semicolon+1;
         usize groupStart=start+1;
-        usize groupEnd=kek_compiler_SelfCFindMatching(program,fileIndex,groupStart);
-        struct SelfCExpr message={0};
-        Status status=kek_compiler_SelfCCompileExpressionRange(program,env,fileIndex,groupStart+1,groupEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&message);
+        usize groupEnd=kek_compiler_CFindMatching(program,fileIndex,groupStart);
+        struct CExpr message={0};
+        Status status=kek_compiler_CCompileExpressionRange(program,env,fileIndex,groupStart+1,groupEnd,std_string_StringFromCString(""),std_string_StringFromCString(""),0,&message);
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteIndent(out,indent);
+            status=kek_compiler_CWriteIndent(out,indent);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(out,"do { fprintf(stderr, \"panic: %s\\n\", ");
@@ -7813,46 +8173,46 @@ Status kek_compiler_SelfCWriteSingleStatement(struct SelfCProgram* program,struc
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(out,"); abort(); } while(0);\n");
         }
-        kek_compiler_SelfCExprDestroy(&message);
+        kek_compiler_CExprDestroy(&message);
         return (status);
     }
-    if (kek_compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_Defer)) {
+    if (kek_compiler_CIsKeyword(program,fileIndex,start,KeywordKind_Defer)) {
         outNext[0]=semicolon+1;
         return (Status_Ok);
     }
-    usize colon=kek_compiler_SelfCFindTopLevelColon(program,fileIndex,start,semicolon);
+    usize colon=kek_compiler_CFindTopLevelColon(program,fileIndex,start,semicolon);
     if (colon<semicolon) {
         outNext[0]=semicolon+1;
-        return (kek_compiler_SelfCWriteVarDecl(program,out,env,fileIndex,start,semicolon,indent));
+        return (kek_compiler_CWriteVarDecl(program,out,env,fileIndex,start,semicolon,indent));
     }
     outNext[0]=semicolon+1;
-    return (kek_compiler_SelfCWriteExprStatement(program,out,env,fileIndex,start,semicolon,indent));
+    return (kek_compiler_CWriteExprStatement(program,out,env,fileIndex,start,semicolon,indent));
 }
-Status kek_compiler_SelfCWriteDeferred(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize end,usize indent) {
-    if (start>=end||!kek_compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_Defer)) {
+Status kek_compiler_CWriteDeferred(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize end,usize indent) {
+    if (start>=end||!kek_compiler_CIsKeyword(program,fileIndex,start,KeywordKind_Defer)) {
         return (Status_Ok);
     }
     usize body=start+1;
-    if (body<end&&kek_compiler_SelfCIsPunctuation(program,fileIndex,body,PunctuationKind_LeftBrace)) {
-        usize blockEnd=kek_compiler_SelfCFindMatching(program,fileIndex,body);
-        return (kek_compiler_SelfCWriteBlock(program,out,env,fileIndex,body+1,blockEnd,indent));
+    if (body<end&&kek_compiler_CIsPunctuation(program,fileIndex,body,PunctuationKind_LeftBrace)) {
+        usize blockEnd=kek_compiler_CFindMatching(program,fileIndex,body);
+        return (kek_compiler_CWriteBlock(program,out,env,fileIndex,body+1,blockEnd,indent));
     }
-    usize semicolon=kek_compiler_SelfCFindStatementSemicolon(program,fileIndex,body,end);
-    return (kek_compiler_SelfCWriteExprStatement(program,out,env,fileIndex,body,semicolon,indent));
+    usize semicolon=kek_compiler_CFindStatementSemicolon(program,fileIndex,body,end);
+    return (kek_compiler_CWriteExprStatement(program,out,env,fileIndex,body,semicolon,indent));
 }
-Status kek_compiler_SelfCWriteBlock(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize end,usize indent) {
+Status kek_compiler_CWriteBlock(struct CProgram* program,struct StringBuilder* out,struct CEnv* env,usize fileIndex,usize start,usize end,usize indent) {
     usize deferStarts[64]={0};
     usize deferEnds[64]={0};
     usize deferCount=0;
     usize index=start;
     Status status=Status_Ok;
     while (index<end&&status==Status_Ok) {
-        if (kek_compiler_SelfCIsKeyword(program,fileIndex,index,KeywordKind_Defer)) {
+        if (kek_compiler_CIsKeyword(program,fileIndex,index,KeywordKind_Defer)) {
             usize deferEnd=index+1;
-            if (deferEnd<end&&kek_compiler_SelfCIsPunctuation(program,fileIndex,deferEnd,PunctuationKind_LeftBrace)) {
-                deferEnd=kek_compiler_SelfCFindMatching(program,fileIndex,deferEnd)+1;
+            if (deferEnd<end&&kek_compiler_CIsPunctuation(program,fileIndex,deferEnd,PunctuationKind_LeftBrace)) {
+                deferEnd=kek_compiler_CFindMatching(program,fileIndex,deferEnd)+1;
             } else {
-                deferEnd=kek_compiler_SelfCFindStatementSemicolon(program,fileIndex,deferEnd,end)+1;
+                deferEnd=kek_compiler_CFindStatementSemicolon(program,fileIndex,deferEnd,end)+1;
             }
             if (deferCount<((void)(deferStarts),64)) {
                 deferStarts[deferCount]=index;
@@ -7863,7 +8223,7 @@ Status kek_compiler_SelfCWriteBlock(struct SelfCProgram* program,struct StringBu
             continue;
         }
         usize next=index+1;
-        status=kek_compiler_SelfCWriteSingleStatement(program,out,env,fileIndex,index,&next,indent);
+        status=kek_compiler_CWriteSingleStatement(program,out,env,fileIndex,index,&next,indent);
         if (next<=index) {
             next=index+1;
         }
@@ -7871,11 +8231,11 @@ Status kek_compiler_SelfCWriteBlock(struct SelfCProgram* program,struct StringBu
     }
     while (deferCount>0&&status==Status_Ok) {
         deferCount-=1;
-        status=kek_compiler_SelfCWriteDeferred(program,out,env,fileIndex,deferStarts[deferCount],deferEnds[deferCount],indent);
+        status=kek_compiler_CWriteDeferred(program,out,env,fileIndex,deferStarts[deferCount],deferEnds[deferCount],indent);
     }
     return (status);
 }
-Status kek_compiler_SelfCFuncUseTempTypeUse(struct SelfCFuncUse* funcUse,struct SelfCTypeUse* out) {
+Status kek_compiler_CFuncUseTempTypeUse(struct CFuncUse* funcUse,struct CTypeUse* out) {
     out->key=funcUse->key;
     out->cName=funcUse->cName;
     out->baseName=funcUse->key;
@@ -7886,16 +8246,16 @@ Status kek_compiler_SelfCFuncUseTempTypeUse(struct SelfCFuncUse* funcUse,struct 
     out->emitted=0;
     return (Status_Ok);
 }
-Status kek_compiler_SelfCWriteSubstTypeForFunc(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCFuncUse* funcUse,usize fileIndex,usize start,usize end) {
-    struct SelfCTypeUse temp={0};
-    kek_compiler_SelfCFuncUseTempTypeUse(funcUse,&temp);
-    struct String firstTypeToken=kek_compiler_SelfCTokenText(program,fileIndex,start);
-    if (start<end&&String_EqualsCString(&firstTypeToken,"ptr")&&start+1<end&&kek_compiler_SelfCIsOperator(program,fileIndex,start+1,OperatorKind_Less)) {
-        usize genericEnd=kek_compiler_SelfCFindMatching(program,fileIndex,start+1);
+Status kek_compiler_CWriteSubstTypeForFunc(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl,struct CFuncUse* funcUse,usize fileIndex,usize start,usize end) {
+    struct CTypeUse temp={0};
+    kek_compiler_CFuncUseTempTypeUse(funcUse,&temp);
+    struct String firstTypeToken=kek_compiler_CTokenText(program,fileIndex,start);
+    if (start<end&&String_EqualsCString(&firstTypeToken,"ptr")&&start+1<end&&kek_compiler_CIsOperator(program,fileIndex,start+1,OperatorKind_Less)) {
+        usize genericEnd=kek_compiler_CFindMatching(program,fileIndex,start+1);
         struct OwnedString innerKey={0};
-        Status innerStatus=kek_compiler_SelfCMakeSubstTypeKey(program,decl,&temp,fileIndex,start+2,genericEnd,&innerKey);
+        Status innerStatus=kek_compiler_CMakeSubstTypeKey(program,decl,&temp,fileIndex,start+2,genericEnd,&innerKey);
         if (innerStatus==Status_Ok) {
-            innerStatus=kek_compiler_SelfCWriteCTypeFromKey(program,out,std_string_OwnedStringView(&innerKey));
+            innerStatus=kek_compiler_CWriteCTypeFromKey(program,out,std_string_OwnedStringView(&innerKey));
         }
         if (innerStatus==Status_Ok) {
             innerStatus=StringBuilder_WriteByte(out,'*');
@@ -7904,32 +8264,32 @@ Status kek_compiler_SelfCWriteSubstTypeForFunc(struct SelfCProgram* program,stru
         return (innerStatus);
     }
     struct OwnedString key={0};
-    Status status=kek_compiler_SelfCMakeSubstTypeKey(program,decl,&temp,fileIndex,start,end,&key);
+    Status status=kek_compiler_CMakeSubstTypeKey(program,decl,&temp,fileIndex,start,end,&key);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteCTypeFromKey(program,out,std_string_OwnedStringView(&key));
+        status=kek_compiler_CWriteCTypeFromKey(program,out,std_string_OwnedStringView(&key));
     }
     if (status==Status_Ok) {
         std_string_DestroyOwnedString(&key);
     }
     return (status);
 }
-Status kek_compiler_SelfCWriteFunctionSignature(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct String nameOverride,struct SelfCFuncUse* funcUse) {
-    struct String functionName=kek_compiler_SelfCTokenText(program,decl->fileIndex,decl->nameIndex);
-    bool isMain=!decl->hasReceiver&&String_EqualsCString(&functionName,"main")&&kek_compiler_SelfCDeclPackageIsRoot(decl);
+Status kek_compiler_CWriteFunctionSignature(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl,struct String nameOverride,struct CFuncUse* funcUse) {
+    struct String functionName=kek_compiler_CTokenText(program,decl->fileIndex,decl->nameIndex);
+    bool isMain=!decl->hasReceiver&&String_EqualsCString(&functionName,"main")&&kek_compiler_CDeclPackageIsRoot(decl);
     Status status=Status_Ok;
     if (isMain) {
         status=StringBuilder_WriteCString(out,"int");
     } else {
         if (funcUse!=0) {
-            status=kek_compiler_SelfCWriteSubstTypeForFunc(program,out,decl,funcUse,decl->fileIndex,decl->returnStart,decl->returnEnd);
+            status=kek_compiler_CWriteSubstTypeForFunc(program,out,decl,funcUse,decl->fileIndex,decl->returnStart,decl->returnEnd);
         } else {
-            struct SelfCTypeInfo returnInfo={0};
-            status=kek_compiler_SelfCRenderTypeInfo(program,decl->fileIndex,decl->returnStart,decl->returnEnd,&returnInfo);
+            struct CTypeInfo returnInfo={0};
+            status=kek_compiler_CRenderTypeInfo(program,decl->fileIndex,decl->returnStart,decl->returnEnd,&returnInfo);
             if (status==Status_Ok) {
                 status=StringBuilder_WriteString(out,std_string_OwnedStringView(&returnInfo.cType));
             }
             if (status==Status_Ok) {
-                kek_compiler_SelfCTypeInfoDestroy(&returnInfo);
+                kek_compiler_CTypeInfoDestroy(&returnInfo);
             }
         }
     }
@@ -7940,7 +8300,7 @@ Status kek_compiler_SelfCWriteFunctionSignature(struct SelfCProgram* program,str
         if (nameOverride.len>0) {
             status=StringBuilder_WriteString(out,nameOverride);
         } else {
-            status=kek_compiler_SelfCWriteDeclCName(program,out,decl);
+            status=kek_compiler_CWriteDeclCName(program,out,decl);
         }
     }
     if (status==Status_Ok) {
@@ -7949,17 +8309,17 @@ Status kek_compiler_SelfCWriteFunctionSignature(struct SelfCProgram* program,str
     bool first=1;
     if (decl->hasReceiver) {
         if (funcUse!=0) {
-            status=kek_compiler_SelfCWriteSubstTypeForFunc(program,out,decl,funcUse,decl->fileIndex,decl->receiverStart,decl->receiverEnd);
+            status=kek_compiler_CWriteSubstTypeForFunc(program,out,decl,funcUse,decl->fileIndex,decl->receiverStart,decl->receiverEnd);
         } else {
-            struct SelfCTypeInfo receiverInfo={0};
+            struct CTypeInfo receiverInfo={0};
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCRenderTypeInfo(program,decl->fileIndex,decl->receiverStart,decl->receiverEnd,&receiverInfo);
+                status=kek_compiler_CRenderTypeInfo(program,decl->fileIndex,decl->receiverStart,decl->receiverEnd,&receiverInfo);
             }
             if (status==Status_Ok) {
                 status=StringBuilder_WriteString(out,std_string_OwnedStringView(&receiverInfo.cType));
             }
             if (status==Status_Ok) {
-                kek_compiler_SelfCTypeInfoDestroy(&receiverInfo);
+                kek_compiler_CTypeInfoDestroy(&receiverInfo);
             }
         }
         if (status==Status_Ok) {
@@ -7968,31 +8328,31 @@ Status kek_compiler_SelfCWriteFunctionSignature(struct SelfCProgram* program,str
         first=0;
     }
     for (usize i=0;i<decl->paramCount;i++) {
-        struct SelfCParam* param=&program->params[decl->firstParam+i];
+        struct CParam* param=&program->params.data[decl->firstParam+i];
         if (!first&&status==Status_Ok) {
             status=StringBuilder_WriteByte(out,',');
         }
         if (funcUse!=0) {
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteSubstTypeForFunc(program,out,decl,funcUse,param->fileIndex,param->typeStart,param->typeEnd);
+                status=kek_compiler_CWriteSubstTypeForFunc(program,out,decl,funcUse,param->fileIndex,param->typeStart,param->typeEnd);
             }
         } else {
-            struct SelfCTypeInfo paramInfo={0};
+            struct CTypeInfo paramInfo={0};
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCRenderTypeInfo(program,param->fileIndex,param->typeStart,param->typeEnd,&paramInfo);
+                status=kek_compiler_CRenderTypeInfo(program,param->fileIndex,param->typeStart,param->typeEnd,&paramInfo);
             }
             if (status==Status_Ok) {
                 status=StringBuilder_WriteString(out,std_string_OwnedStringView(&paramInfo.cType));
             }
             if (status==Status_Ok) {
-                kek_compiler_SelfCTypeInfoDestroy(&paramInfo);
+                kek_compiler_CTypeInfoDestroy(&paramInfo);
             }
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteByte(out,' ');
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteToken(program,out,param->fileIndex,param->nameIndex);
+            status=kek_compiler_CWriteToken(program,out,param->fileIndex,param->nameIndex);
         }
         first=0;
     }
@@ -8004,72 +8364,72 @@ Status kek_compiler_SelfCWriteFunctionSignature(struct SelfCProgram* program,str
     }
     return (status);
 }
-Status kek_compiler_SelfCWriteFunctionPrototype(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl) {
-    Status status=kek_compiler_SelfCWriteFunctionSignature(program,out,decl,std_string_StringFromCString(""),0);
+Status kek_compiler_CWriteFunctionPrototype(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl) {
+    Status status=kek_compiler_CWriteFunctionSignature(program,out,decl,std_string_StringFromCString(""),0);
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,";\n");
     }
     return (status);
 }
-Status kek_compiler_SelfCWriteFunctionBody(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl) {
-    Status status=kek_compiler_SelfCWriteFunctionSignature(program,out,decl,std_string_StringFromCString(""),0);
+Status kek_compiler_CWriteFunctionBody(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl) {
+    Status status=kek_compiler_CWriteFunctionSignature(program,out,decl,std_string_StringFromCString(""),0);
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out," {\n");
     }
-    struct SelfCEnv env={0};
+    struct CEnv env={0};
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCEnvInit(program,&env);
+        status=kek_compiler_CEnvInit(program,&env);
     }
-    struct SelfCTypeInfo returnInfo={0};
+    struct CTypeInfo returnInfo={0};
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCRenderTypeInfo(program,decl->fileIndex,decl->returnStart,decl->returnEnd,&returnInfo);
+        status=kek_compiler_CRenderTypeInfo(program,decl->fileIndex,decl->returnStart,decl->returnEnd,&returnInfo);
     }
     if (status==Status_Ok) {
-        kek_compiler_SelfCReplaceOwned(&env.returnTypeKey,returnInfo.key);
-        kek_compiler_SelfCReplaceOwned(&env.returnCType,returnInfo.cType);
+        kek_compiler_CReplaceOwned(&env.returnTypeKey,returnInfo.key);
+        kek_compiler_CReplaceOwned(&env.returnCType,returnInfo.cType);
         returnInfo.key.data=0;
         returnInfo.cType.data=0;
     }
     if (decl->hasReceiver&&status==Status_Ok) {
-        struct SelfCTypeInfo receiverInfo={0};
-        status=kek_compiler_SelfCRenderTypeInfo(program,decl->fileIndex,decl->receiverStart,decl->receiverEnd,&receiverInfo);
+        struct CTypeInfo receiverInfo={0};
+        status=kek_compiler_CRenderTypeInfo(program,decl->fileIndex,decl->receiverStart,decl->receiverEnd,&receiverInfo);
         if (status==Status_Ok) {
             env.hasThis=1;
-            kek_compiler_SelfCReplaceOwned(&env.thisTypeKey,receiverInfo.key);
-            kek_compiler_SelfCReplaceOwned(&env.thisCType,receiverInfo.cType);
+            kek_compiler_CReplaceOwned(&env.thisTypeKey,receiverInfo.key);
+            kek_compiler_CReplaceOwned(&env.thisCType,receiverInfo.cType);
             receiverInfo.key.data=0;
             receiverInfo.cType.data=0;
-            status=kek_compiler_SelfCEnvAdd(program,&env,std_string_StringFromCString("this"),std_string_OwnedStringView(&env.thisTypeKey),std_string_OwnedStringView(&env.thisCType),0,std_string_StringFromCString(""),1);
+            status=kek_compiler_CEnvAdd(program,&env,std_string_StringFromCString("this"),std_string_OwnedStringView(&env.thisTypeKey),std_string_OwnedStringView(&env.thisCType),0,std_string_StringFromCString(""),1);
         }
-        kek_compiler_SelfCTypeInfoDestroy(&receiverInfo);
+        kek_compiler_CTypeInfoDestroy(&receiverInfo);
     }
     for (usize i=0;i<decl->paramCount&&status==Status_Ok;i++) {
-        struct SelfCParam* param=&program->params[decl->firstParam+i];
-        struct SelfCTypeInfo paramInfo={0};
-        status=kek_compiler_SelfCRenderTypeInfo(program,param->fileIndex,param->typeStart,param->typeEnd,&paramInfo);
+        struct CParam* param=&program->params.data[decl->firstParam+i];
+        struct CTypeInfo paramInfo={0};
+        status=kek_compiler_CRenderTypeInfo(program,param->fileIndex,param->typeStart,param->typeEnd,&paramInfo);
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCEnvAdd(program,&env,kek_compiler_SelfCTokenText(program,param->fileIndex,param->nameIndex),std_string_OwnedStringView(&paramInfo.key),std_string_OwnedStringView(&paramInfo.cType),0,std_string_StringFromCString(""),paramInfo.isPointer);
+            status=kek_compiler_CEnvAdd(program,&env,kek_compiler_CTokenText(program,param->fileIndex,param->nameIndex),std_string_OwnedStringView(&paramInfo.key),std_string_OwnedStringView(&paramInfo.cType),0,std_string_StringFromCString(""),paramInfo.isPointer);
         }
-        kek_compiler_SelfCTypeInfoDestroy(&paramInfo);
+        kek_compiler_CTypeInfoDestroy(&paramInfo);
     }
-    kek_compiler_SelfCTypeInfoDestroy(&returnInfo);
+    kek_compiler_CTypeInfoDestroy(&returnInfo);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteBlock(program,out,&env,decl->fileIndex,decl->bodyStart,decl->bodyEnd,1);
+        status=kek_compiler_CWriteBlock(program,out,&env,decl->fileIndex,decl->bodyStart,decl->bodyEnd,1);
     }
-    kek_compiler_SelfCEnvDestroy(&env);
+    kek_compiler_CEnvDestroy(&env);
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out,"}\n");
     }
     return (status);
 }
-Status kek_compiler_SelfCWriteManualLine(struct StringBuilder* out,str text) {
+Status kek_compiler_CWriteManualLine(struct StringBuilder* out,str text) {
     Status status=StringBuilder_WriteCString(out,text);
     if (status==Status_Ok) {
         status=StringBuilder_WriteByte(out,'\n');
     }
     return (status);
 }
-Status kek_compiler_SelfCWriteArrayMethodRef(struct StringBuilder* out,struct SelfCFuncUse* use,str name) {
+Status kek_compiler_CWriteArrayMethodRef(struct StringBuilder* out,struct CFuncUse* use,str name) {
     Status status=StringBuilder_WriteCString(out,"Array__");
     if (status==Status_Ok) {
         status=StringBuilder_WriteString(out,std_string_OwnedStringView(&use->arg0));
@@ -8082,7 +8442,7 @@ Status kek_compiler_SelfCWriteArrayMethodRef(struct StringBuilder* out,struct Se
     }
     return (status);
 }
-Status kek_compiler_SelfCWriteLinkedListMethodRef(struct StringBuilder* out,struct SelfCFuncUse* use,str name) {
+Status kek_compiler_CWriteLinkedListMethodRef(struct StringBuilder* out,struct CFuncUse* use,str name) {
     Status status=StringBuilder_WriteCString(out,"LinkedList__");
     if (status==Status_Ok) {
         status=StringBuilder_WriteString(out,std_string_OwnedStringView(&use->arg0));
@@ -8095,63 +8455,63 @@ Status kek_compiler_SelfCWriteLinkedListMethodRef(struct StringBuilder* out,stru
     }
     return (status);
 }
-Status kek_compiler_SelfCWriteResultTypeRef(struct StringBuilder* out,struct SelfCFuncUse* use) {
+Status kek_compiler_CWriteResultTypeRef(struct StringBuilder* out,struct CFuncUse* use) {
     Status status=StringBuilder_WriteCString(out,"struct Result__");
     if (status==Status_Ok) {
         status=StringBuilder_WriteString(out,std_string_OwnedStringView(&use->arg0));
     }
     return (status);
 }
-Status kek_compiler_SelfCWriteListNodeTypeRef(struct StringBuilder* out,struct SelfCFuncUse* use) {
+Status kek_compiler_CWriteListNodeTypeRef(struct StringBuilder* out,struct CFuncUse* use) {
     Status status=StringBuilder_WriteCString(out,"struct ListNode__");
     if (status==Status_Ok) {
         status=StringBuilder_WriteString(out,std_string_OwnedStringView(&use->arg0));
     }
     return (status);
 }
-Status kek_compiler_SelfCWriteManualArrayGenericBody(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCFuncUse* use,struct String argC) {
-    struct String name=kek_compiler_SelfCTokenText(program,decl->fileIndex,decl->nameIndex);
+Status kek_compiler_CWriteManualArrayGenericBody(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl,struct CFuncUse* use,struct String argC) {
+    struct String name=kek_compiler_CTokenText(program,decl->fileIndex,decl->nameIndex);
     Status status=Status_Ok;
     if (String_EqualsCString(&name,"Destroy")) {
-        status=kek_compiler_SelfCWriteManualLine(out,"    if(this->data!=0){");
+        status=kek_compiler_CWriteManualLine(out,"    if(this->data!=0){");
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteManualLine(out,"        kek_std_free(this->data);");
+            status=kek_compiler_CWriteManualLine(out,"        kek_std_free(this->data);");
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteManualLine(out,"    }");
+            status=kek_compiler_CWriteManualLine(out,"    }");
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteManualLine(out,"    this->data=0;");
+            status=kek_compiler_CWriteManualLine(out,"    this->data=0;");
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteManualLine(out,"    this->len=0;");
+            status=kek_compiler_CWriteManualLine(out,"    this->len=0;");
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteManualLine(out,"    this->cap=0;");
+            status=kek_compiler_CWriteManualLine(out,"    this->cap=0;");
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteManualLine(out,"    return Status_Ok;");
+            status=kek_compiler_CWriteManualLine(out,"    return Status_Ok;");
         }
     } else {
         if (String_EqualsCString(&name,"Clear")) {
-            status=kek_compiler_SelfCWriteManualLine(out,"    this->len=0;");
+            status=kek_compiler_CWriteManualLine(out,"    this->len=0;");
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"    return Status_Ok;");
+                status=kek_compiler_CWriteManualLine(out,"    return Status_Ok;");
             }
         } else {
             if (String_EqualsCString(&name,"Reserve")) {
-                status=kek_compiler_SelfCWriteManualLine(out,"    usize needed=this->len+additional;");
+                status=kek_compiler_CWriteManualLine(out,"    usize needed=this->len+additional;");
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    if(needed<=this->cap){return Status_Ok;}");
+                    status=kek_compiler_CWriteManualLine(out,"    if(needed<=this->cap){return Status_Ok;}");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    usize newCap=this->cap;");
+                    status=kek_compiler_CWriteManualLine(out,"    usize newCap=this->cap;");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    if(newCap==0){newCap=8;}");
+                    status=kek_compiler_CWriteManualLine(out,"    if(newCap==0){newCap=8;}");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    while(newCap<needed){newCap=newCap*2;}");
+                    status=kek_compiler_CWriteManualLine(out,"    while(newCap<needed){newCap=newCap*2;}");
                 }
                 if (status==Status_Ok) {
                     status=StringBuilder_WriteCString(out,"    ");
@@ -8178,79 +8538,79 @@ Status kek_compiler_SelfCWriteManualArrayGenericBody(struct SelfCProgram* progra
                     status=StringBuilder_WriteString(out,argC);
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"));");
+                    status=kek_compiler_CWriteManualLine(out,"));");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    if(newData==0){return Status_NoMemory;}");
+                    status=kek_compiler_CWriteManualLine(out,"    if(newData==0){return Status_NoMemory;}");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    this->data=newData;");
+                    status=kek_compiler_CWriteManualLine(out,"    this->data=newData;");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    this->cap=newCap;");
+                    status=kek_compiler_CWriteManualLine(out,"    this->cap=newCap;");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    return Status_Ok;");
+                    status=kek_compiler_CWriteManualLine(out,"    return Status_Ok;");
                 }
             } else {
                 if (String_EqualsCString(&name,"AppendSlice")) {
                     status=StringBuilder_WriteCString(out,"    Status status=");
                     if (status==Status_Ok) {
-                        status=kek_compiler_SelfCWriteArrayMethodRef(out,use,"Reserve");
+                        status=kek_compiler_CWriteArrayMethodRef(out,use,"Reserve");
                     }
                     if (status==Status_Ok) {
-                        status=kek_compiler_SelfCWriteManualLine(out,"(this,items.len);");
+                        status=kek_compiler_CWriteManualLine(out,"(this,items.len);");
                     }
                     if (status==Status_Ok) {
-                        status=kek_compiler_SelfCWriteManualLine(out,"    if(status!=Status_Ok){return status;}");
+                        status=kek_compiler_CWriteManualLine(out,"    if(status!=Status_Ok){return status;}");
                     }
                     if (status==Status_Ok) {
-                        status=kek_compiler_SelfCWriteManualLine(out,"    for(usize i=0;i<items.len;i++){");
+                        status=kek_compiler_CWriteManualLine(out,"    for(usize i=0;i<items.len;i++){");
                     }
                     if (status==Status_Ok) {
-                        status=kek_compiler_SelfCWriteManualLine(out,"        this->data[this->len+i]=items.data[i];");
+                        status=kek_compiler_CWriteManualLine(out,"        this->data[this->len+i]=items.data[i];");
                     }
                     if (status==Status_Ok) {
-                        status=kek_compiler_SelfCWriteManualLine(out,"    }");
+                        status=kek_compiler_CWriteManualLine(out,"    }");
                     }
                     if (status==Status_Ok) {
-                        status=kek_compiler_SelfCWriteManualLine(out,"    this->len+=items.len;");
+                        status=kek_compiler_CWriteManualLine(out,"    this->len+=items.len;");
                     }
                     if (status==Status_Ok) {
-                        status=kek_compiler_SelfCWriteManualLine(out,"    return Status_Ok;");
+                        status=kek_compiler_CWriteManualLine(out,"    return Status_Ok;");
                     }
                 } else {
                     if (String_EqualsCString(&name,"Push")) {
                         status=StringBuilder_WriteCString(out,"    Status status=");
                         if (status==Status_Ok) {
-                            status=kek_compiler_SelfCWriteArrayMethodRef(out,use,"Reserve");
+                            status=kek_compiler_CWriteArrayMethodRef(out,use,"Reserve");
                         }
                         if (status==Status_Ok) {
-                            status=kek_compiler_SelfCWriteManualLine(out,"(this,1);");
+                            status=kek_compiler_CWriteManualLine(out,"(this,1);");
                         }
                         if (status==Status_Ok) {
-                            status=kek_compiler_SelfCWriteManualLine(out,"    if(status!=Status_Ok){return status;}");
+                            status=kek_compiler_CWriteManualLine(out,"    if(status!=Status_Ok){return status;}");
                         }
                         if (status==Status_Ok) {
-                            status=kek_compiler_SelfCWriteManualLine(out,"    this->data[this->len]=value;");
+                            status=kek_compiler_CWriteManualLine(out,"    this->data[this->len]=value;");
                         }
                         if (status==Status_Ok) {
-                            status=kek_compiler_SelfCWriteManualLine(out,"    this->len+=1;");
+                            status=kek_compiler_CWriteManualLine(out,"    this->len+=1;");
                         }
                         if (status==Status_Ok) {
-                            status=kek_compiler_SelfCWriteManualLine(out,"    return Status_Ok;");
+                            status=kek_compiler_CWriteManualLine(out,"    return Status_Ok;");
                         }
                     } else {
                         if (String_EqualsCString(&name,"PushZeroed")) {
                             status=StringBuilder_WriteCString(out,"    Status status=");
                             if (status==Status_Ok) {
-                                status=kek_compiler_SelfCWriteArrayMethodRef(out,use,"Reserve");
+                                status=kek_compiler_CWriteArrayMethodRef(out,use,"Reserve");
                             }
                             if (status==Status_Ok) {
-                                status=kek_compiler_SelfCWriteManualLine(out,"(this,1);");
+                                status=kek_compiler_CWriteManualLine(out,"(this,1);");
                             }
                             if (status==Status_Ok) {
-                                status=kek_compiler_SelfCWriteManualLine(out,"    if(status!=Status_Ok){return status;}");
+                                status=kek_compiler_CWriteManualLine(out,"    if(status!=Status_Ok){return status;}");
                             }
                             if (status==Status_Ok) {
                                 status=StringBuilder_WriteCString(out,"    kek_std_mem_set((void*)(&this->data[this->len]),0,sizeof(");
@@ -8259,79 +8619,79 @@ Status kek_compiler_SelfCWriteManualArrayGenericBody(struct SelfCProgram* progra
                                 status=StringBuilder_WriteString(out,argC);
                             }
                             if (status==Status_Ok) {
-                                status=kek_compiler_SelfCWriteManualLine(out,"));");
+                                status=kek_compiler_CWriteManualLine(out,"));");
                             }
                             if (status==Status_Ok) {
-                                status=kek_compiler_SelfCWriteManualLine(out,"    this->len+=1;");
+                                status=kek_compiler_CWriteManualLine(out,"    this->len+=1;");
                             }
                             if (status==Status_Ok) {
-                                status=kek_compiler_SelfCWriteManualLine(out,"    return Status_Ok;");
+                                status=kek_compiler_CWriteManualLine(out,"    return Status_Ok;");
                             }
                         } else {
                             if (String_EqualsCString(&name,"Pop")) {
                                 status=StringBuilder_WriteCString(out,"    ");
                                 if (status==Status_Ok) {
-                                    status=kek_compiler_SelfCWriteResultTypeRef(out,use);
+                                    status=kek_compiler_CWriteResultTypeRef(out,use);
                                 }
                                 if (status==Status_Ok) {
-                                    status=kek_compiler_SelfCWriteManualLine(out," result={0};");
+                                    status=kek_compiler_CWriteManualLine(out," result={0};");
                                 }
                                 if (status==Status_Ok) {
-                                    status=kek_compiler_SelfCWriteManualLine(out,"    if(this->len==0){result.status=Status_End;return result;}");
+                                    status=kek_compiler_CWriteManualLine(out,"    if(this->len==0){result.status=Status_End;return result;}");
                                 }
                                 if (status==Status_Ok) {
-                                    status=kek_compiler_SelfCWriteManualLine(out,"    this->len-=1;");
+                                    status=kek_compiler_CWriteManualLine(out,"    this->len-=1;");
                                 }
                                 if (status==Status_Ok) {
-                                    status=kek_compiler_SelfCWriteManualLine(out,"    result.status=Status_Ok;");
+                                    status=kek_compiler_CWriteManualLine(out,"    result.status=Status_Ok;");
                                 }
                                 if (status==Status_Ok) {
-                                    status=kek_compiler_SelfCWriteManualLine(out,"    result.value=this->data[this->len];");
+                                    status=kek_compiler_CWriteManualLine(out,"    result.value=this->data[this->len];");
                                 }
                                 if (status==Status_Ok) {
-                                    status=kek_compiler_SelfCWriteManualLine(out,"    return result;");
+                                    status=kek_compiler_CWriteManualLine(out,"    return result;");
                                 }
                             } else {
                                 if (String_EqualsCString(&name,"Get")) {
                                     status=StringBuilder_WriteCString(out,"    ");
                                     if (status==Status_Ok) {
-                                        status=kek_compiler_SelfCWriteResultTypeRef(out,use);
+                                        status=kek_compiler_CWriteResultTypeRef(out,use);
                                     }
                                     if (status==Status_Ok) {
-                                        status=kek_compiler_SelfCWriteManualLine(out," result={0};");
+                                        status=kek_compiler_CWriteManualLine(out," result={0};");
                                     }
                                     if (status==Status_Ok) {
-                                        status=kek_compiler_SelfCWriteManualLine(out,"    if(index>=this->len){result.status=Status_Invalid;return result;}");
+                                        status=kek_compiler_CWriteManualLine(out,"    if(index>=this->len){result.status=Status_Invalid;return result;}");
                                     }
                                     if (status==Status_Ok) {
-                                        status=kek_compiler_SelfCWriteManualLine(out,"    result.status=Status_Ok;");
+                                        status=kek_compiler_CWriteManualLine(out,"    result.status=Status_Ok;");
                                     }
                                     if (status==Status_Ok) {
-                                        status=kek_compiler_SelfCWriteManualLine(out,"    result.value=this->data[index];");
+                                        status=kek_compiler_CWriteManualLine(out,"    result.value=this->data[index];");
                                     }
                                     if (status==Status_Ok) {
-                                        status=kek_compiler_SelfCWriteManualLine(out,"    return result;");
+                                        status=kek_compiler_CWriteManualLine(out,"    return result;");
                                     }
                                 } else {
                                     if (String_EqualsCString(&name,"Set")) {
-                                        status=kek_compiler_SelfCWriteManualLine(out,"    if(index>=this->len){return Status_Invalid;}");
+                                        status=kek_compiler_CWriteManualLine(out,"    if(index>=this->len){return Status_Invalid;}");
                                         if (status==Status_Ok) {
-                                            status=kek_compiler_SelfCWriteManualLine(out,"    this->data[index]=value;");
+                                            status=kek_compiler_CWriteManualLine(out,"    this->data[index]=value;");
                                         }
                                         if (status==Status_Ok) {
-                                            status=kek_compiler_SelfCWriteManualLine(out,"    return Status_Ok;");
+                                            status=kek_compiler_CWriteManualLine(out,"    return Status_Ok;");
                                         }
                                     } else {
                                         if (String_EqualsCString(&name,"GetPtr")) {
-                                            status=kek_compiler_SelfCWriteManualLine(out,"    if(index>=this->len){return 0;}");
+                                            status=kek_compiler_CWriteManualLine(out,"    if(index>=this->len){return 0;}");
                                             if (status==Status_Ok) {
-                                                status=kek_compiler_SelfCWriteManualLine(out,"    return &this->data[index];");
+                                                status=kek_compiler_CWriteManualLine(out,"    return &this->data[index];");
                                             }
                                         } else {
                                             if (String_EqualsCString(&name,"LastPtr")) {
-                                                status=kek_compiler_SelfCWriteManualLine(out,"    if(this->len==0){return 0;}");
+                                                status=kek_compiler_CWriteManualLine(out,"    if(this->len==0){return 0;}");
                                                 if (status==Status_Ok) {
-                                                    status=kek_compiler_SelfCWriteManualLine(out,"    return &this->data[this->len-1];");
+                                                    status=kek_compiler_CWriteManualLine(out,"    return &this->data[this->len-1];");
                                                 }
                                             } else {
                                                 if (String_EqualsCString(&name,"Span")) {
@@ -8340,16 +8700,16 @@ Status kek_compiler_SelfCWriteManualArrayGenericBody(struct SelfCProgram* progra
                                                         status=StringBuilder_WriteString(out,std_string_OwnedStringView(&use->arg0));
                                                     }
                                                     if (status==Status_Ok) {
-                                                        status=kek_compiler_SelfCWriteManualLine(out," out={0};");
+                                                        status=kek_compiler_CWriteManualLine(out," out={0};");
                                                     }
                                                     if (status==Status_Ok) {
-                                                        status=kek_compiler_SelfCWriteManualLine(out,"    out.data=this->data;");
+                                                        status=kek_compiler_CWriteManualLine(out,"    out.data=this->data;");
                                                     }
                                                     if (status==Status_Ok) {
-                                                        status=kek_compiler_SelfCWriteManualLine(out,"    out.len=this->len;");
+                                                        status=kek_compiler_CWriteManualLine(out,"    out.len=this->len;");
                                                     }
                                                     if (status==Status_Ok) {
-                                                        status=kek_compiler_SelfCWriteManualLine(out,"    return out;");
+                                                        status=kek_compiler_CWriteManualLine(out,"    return out;");
                                                     }
                                                 } else {
                                                     if (String_EqualsCString(&name,"Slice")) {
@@ -8358,16 +8718,16 @@ Status kek_compiler_SelfCWriteManualArrayGenericBody(struct SelfCProgram* progra
                                                             status=StringBuilder_WriteString(out,std_string_OwnedStringView(&use->arg0));
                                                         }
                                                         if (status==Status_Ok) {
-                                                            status=kek_compiler_SelfCWriteManualLine(out," out={0};");
+                                                            status=kek_compiler_CWriteManualLine(out," out={0};");
                                                         }
                                                         if (status==Status_Ok) {
-                                                            status=kek_compiler_SelfCWriteManualLine(out,"    out.data=this->data;");
+                                                            status=kek_compiler_CWriteManualLine(out,"    out.data=this->data;");
                                                         }
                                                         if (status==Status_Ok) {
-                                                            status=kek_compiler_SelfCWriteManualLine(out,"    out.len=this->len;");
+                                                            status=kek_compiler_CWriteManualLine(out,"    out.len=this->len;");
                                                         }
                                                         if (status==Status_Ok) {
-                                                            status=kek_compiler_SelfCWriteManualLine(out,"    return out;");
+                                                            status=kek_compiler_CWriteManualLine(out,"    return out;");
                                                         }
                                                     }
                                                 }
@@ -8384,276 +8744,276 @@ Status kek_compiler_SelfCWriteManualArrayGenericBody(struct SelfCProgram* progra
     }
     return (status);
 }
-Status kek_compiler_SelfCWriteManualLinkedListGenericBody(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCFuncUse* use) {
-    struct String name=kek_compiler_SelfCTokenText(program,decl->fileIndex,decl->nameIndex);
+Status kek_compiler_CWriteManualLinkedListGenericBody(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl,struct CFuncUse* use) {
+    struct String name=kek_compiler_CTokenText(program,decl->fileIndex,decl->nameIndex);
     Status status=Status_Ok;
     if (String_EqualsCString(&name,"PushBack")||String_EqualsCString(&name,"PushFront")) {
         status=StringBuilder_WriteCString(out,"    ");
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteListNodeTypeRef(out,use);
+            status=kek_compiler_CWriteListNodeTypeRef(out,use);
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(out,"* node=(");
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteListNodeTypeRef(out,use);
+            status=kek_compiler_CWriteListNodeTypeRef(out,use);
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteManualLine(out,"*)kek_std_alloc(");
+            status=kek_compiler_CWriteManualLine(out,"*)kek_std_alloc(");
         }
         if (status==Status_Ok) {
             status=StringBuilder_WriteCString(out,"        sizeof(");
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteListNodeTypeRef(out,use);
+            status=kek_compiler_CWriteListNodeTypeRef(out,use);
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteManualLine(out,"));");
+            status=kek_compiler_CWriteManualLine(out,"));");
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteManualLine(out,"    if(node==0){return Status_NoMemory;}");
+            status=kek_compiler_CWriteManualLine(out,"    if(node==0){return Status_NoMemory;}");
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteManualLine(out,"    node->value=value;");
+            status=kek_compiler_CWriteManualLine(out,"    node->value=value;");
         }
         if (String_EqualsCString(&name,"PushBack")) {
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"    node->next=0;");
+                status=kek_compiler_CWriteManualLine(out,"    node->next=0;");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"    node->prev=this->last;");
+                status=kek_compiler_CWriteManualLine(out,"    node->prev=this->last;");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"    if(this->last!=0){");
+                status=kek_compiler_CWriteManualLine(out,"    if(this->last!=0){");
             }
             if (status==Status_Ok) {
                 status=StringBuilder_WriteCString(out,"        ");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteListNodeTypeRef(out,use);
+                status=kek_compiler_CWriteListNodeTypeRef(out,use);
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"* last=this->last;");
+                status=kek_compiler_CWriteManualLine(out,"* last=this->last;");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"        last->next=node;");
+                status=kek_compiler_CWriteManualLine(out,"        last->next=node;");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"    }else{");
+                status=kek_compiler_CWriteManualLine(out,"    }else{");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"        this->first=node;");
+                status=kek_compiler_CWriteManualLine(out,"        this->first=node;");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"    }");
+                status=kek_compiler_CWriteManualLine(out,"    }");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"    this->last=node;");
+                status=kek_compiler_CWriteManualLine(out,"    this->last=node;");
             }
         } else {
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"    node->prev=0;");
+                status=kek_compiler_CWriteManualLine(out,"    node->prev=0;");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"    node->next=this->first;");
+                status=kek_compiler_CWriteManualLine(out,"    node->next=this->first;");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"    if(this->first!=0){");
+                status=kek_compiler_CWriteManualLine(out,"    if(this->first!=0){");
             }
             if (status==Status_Ok) {
                 status=StringBuilder_WriteCString(out,"        ");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteListNodeTypeRef(out,use);
+                status=kek_compiler_CWriteListNodeTypeRef(out,use);
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"* first=this->first;");
+                status=kek_compiler_CWriteManualLine(out,"* first=this->first;");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"        first->prev=node;");
+                status=kek_compiler_CWriteManualLine(out,"        first->prev=node;");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"    }else{");
+                status=kek_compiler_CWriteManualLine(out,"    }else{");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"        this->last=node;");
+                status=kek_compiler_CWriteManualLine(out,"        this->last=node;");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"    }");
+                status=kek_compiler_CWriteManualLine(out,"    }");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"    this->first=node;");
+                status=kek_compiler_CWriteManualLine(out,"    this->first=node;");
             }
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteManualLine(out,"    this->len+=1;");
+            status=kek_compiler_CWriteManualLine(out,"    this->len+=1;");
         }
         if (status==Status_Ok) {
-            status=kek_compiler_SelfCWriteManualLine(out,"    return Status_Ok;");
+            status=kek_compiler_CWriteManualLine(out,"    return Status_Ok;");
         }
     } else {
         if (String_EqualsCString(&name,"PopBack")||String_EqualsCString(&name,"PopFront")) {
             status=StringBuilder_WriteCString(out,"    ");
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteResultTypeRef(out,use);
+                status=kek_compiler_CWriteResultTypeRef(out,use);
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out," result={0};");
+                status=kek_compiler_CWriteManualLine(out," result={0};");
             }
             if (String_EqualsCString(&name,"PopBack")) {
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    if(this->last==0){result.status=Status_End;return result;}");
+                    status=kek_compiler_CWriteManualLine(out,"    if(this->last==0){result.status=Status_End;return result;}");
                 }
                 if (status==Status_Ok) {
                     status=StringBuilder_WriteCString(out,"    ");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteListNodeTypeRef(out,use);
+                    status=kek_compiler_CWriteListNodeTypeRef(out,use);
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"* node=this->last;");
+                    status=kek_compiler_CWriteManualLine(out,"* node=this->last;");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    result.value=node->value;");
+                    status=kek_compiler_CWriteManualLine(out,"    result.value=node->value;");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    this->last=node->prev;");
+                    status=kek_compiler_CWriteManualLine(out,"    this->last=node->prev;");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    if(this->last!=0){");
+                    status=kek_compiler_CWriteManualLine(out,"    if(this->last!=0){");
                 }
                 if (status==Status_Ok) {
                     status=StringBuilder_WriteCString(out,"        ");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteListNodeTypeRef(out,use);
+                    status=kek_compiler_CWriteListNodeTypeRef(out,use);
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"* last=this->last;");
+                    status=kek_compiler_CWriteManualLine(out,"* last=this->last;");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"        last->next=0;");
+                    status=kek_compiler_CWriteManualLine(out,"        last->next=0;");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    }else{");
+                    status=kek_compiler_CWriteManualLine(out,"    }else{");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"        this->first=0;");
+                    status=kek_compiler_CWriteManualLine(out,"        this->first=0;");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    }");
+                    status=kek_compiler_CWriteManualLine(out,"    }");
                 }
             } else {
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    if(this->first==0){result.status=Status_End;return result;}");
+                    status=kek_compiler_CWriteManualLine(out,"    if(this->first==0){result.status=Status_End;return result;}");
                 }
                 if (status==Status_Ok) {
                     status=StringBuilder_WriteCString(out,"    ");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteListNodeTypeRef(out,use);
+                    status=kek_compiler_CWriteListNodeTypeRef(out,use);
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"* node=this->first;");
+                    status=kek_compiler_CWriteManualLine(out,"* node=this->first;");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    result.value=node->value;");
+                    status=kek_compiler_CWriteManualLine(out,"    result.value=node->value;");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    this->first=node->next;");
+                    status=kek_compiler_CWriteManualLine(out,"    this->first=node->next;");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    if(this->first!=0){");
+                    status=kek_compiler_CWriteManualLine(out,"    if(this->first!=0){");
                 }
                 if (status==Status_Ok) {
                     status=StringBuilder_WriteCString(out,"        ");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteListNodeTypeRef(out,use);
+                    status=kek_compiler_CWriteListNodeTypeRef(out,use);
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"* first=this->first;");
+                    status=kek_compiler_CWriteManualLine(out,"* first=this->first;");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"        first->prev=0;");
+                    status=kek_compiler_CWriteManualLine(out,"        first->prev=0;");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    }else{");
+                    status=kek_compiler_CWriteManualLine(out,"    }else{");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"        this->last=0;");
+                    status=kek_compiler_CWriteManualLine(out,"        this->last=0;");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    }");
+                    status=kek_compiler_CWriteManualLine(out,"    }");
                 }
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"    this->len-=1;");
+                status=kek_compiler_CWriteManualLine(out,"    this->len-=1;");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"    kek_std_free(node);");
+                status=kek_compiler_CWriteManualLine(out,"    kek_std_free(node);");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"    result.status=Status_Ok;");
+                status=kek_compiler_CWriteManualLine(out,"    result.status=Status_Ok;");
             }
             if (status==Status_Ok) {
-                status=kek_compiler_SelfCWriteManualLine(out,"    return result;");
+                status=kek_compiler_CWriteManualLine(out,"    return result;");
             }
         } else {
             if (String_EqualsCString(&name,"Destroy")) {
-                status=kek_compiler_SelfCWriteManualLine(out,"    while(this->len>0){");
+                status=kek_compiler_CWriteManualLine(out,"    while(this->len>0){");
                 if (status==Status_Ok) {
                     status=StringBuilder_WriteCString(out,"        ");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteResultTypeRef(out,use);
+                    status=kek_compiler_CWriteResultTypeRef(out,use);
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out," ignored={0};");
+                    status=kek_compiler_CWriteManualLine(out," ignored={0};");
                 }
                 if (status==Status_Ok) {
                     status=StringBuilder_WriteCString(out,"        ignored=");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteLinkedListMethodRef(out,use,"PopBack");
+                    status=kek_compiler_CWriteLinkedListMethodRef(out,use,"PopBack");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"(this);");
+                    status=kek_compiler_CWriteManualLine(out,"(this);");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"        if(ignored.status!=Status_Ok){return ignored.status;}");
+                    status=kek_compiler_CWriteManualLine(out,"        if(ignored.status!=Status_Ok){return ignored.status;}");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    }");
+                    status=kek_compiler_CWriteManualLine(out,"    }");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    return Status_Ok;");
+                    status=kek_compiler_CWriteManualLine(out,"    return Status_Ok;");
                 }
             }
         }
     }
     return (status);
 }
-Status kek_compiler_SelfCWriteManualGenericBody(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCFuncUse* use) {
-    struct String name=kek_compiler_SelfCTokenText(program,decl->fileIndex,decl->nameIndex);
+Status kek_compiler_CWriteManualGenericBody(struct CProgram* program,struct StringBuilder* out,struct CDecl* decl,struct CFuncUse* use) {
+    struct String name=kek_compiler_CTokenText(program,decl->fileIndex,decl->nameIndex);
     struct OwnedString argC={0};
-    Status status=kek_compiler_SelfCMakeCTypeFromKey(program,std_string_OwnedStringView(&use->arg0),&argC);
+    Status status=kek_compiler_CMakeCTypeFromKey(program,std_string_OwnedStringView(&use->arg0),&argC);
     if (status!=Status_Ok) {
         return (status);
     }
-    status=kek_compiler_SelfCWriteFunctionSignature(program,out,decl,std_string_OwnedStringView(&use->cName),use);
+    status=kek_compiler_CWriteFunctionSignature(program,out,decl,std_string_OwnedStringView(&use->cName),use);
     if (status==Status_Ok) {
         status=StringBuilder_WriteCString(out," {\n");
     }
     bool handled=0;
     if (decl->hasReceiver&&status==Status_Ok) {
-        struct String receiverBase=kek_compiler_SelfCTokenText(program,decl->fileIndex,decl->receiverStart);
+        struct String receiverBase=kek_compiler_CTokenText(program,decl->fileIndex,decl->receiverStart);
         if (String_EqualsCString(&receiverBase,"Array")) {
-            status=kek_compiler_SelfCWriteManualArrayGenericBody(program,out,decl,use,std_string_OwnedStringView(&argC));
+            status=kek_compiler_CWriteManualArrayGenericBody(program,out,decl,use,std_string_OwnedStringView(&argC));
             handled=1;
         } else {
             if (String_EqualsCString(&receiverBase,"LinkedList")) {
-                status=kek_compiler_SelfCWriteManualLinkedListGenericBody(program,out,decl,use);
+                status=kek_compiler_CWriteManualLinkedListGenericBody(program,out,decl,use);
                 handled=1;
             }
         }
@@ -8688,13 +9048,13 @@ Status kek_compiler_SelfCWriteManualGenericBody(struct SelfCProgram* program,str
                     status=StringBuilder_WriteString(out,std_string_OwnedStringView(&use->arg0));
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out," array={0};");
+                    status=kek_compiler_CWriteManualLine(out," array={0};");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    array.allocator=allocator;");
+                    status=kek_compiler_CWriteManualLine(out,"    array.allocator=allocator;");
                 }
                 if (status==Status_Ok) {
-                    status=kek_compiler_SelfCWriteManualLine(out,"    return array;");
+                    status=kek_compiler_CWriteManualLine(out,"    return array;");
                 }
             } else {
                 if (String_EqualsCString(&name,"LinkedListNew")) {
@@ -8705,13 +9065,13 @@ Status kek_compiler_SelfCWriteManualGenericBody(struct SelfCProgram* program,str
                         status=StringBuilder_WriteString(out,std_string_OwnedStringView(&use->arg0));
                     }
                     if (status==Status_Ok) {
-                        status=kek_compiler_SelfCWriteManualLine(out," list={0};");
+                        status=kek_compiler_CWriteManualLine(out," list={0};");
                     }
                     if (status==Status_Ok) {
-                        status=kek_compiler_SelfCWriteManualLine(out,"    list.allocator=allocator;");
+                        status=kek_compiler_CWriteManualLine(out,"    list.allocator=allocator;");
                     }
                     if (status==Status_Ok) {
-                        status=kek_compiler_SelfCWriteManualLine(out,"    return list;");
+                        status=kek_compiler_CWriteManualLine(out,"    return list;");
                     }
                 } else {
                     if (String_EqualsCString(&name,"Alloc")) {
@@ -8819,20 +9179,20 @@ Status kek_compiler_SelfCWriteManualGenericBody(struct SelfCProgram* program,str
     std_string_DestroyOwnedString(&argC);
     return (status);
 }
-Status kek_compiler_SelfCWriteFunctionDeclarations(struct SelfCProgram* program,struct StringBuilder* out) {
-    for (usize i=0;i<program->declCount;i++) {
-        struct SelfCDecl* decl=&program->decls[i];
-        if (decl->kind==SelfCDeclKind_Function&&!decl->isGeneric) {
-            Status status=kek_compiler_SelfCWriteFunctionPrototype(program,out,decl);
+Status kek_compiler_CWriteFunctionDeclarations(struct CProgram* program,struct StringBuilder* out) {
+    for (usize i=0;i<program->decls.len;i++) {
+        struct CDecl* decl=&program->decls.data[i];
+        if (decl->kind==CDeclKind_Function&&!decl->isGeneric&&decl->reachable) {
+            Status status=kek_compiler_CWriteFunctionPrototype(program,out,decl);
             if (status!=Status_Ok) {
                 return (status);
             }
         }
     }
-    for (usize i=0;i<program->funcUseCount;i++) {
-        struct SelfCFuncUse* use=&program->funcUses[i];
-        if (use->declIndex<program->declCount) {
-            Status status=kek_compiler_SelfCWriteFunctionSignature(program,out,&program->decls[use->declIndex],std_string_OwnedStringView(&use->cName),use);
+    for (usize i=0;i<program->funcUses.len;i++) {
+        struct CFuncUse* use=&program->funcUses.data[i];
+        if (use->declIndex<program->decls.len) {
+            Status status=kek_compiler_CWriteFunctionSignature(program,out,&program->decls.data[use->declIndex],std_string_OwnedStringView(&use->cName),use);
             if (status==Status_Ok) {
                 status=StringBuilder_WriteCString(out,";\n");
             }
@@ -8843,20 +9203,20 @@ Status kek_compiler_SelfCWriteFunctionDeclarations(struct SelfCProgram* program,
     }
     return (Status_Ok);
 }
-Status kek_compiler_SelfCWriteFunctionDefinitions(struct SelfCProgram* program,struct StringBuilder* out) {
-    for (usize i=0;i<program->funcUseCount;i++) {
-        struct SelfCFuncUse* use=&program->funcUses[i];
-        if (use->declIndex<program->declCount) {
-            Status status=kek_compiler_SelfCWriteManualGenericBody(program,out,&program->decls[use->declIndex],use);
+Status kek_compiler_CWriteFunctionDefinitions(struct CProgram* program,struct StringBuilder* out) {
+    for (usize i=0;i<program->funcUses.len;i++) {
+        struct CFuncUse* use=&program->funcUses.data[i];
+        if (use->declIndex<program->decls.len) {
+            Status status=kek_compiler_CWriteManualGenericBody(program,out,&program->decls.data[use->declIndex],use);
             if (status!=Status_Ok) {
                 return (status);
             }
         }
     }
-    for (usize i=0;i<program->declCount;i++) {
-        struct SelfCDecl* decl=&program->decls[i];
-        if (decl->kind==SelfCDeclKind_Function&&!decl->isGeneric&&decl->hasBody) {
-            Status status=kek_compiler_SelfCWriteFunctionBody(program,out,decl);
+    for (usize i=0;i<program->decls.len;i++) {
+        struct CDecl* decl=&program->decls.data[i];
+        if (decl->kind==CDeclKind_Function&&!decl->isGeneric&&decl->hasBody&&decl->reachable) {
+            Status status=kek_compiler_CWriteFunctionBody(program,out,decl);
             if (status!=Status_Ok) {
                 return (status);
             }
@@ -8864,56 +9224,59 @@ Status kek_compiler_SelfCWriteFunctionDefinitions(struct SelfCProgram* program,s
     }
     return (Status_Ok);
 }
-Status kek_compiler_SelfCWriteProgram(struct SelfCProgram* program,struct StringBuilder* out) {
-    Status status=kek_compiler_SelfCWritePrelude(out);
+Status kek_compiler_CWriteProgram(struct CProgram* program,struct StringBuilder* out) {
+    Status status=kek_compiler_CWritePrelude(out);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteTypeDeclarations(program,out);
+        status=kek_compiler_CWriteTypeDeclarations(program,out);
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteByte(out,'\n');
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteFunctionDeclarations(program,out);
+        status=kek_compiler_CWriteFunctionDeclarations(program,out);
     }
     if (status==Status_Ok) {
         status=StringBuilder_WriteByte(out,'\n');
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteFunctionDefinitions(program,out);
+        status=kek_compiler_CWriteFunctionDefinitions(program,out);
     }
     return (status);
 }
-Status kek_compiler_SelfCompileToCString(str inputPath,struct Allocator allocator,struct StringBuilder* out,struct SelfDiagnosticBag* diagnostics) {
-    struct SelfCProgram program={0};
-    Status status=kek_compiler_SelfCProgramInit(&program,allocator);
+Status kek_compiler_CompileToCString(str inputPath,struct Allocator allocator,struct StringBuilder* out,struct DiagnosticBag* diagnostics) {
+    struct CProgram program={0};
+    Status status=kek_compiler_CProgramInit(&program,allocator);
     if (status!=Status_Ok) {
         return (status);
     }
-    status=kek_compiler_SelfCLoadAndTokenize(&program,inputPath);
+    status=kek_compiler_CLoadAndTokenize(&program,inputPath);
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCParseDeclarations(&program);
+        status=kek_compiler_CParseDeclarations(&program);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCCollectTypeUses(&program);
+        status=kek_compiler_CMarkReachableDecls(&program);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCCollectGenericFunctionUses(&program);
+        status=kek_compiler_CCollectTypeUses(&program);
     }
     if (status==Status_Ok) {
-        status=kek_compiler_SelfCWriteProgram(&program,out);
+        status=kek_compiler_CCollectGenericFunctionUses(&program);
     }
-    if (program.diagnostics.count>0) {
-        for (usize i=0;i<program.diagnostics.count&&diagnostics->count<(sizeof(diagnostics->items)/sizeof((diagnostics->items)[0]));i++) {
-            struct SelfDiagnostic* item=&program.diagnostics.items[i];
-            kek_diagnostics_SelfDiagnosticAdd(diagnostics,item->severity,item->phase,item->fileIndex,item->location,std_string_OwnedStringView(&item->message));
+    if (status==Status_Ok) {
+        status=kek_compiler_CWriteProgram(&program,out);
+    }
+    if (program.diagnostics.items.len>0) {
+        for (usize i=0;i<program.diagnostics.items.len;i++) {
+            struct Diagnostic* item=&program.diagnostics.items.data[i];
+            kek_diagnostics_DiagnosticAdd(diagnostics,item->severity,item->phase,item->fileIndex,item->location,std_string_OwnedStringView(&item->message));
         }
     }
-    kek_compiler_SelfCProgramDestroy(&program);
+    kek_compiler_CProgramDestroy(&program);
     return (status);
 }
-Status kek_compiler_SelfCompileToC(str inputPath,str outputPath,struct Allocator allocator,struct SelfDiagnosticBag* diagnostics) {
+Status kek_compiler_CompileToC(str inputPath,str outputPath,struct Allocator allocator,struct DiagnosticBag* diagnostics) {
     struct StringBuilder generated=std_string_StringBuilderNew(allocator);
-    Status status=kek_compiler_SelfCompileToCString(inputPath,allocator,&generated,diagnostics);
+    Status status=kek_compiler_CompileToCString(inputPath,allocator,&generated,diagnostics);
     if (status==Status_Ok) {
         struct String view=StringBuilder_View(&generated);
         status=std_file_WriteFile(outputPath,view);
@@ -8921,56 +9284,29 @@ Status kek_compiler_SelfCompileToC(str inputPath,str outputPath,struct Allocator
     StringBuilder_Destroy(&generated);
     return (status);
 }
-Status kek_compiler_SelfCompileToCStringWithoutDiagnostics(str inputPath,struct Allocator allocator,struct StringBuilder* out) {
-    struct SelfDiagnosticBag diagnostics={0};
-    kek_diagnostics_SelfDiagnosticBagInit(&diagnostics,allocator);
-    Status status=kek_compiler_SelfCompileToCString(inputPath,allocator,out,&diagnostics);
-    kek_diagnostics_SelfDiagnosticBagDestroy(&diagnostics);
-    return (status);
-}
-Status kek_compiler_SelfWriteCompileDiagnostics(str inputPath,struct Allocator allocator,struct StringBuilder* out) {
-    struct StringBuilder generated=std_string_StringBuilderNew(allocator);
-    struct SelfDiagnosticBag diagnostics={0};
-    kek_diagnostics_SelfDiagnosticBagInit(&diagnostics,allocator);
-    Status status=kek_compiler_SelfCompileToCString(inputPath,allocator,&generated,&diagnostics);
-    Status writeStatus=Status_Ok;
-    if (diagnostics.count>0) {
-        writeStatus=kek_diagnostics_SelfWriteDiagnosticDump(&diagnostics,out);
-    } else {
-        if (status!=Status_Ok) {
-            writeStatus=StringBuilder_WriteCString(out,"diag|2|4|-1|0|0|0|0|compile failed\n");
-        }
-    }
-    StringBuilder_Destroy(&generated);
-    kek_diagnostics_SelfDiagnosticBagDestroy(&diagnostics);
-    if (writeStatus!=Status_Ok) {
-        return (writeStatus);
-    }
-    return (Status_Ok);
-}
-Status kek_compiler_SelfCompilerRunBuild(str inputPath,str outputPath) {
+Status kek_compiler_CompilerRunBuild(str inputPath,str outputPath) {
     struct Allocator allocator=std_mem_DefaultAllocator();
-    struct SelfDiagnosticBag diagnostics={0};
-    kek_diagnostics_SelfDiagnosticBagInit(&diagnostics,allocator);
-    Status status=kek_compiler_SelfCompileToC(inputPath,outputPath,allocator,&diagnostics);
-    if (diagnostics.count>0) {
+    struct DiagnosticBag diagnostics={0};
+    kek_diagnostics_DiagnosticBagInit(&diagnostics,allocator);
+    Status status=kek_compiler_CompileToC(inputPath,outputPath,allocator,&diagnostics);
+    if (diagnostics.items.len>0) {
         struct StringBuilder dump=std_string_StringBuilderNew(allocator);
-        kek_diagnostics_SelfWriteDiagnosticDump(&diagnostics,&dump);
+        kek_diagnostics_WriteDiagnosticDump(&diagnostics,&dump);
         struct File stderr=std_file_Stderr();
         struct String view=StringBuilder_View(&dump);
         File_Write(&stderr,String_Bytes(&view));
         StringBuilder_Destroy(&dump);
     }
-    kek_diagnostics_SelfDiagnosticBagDestroy(&diagnostics);
+    kek_diagnostics_DiagnosticBagDestroy(&diagnostics);
     return (status);
 }
-int kek_compiler_SelfCompilerMain(int argc,str* argv) {
+int kek_compiler_CompilerMain(int argc,str* argv) {
     if (argc<2) {
-        return (kek_compiler_SelfCompilerFail("missing command\n"));
+        return (kek_compiler_CompilerFail("missing command\n"));
     }
     struct String command=std_string_StringFromCString(argv[1]);
     if (String_EqualsCString(&command,"--help")) {
-        return (kek_compiler_SelfCompilerPrintHelp());
+        return (kek_compiler_CompilerPrintHelp());
     }
     if (String_EqualsCString(&command,"--version")) {
         struct File stdout=std_file_Stdout();
@@ -8978,10 +9314,10 @@ int kek_compiler_SelfCompilerMain(int argc,str* argv) {
         return (0);
     }
     if (!String_EqualsCString(&command,"build")) {
-        return (kek_compiler_SelfCompilerFail("unknown command\n"));
+        return (kek_compiler_CompilerFail("unknown command\n"));
     }
     if (argc<3) {
-        return (kek_compiler_SelfCompilerFail("missing input\n"));
+        return (kek_compiler_CompilerFail("missing input\n"));
     }
     str inputPath=argv[2];
     str outputPath="out.kek.c";
@@ -8990,17 +9326,17 @@ int kek_compiler_SelfCompilerMain(int argc,str* argv) {
         struct String arg=std_string_StringFromCString(argv[i]);
         if (String_EqualsCString(&arg,"-o")) {
             if (i+1>=((usize)(argc))) {
-                return (kek_compiler_SelfCompilerFail("missing -o value\n"));
+                return (kek_compiler_CompilerFail("missing -o value\n"));
             }
             outputPath=argv[i+1];
             i+=2;
             continue;
         }
-        return (kek_compiler_SelfCompilerFail("unknown build option\n"));
+        return (kek_compiler_CompilerFail("unknown build option\n"));
     }
-    Status status=kek_compiler_SelfCompilerRunBuild(inputPath,outputPath);
+    Status status=kek_compiler_CompilerRunBuild(inputPath,outputPath);
     if (status!=Status_Ok) {
-        return (kek_compiler_SelfCompilerFail("build failed\n"));
+        return (kek_compiler_CompilerFail("build failed\n"));
     }
     return (0);
 }
@@ -9021,13 +9357,4 @@ Status std_thread_ThreadHandleJoin(usize* handle) {
         return (Status_IoError);
     }
     return (Status_Ok);
-}
-Status std_thread_ThreadStart(struct Thread* thread,ptr entry,ptr arg) {
-    return (std_thread_ThreadHandleStart(&thread->handle,entry,arg));
-}
-Status std_thread_ThreadJoin(struct Thread* thread) {
-    return (std_thread_ThreadHandleJoin(&thread->handle));
-}
-Status Thread_Join(struct Thread* this) {
-    return (std_thread_ThreadJoin(this));
 }

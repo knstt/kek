@@ -6,5 +6,5 @@
 #import(kek/compiler.kek);
 
 int:main(int:argc, ptr<str>:argv) {
-	return(compiler::SelfCompilerMain(argc, argv));
+	return(compiler::CompilerMain(argc, argv));
 }

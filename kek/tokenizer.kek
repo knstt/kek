@@ -612,59 +612,13 @@ Token:Tokenizer::Next() {
 	return(TokenNew(TokenKind::Identifier, 0, line, column, start, 1));
 }
 
-Status:TokenArrayReserve(ptr<Array<Token>>:tokens, usize:additional) {
-	usize:needed = tokens.len + additional;
-	if (needed <= tokens.cap) {
-		return(Status::Ok);
-	}
-
-	usize:newCap = tokens.cap;
-	if (newCap == 0) {
-		newCap = 64;
-	}
-	while (newCap < needed) {
-		newCap = newCap * 2;
-	}
-
-	ptr<Token>:newData = std::Resize<Token>(tokens.allocator, tokens.data, tokens.cap, newCap);
-	if (newData == 0) {
-		return(Status::NoMemory);
-	}
-	tokens.data = newData;
-	tokens.cap = newCap;
-	return(Status::Ok);
-}
-
-Status:TokenArrayPush(ptr<Array<Token>>:tokens, Token:token) {
-	Status:status = TokenArrayReserve(tokens, 1);
-	if (status != Status::Ok) {
-		return(status);
-	}
-	tokens.data[tokens.len] = token;
-	tokens.len += 1;
-	return(Status::Ok);
-}
-
-Status:TokenArrayDestroy(ptr<Array<Token>>:tokens) {
-	if (tokens.data != 0) {
-		std::Free<Token>(tokens.allocator, tokens.data, tokens.cap);
-	}
-	tokens.data = 0;
-	tokens.len = 0;
-	tokens.cap = 0;
-	return(Status::Ok);
-}
-
 Status:TokenizeToArray(String:source, bool:emitComments, Allocator:allocator, ptr<Array<Token>>:out) {
-	out.data = 0;
-	out.len = 0;
-	out.cap = 0;
-	out.allocator = allocator;
+	out[0] = std::ArrayNew<Token>(allocator);
 
 	Tokenizer:tokenizer = TokenizerNew(source, emitComments);
 	while (true) {
 		Token:token = tokenizer.Next();
-		Status:status = TokenArrayPush(out, token);
+		Status:status = out.Push(token);
 		if (status != Status::Ok) {
 			return(status);
 		}
@@ -723,9 +677,9 @@ Status:WriteTokenDump(String:source, bool:emitComments, ptr<StringBuilder>:out) 
 	for (usize:i = 0; i < tokens.len; i++) {
 		status = WriteTokenDumpLine(tokens.data[i], out);
 		if (status != Status::Ok) {
-			TokenArrayDestroy(&tokens);
+			tokens.Destroy();
 			return(status);
 		}
 	}
-	return(TokenArrayDestroy(&tokens));
+	return(tokens.Destroy());
 }
