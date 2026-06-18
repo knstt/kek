@@ -1,7335 +1,9001 @@
-/* Generated bootstrap compiler artifact. Source of truth: self/kek.kek during self-hosted milestones. */
 #include <assert.h>
-#include <ctype.h>
-#include <dirent.h>
-#include <errno.h>
-#include <stdarg.h>
-#include <stddef.h>
 #include <stdint.h>
-#include <stdio.h>
+#include <stddef.h>
+#include <stdbool.h>
+
+typedef uint8_t u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+typedef uint64_t u64;
+typedef int8_t i8;
+typedef int16_t i16;
+typedef int32_t i32;
+typedef int64_t i64;
+typedef float f32;
+typedef double f64;
+typedef void* ptr;
+typedef const char* str;
+
+typedef u8 byte;
+typedef u64 usize;
+typedef i64 isize;
+typedef ptr RawHandle;
+typedef enum Status {
+    Status_Ok,
+    Status_End,
+    Status_Invalid,
+    Status_NoMemory,
+    Status_NotFound,
+    Status_PermissionDenied,
+    Status_Interrupted,
+    Status_Unsupported,
+    Status_IoError,
+} Status;
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif
+
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 
+static void* kek_std_alloc(size_t size) {
+	return malloc(size);
+}
 
+static void* kek_std_resize(void* oldData, size_t size) {
+	return realloc(oldData, size);
+}
 
-#define VERSION "0.2.0"
+static void kek_std_free(void* data) {
+	free(data);
+}
 
-#define MAX_PATH_LENGTH 256
-#define MAX_FILES 32
+static void* kek_std_mem_copy(void* dest, const void* src, size_t count) {
+	return memcpy(dest, src, count);
+}
 
-struct SourceFile {
-    char path[MAX_PATH_LENGTH];
-    char* content;
-    size_t length;
-    int fileIndex;
+static void* kek_std_mem_set(void* dest, int value, size_t count) {
+	return memset(dest, value, count);
+}
+
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+struct Allocator {
+    ptr context;
 };
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif
 
-struct SourceLocation {
-    size_t line;
-    size_t column;
-    size_t offset;
-    size_t length;
+#include <stdio.h>
+
+static FILE* kek_std_file_open(const char* path, const char* mode) {
+	return fopen(path, mode);
+}
+
+static size_t kek_std_file_read(void* data, size_t size, size_t count, FILE* file) {
+	return fread(data, size, count, file);
+}
+
+static size_t kek_std_file_write(const void* data, size_t size, size_t count, FILE* file) {
+	return fwrite(data, size, count, file);
+}
+
+static int kek_std_file_flush(FILE* file) {
+	return fflush(file);
+}
+
+static int kek_std_file_close(FILE* file) {
+	return fclose(file);
+}
+
+static FILE* kek_std_stdin(void) {
+	return stdin;
+}
+
+static FILE* kek_std_stdout(void) {
+	return stdout;
+}
+
+static FILE* kek_std_stderr(void) {
+	return stderr;
+}
+
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+typedef enum FileMode {
+    FileMode_Read,
+    FileMode_Write,
+    FileMode_Append,
+    FileMode_ReadWrite,
+} FileMode;
+struct File {
+    RawHandle handle;
+    bool owned;
 };
-
-struct FileTable {
-    struct SourceFile files[MAX_FILES];
-    size_t count;
+struct MemoryReader {
+    byte* data;
+    usize len;
+    usize pos;
 };
-
-enum KekDiagnosticSeverity {
-    KEK_DIAGNOSTIC_NOTE,
-    KEK_DIAGNOSTIC_WARNING,
-    KEK_DIAGNOSTIC_ERROR,
+struct MemoryWriter {
+    byte* data;
+    usize len;
+    usize pos;
 };
-
-enum KekDiagnosticPhase {
-    KEK_PHASE_SOURCE,
-    KEK_PHASE_LEX,
-    KEK_PHASE_PARSE,
-    KEK_PHASE_TYPED_PARSE,
-    KEK_PHASE_SEMANTIC,
-    KEK_PHASE_CODEGEN,
+struct String {
+    byte* data;
+    usize len;
 };
-
-struct KekDiagnostic {
-    enum KekDiagnosticSeverity severity;
-    enum KekDiagnosticPhase phase;
-    int fileIndex;
-    struct SourceLocation location;
-    char message[256];
+struct OwnedString {
+    byte* data;
+    usize len;
+    usize cap;
+    struct Allocator allocator;
 };
-
-struct KekDiagnosticBag {
-    struct KekDiagnostic* items;
-    size_t count;
-    size_t capacity;
-    size_t errorCount;
+struct StringBuilder {
+    byte* data;
+    usize len;
+    usize cap;
+    struct Allocator allocator;
 };
-
-enum TokenType {
-    TOKEN_EOF,
-    TOKEN_IDENTIFIER,
-    TOKEN_NUMBER,
-    TOKEN_STRING,
-    TOKEN_CHAR,
-    TOKEN_COMMENT,
-    TOKEN_DOC_COMMENT,
-    TOKEN_OPERATOR,
-    TOKEN_KEYWORD,
-    TOKEN_PUNCTUATION,
+struct ByteCursor {
+    struct String input;
+    usize pos;
+    usize line;
+    usize column;
 };
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif
 
-extern const char* TokenTypeNames[];
+#include <dirent.h>
 
-enum OperatorType {
-    OPERATOR_SCOPE,
-    OPERATOR_EQUAL,
-    OPERATOR_NOT_EQUAL,
-    OPERATOR_LESS_EQUAL,
-    OPERATOR_GREATER_EQUAL,
-    OPERATOR_LOGICAL_AND,
-    OPERATOR_LOGICAL_OR,
-    OPERATOR_PLUS_ASSIGN,
-    OPERATOR_MINUS_ASSIGN,
-    OPERATOR_ARROW,
-    OPERATOR_PLUS,
-    OPERATOR_MINUS,
-    OPERATOR_MULTIPLY,
-    OPERATOR_DIVIDE,
-    OPERATOR_MODULO,
-    OPERATOR_ASSIGN,
-    OPERATOR_LESS,
-    OPERATOR_GREATER,
-    OPERATOR_LOGICAL_NOT,
-    OPERATOR_BITWISE_AND,
-    OPERATOR_BITWISE_OR,
-    OPERATOR_BITWISE_NOT,
+static DIR* kek_std_dir_open(const char* path) {
+	return opendir(path);
+}
 
-    OPERATOR_COUNT
+static const char* kek_std_dir_read_name(DIR* dir) {
+	struct dirent* entry = readdir(dir);
+	if (!entry) {
+		return 0;
+	}
+	return entry->d_name;
+}
+
+static int kek_std_dir_close(DIR* dir) {
+	return closedir(dir);
+}
+
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+struct Directory {
+    RawHandle handle;
 };
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif
 
-extern const char* OperatorNames[];
+#include <stdlib.h>
 
-enum KeywordType {
-    KEYWORD_IF,
-    KEYWORD_ELSE,
-    KEYWORD_WHILE,
-    KEYWORD_FOR,
-    KEYWORD_RETURN,
-    KEYWORD_DO,
-    KEYWORD_BREAK,
-    KEYWORD_CONTINUE,
-    KEYWORD_USING,
-    KEYWORD_ALIAS,
-    KEYWORD_EXPORT,
-    KEYWORD_EXTERN,
-    KEYWORD_ENUM,
-    KEYWORD_STRUCT,
-    KEYWORD_UNION,
-    KEYWORD_SWITCH,
-    KEYWORD_CASE,
-    KEYWORD_DEFAULT,
-    KEYWORD_EACH,
-    KEYWORD_PACKED,
-    KEYWORD_ALIGNED,
-    KEYWORD_COMPTIME,
-    KEYWORD_DEFER,
-    KEYWORD_TAGGED,
-    KEYWORD_TRUE,
-    KEYWORD_FALSE,
-    KEYWORD_UNREACHABLE,
-    KEYWORD_PANIC,
+static int kek_std_system(const char* command) {
+	return system(command);
+}
 
-    KEYWORD_COUNT
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+typedef enum SelfDiagnosticSeverity {
+    SelfDiagnosticSeverity_Note,
+    SelfDiagnosticSeverity_Warning,
+    SelfDiagnosticSeverity_Error,
+} SelfDiagnosticSeverity;
+typedef enum SelfDiagnosticPhase {
+    SelfDiagnosticPhase_Source,
+    SelfDiagnosticPhase_Lex,
+    SelfDiagnosticPhase_Parse,
+    SelfDiagnosticPhase_TypedParse,
+    SelfDiagnosticPhase_Semantic,
+    SelfDiagnosticPhase_Codegen,
+} SelfDiagnosticPhase;
+struct SelfSourceLocation {
+    usize line;
+    usize column;
+    usize offset;
+    usize length;
 };
-
-extern const char* KeywordNames[];
-
-enum PunctuationType {
-    PUNCTUATION_LEFT_PAREN,
-    PUNCTUATION_RIGHT_PAREN,
-    PUNCTUATION_LEFT_BRACE,
-    PUNCTUATION_RIGHT_BRACE,
-    PUNCTUATION_LEFT_BRACKET,
-    PUNCTUATION_RIGHT_BRACKET,
-    PUNCTUATION_SEMICOLON,
-    PUNCTUATION_COMMA,
-    PUNCTUATION_COLON,
-    PUNCTUATION_DOT,
-    PUNCTUATION_HASH,
-
-    PUNCTUATION_COUNT
+struct SelfDiagnostic {
+    SelfDiagnosticSeverity severity;
+    SelfDiagnosticPhase phase;
+    i64 fileIndex;
+    struct SelfSourceLocation location;
+    struct OwnedString message;
 };
-
-extern const char* PunctuationNames[];
-
-union TokenValue {
-    struct {
-        size_t offset;
-        size_t length;
-    } text;
-    enum OperatorType operator;
-    enum KeywordType keyword;
-    enum PunctuationType punctuation;
+struct SelfDiagnosticBag {
+    struct SelfDiagnostic items[256];
+    usize count;
+    usize errorCount;
+    struct Allocator allocator;
 };
-
+struct SelfSourceFile {
+    struct OwnedString path;
+    struct OwnedString content;
+    usize fileIndex;
+};
+struct SelfFileTable {
+    struct SelfSourceFile files[64];
+    usize count;
+    struct Allocator allocator;
+};
+typedef enum TokenKind {
+    TokenKind_Eof,
+    TokenKind_Identifier,
+    TokenKind_Number,
+    TokenKind_String,
+    TokenKind_Char,
+    TokenKind_Comment,
+    TokenKind_DocComment,
+    TokenKind_Operator,
+    TokenKind_Keyword,
+    TokenKind_Punctuation,
+} TokenKind;
+typedef enum OperatorKind {
+    OperatorKind_Scope,
+    OperatorKind_Equal,
+    OperatorKind_NotEqual,
+    OperatorKind_LessEqual,
+    OperatorKind_GreaterEqual,
+    OperatorKind_LogicalAnd,
+    OperatorKind_LogicalOr,
+    OperatorKind_PlusAssign,
+    OperatorKind_MinusAssign,
+    OperatorKind_Arrow,
+    OperatorKind_Plus,
+    OperatorKind_Minus,
+    OperatorKind_Multiply,
+    OperatorKind_Divide,
+    OperatorKind_Modulo,
+    OperatorKind_Assign,
+    OperatorKind_Less,
+    OperatorKind_Greater,
+    OperatorKind_LogicalNot,
+    OperatorKind_BitwiseAnd,
+    OperatorKind_BitwiseOr,
+    OperatorKind_BitwiseNot,
+} OperatorKind;
+typedef enum KeywordKind {
+    KeywordKind_If,
+    KeywordKind_Else,
+    KeywordKind_While,
+    KeywordKind_For,
+    KeywordKind_Return,
+    KeywordKind_Do,
+    KeywordKind_Break,
+    KeywordKind_Continue,
+    KeywordKind_Using,
+    KeywordKind_Alias,
+    KeywordKind_Export,
+    KeywordKind_Extern,
+    KeywordKind_Enum,
+    KeywordKind_Struct,
+    KeywordKind_Union,
+    KeywordKind_Switch,
+    KeywordKind_Case,
+    KeywordKind_Default,
+    KeywordKind_Each,
+    KeywordKind_Packed,
+    KeywordKind_Aligned,
+    KeywordKind_Comptime,
+    KeywordKind_Defer,
+    KeywordKind_Tagged,
+    KeywordKind_True,
+    KeywordKind_False,
+    KeywordKind_Unreachable,
+    KeywordKind_Panic,
+} KeywordKind;
+typedef enum PunctuationKind {
+    PunctuationKind_LeftParen,
+    PunctuationKind_RightParen,
+    PunctuationKind_LeftBrace,
+    PunctuationKind_RightBrace,
+    PunctuationKind_LeftBracket,
+    PunctuationKind_RightBracket,
+    PunctuationKind_Semicolon,
+    PunctuationKind_Comma,
+    PunctuationKind_Colon,
+    PunctuationKind_Dot,
+    PunctuationKind_Hash,
+} PunctuationKind;
 struct Token {
-    enum TokenType type;
-    union TokenValue value;
-    struct SourceLocation location;
+    TokenKind kind;
+    u64 subkind;
+    usize line;
+    usize column;
+    usize offset;
+    usize length;
 };
-
 struct Tokenizer {
-    struct SourceFile* file;
-    int fileIndex;
-    size_t position;
-    size_t line;
-    size_t column;
-    int emitComments;
-    struct KekDiagnosticBag* diagnostics;
+    struct ByteCursor cursor;
+    bool emitComments;
 };
-
-struct TokenArray {
-    struct Token* items;
-    size_t count;
-    size_t capacity;
-};
-
-enum AstNodeType {
-    AST_FILE,
-    AST_STATEMENT,
-    AST_BLOCK,
-    AST_GROUP,
-    AST_INDEX,
-    AST_GENERIC,
-    AST_TOKEN,
-};
-
-extern const char* AstNodeTypeNames[];
-
-struct AstNode {
-    enum AstNodeType type;
-    struct SourceLocation location;
+typedef enum SelfAstKind {
+    SelfAstKind_File,
+    SelfAstKind_Statement,
+    SelfAstKind_Block,
+    SelfAstKind_Group,
+    SelfAstKind_Index,
+    SelfAstKind_Generic,
+    SelfAstKind_Token,
+} SelfAstKind;
+struct SelfAstNode {
+    SelfAstKind kind;
+    struct SelfSourceLocation location;
     struct Token token;
-    struct AstNode* firstChild;
-    struct AstNode* lastChild;
-    struct AstNode* nextSibling;
-    size_t childCount;
+    usize firstChild;
+    usize lastChild;
+    usize nextSibling;
+    usize childCount;
 };
-
-enum KekDeclKind {
-    KEK_DECL_IMPORT,
-    KEK_DECL_USING,
-    KEK_DECL_ALIAS,
-    KEK_DECL_EXTERN_C,
-    KEK_DECL_STRUCT,
-    KEK_DECL_ENUM,
-    KEK_DECL_UNION,
-    KEK_DECL_FUNCTION,
-    KEK_DECL_VARIABLE,
-    KEK_DECL_UNKNOWN,
-
-    KEK_DECL_COUNT
+struct SelfAstTree {
+    struct SelfAstNode* nodes;
+    usize len;
+    usize cap;
+    usize root;
+    struct Allocator allocator;
 };
-
-enum KekStmtKind {
-    KEK_STMT_BLOCK,
-    KEK_STMT_DECL,
-    KEK_STMT_EXPR,
-    KEK_STMT_IF,
-    KEK_STMT_ELSE,
-    KEK_STMT_WHILE,
-    KEK_STMT_DO_WHILE,
-    KEK_STMT_FOR,
-    KEK_STMT_EACH,
-    KEK_STMT_SWITCH,
-    KEK_STMT_CASE,
-    KEK_STMT_DEFAULT,
-    KEK_STMT_DEFER,
-    KEK_STMT_RETURN,
-    KEK_STMT_BREAK,
-    KEK_STMT_CONTINUE,
-    KEK_STMT_UNREACHABLE,
-    KEK_STMT_PANIC,
-    KEK_STMT_UNKNOWN,
-
-    KEK_STMT_COUNT
-};
-
-enum KekExprKind {
-    KEK_EXPR_NAME,
-    KEK_EXPR_NUMBER,
-    KEK_EXPR_STRING,
-    KEK_EXPR_BOOL,
-    KEK_EXPR_CALL,
-    KEK_EXPR_FIELD,
-    KEK_EXPR_SCOPE,
-    KEK_EXPR_INDEX,
-    KEK_EXPR_GROUP,
-    KEK_EXPR_STRUCT_LITERAL,
-    KEK_EXPR_UNARY,
-    KEK_EXPR_BINARY,
-    KEK_EXPR_ASSIGN,
-    KEK_EXPR_CAST,
-    KEK_EXPR_SIZEOF,
-    KEK_EXPR_ALIGNOF,
-    KEK_EXPR_OFFSETOF,
-    KEK_EXPR_LEN,
-    KEK_EXPR_RANGE,
-    KEK_EXPR_UNKNOWN,
-
-    KEK_EXPR_COUNT
-};
-
-enum KekTypeKind {
-    KEK_TYPE_BUILTIN,
-    KEK_TYPE_NAME,
-    KEK_TYPE_POINTER,
-    KEK_TYPE_ARRAY,
-    KEK_TYPE_FUNCTION,
-    KEK_TYPE_UNKNOWN,
-
-    KEK_TYPE_COUNT
-};
-
-enum KekSymbolKind {
-    KEK_SYMBOL_TYPE,
-    KEK_SYMBOL_FUNCTION,
-    KEK_SYMBOL_GLOBAL,
-    KEK_SYMBOL_PARAM,
-    KEK_SYMBOL_LOCAL,
-    KEK_SYMBOL_IMPORT,
-    KEK_SYMBOL_UNKNOWN,
-
-    KEK_SYMBOL_COUNT
-};
-
-enum KekScopeKind {
-    KEK_SCOPE_PROGRAM,
-    KEK_SCOPE_MODULE,
-    KEK_SCOPE_FUNCTION,
-    KEK_SCOPE_BLOCK,
-    KEK_SCOPE_LOOP,
-
-    KEK_SCOPE_COUNT
-};
-
-extern const char* KekDeclKindNames[];
-extern const char* KekStmtKindNames[];
-extern const char* KekExprKindNames[];
-extern const char* KekTypeKindNames[];
-extern const char* KekSymbolKindNames[];
-extern const char* KekScopeKindNames[];
-
-struct KekType;
-struct KekExpr;
-struct KekStmt;
-struct KekParam;
-struct KekField;
-struct KekVariant;
-
-struct KekType {
-    enum KekTypeKind kind;
-    struct SourceLocation location;
-    struct AstNode* source;
-    struct AstNode* name;
-    struct AstNode* genericArgs;
-    struct KekType* element;
-    struct KekExpr* arraySize;
-    struct KekType* next;
-};
-
-struct KekExpr {
-    enum KekExprKind kind;
-    struct SourceLocation location;
-    struct AstNode* source;
-    struct AstNode* token;
-    struct KekExpr* left;
-    struct KekExpr* right;
-    struct KekExpr* callee;
-    struct KekType* type;
-    struct AstNode* genericArgs;
-    struct KekExpr* firstArg;
-    struct KekExpr* lastArg;
-    struct KekExpr* next;
-    struct KekExpr* step;         // Step expression (for range)
-};
-
-struct KekStmt {
-    enum KekStmtKind kind;
-    struct SourceLocation location;
-    struct AstNode* source;
-    struct KekType* declType;
-    struct AstNode* declName;
-    struct KekExpr* expr;
-    struct KekExpr* condition;
-    struct KekExpr* step;
-    struct KekStmt* initStmt;
-    struct KekStmt* firstChild;
-    struct KekStmt* lastChild;
-    struct KekStmt* next;
-    struct KekType* indexType;    // Type of index variable (for each)
-    struct AstNode* indexName;    // Name of index variable (for each)
-};
-
-struct KekParam {
-    struct SourceLocation location;
-    struct AstNode* source;
-    struct KekType* type;
-    struct AstNode* name;
-    struct KekExpr* defaultValue;
-    struct KekParam* next;
-};
-
-struct KekField {
-    struct SourceLocation location;
-    struct AstNode* source;
-    struct KekType* type;
-    struct AstNode* name;
-    struct KekExpr* defaultValue;
-    struct KekField* next;
-    struct KekField* nestedFields;  // For nested struct definitions
-    struct KekField* lastNestedField;
-    int isNestedStruct;
-};
-
-struct KekVariant {
-    struct SourceLocation location;
-    struct AstNode* source;
-    struct AstNode* name;
-    struct KekExpr* value;
-    struct KekVariant* next;
-};
-
-struct KekDecl {
-    enum KekDeclKind kind;
-    struct SourceLocation location;
-    struct AstNode* source;
-    struct AstNode* name;
-    struct AstNode* type;
-    struct AstNode* body;
-    struct AstNode* genericParams;
-    struct KekType* parsedType;
-    struct KekParam* firstParam;
-    struct KekParam* lastParam;
-    struct KekField* firstField;
-    struct KekField* lastField;
-    struct KekVariant* firstVariant;
-    struct KekVariant* lastVariant;
-    struct KekStmt* firstStmt;
-    struct KekStmt* lastStmt;
-    struct KekDecl* next;
-    int hasDocComment;
-    struct SourceLocation docCommentLocation;
-};
-
-struct KekModule {
-    struct SourceFile* file;
-    struct KekDecl* firstDecl;
-    struct KekDecl* lastDecl;
-    size_t declCount;
-    size_t declKindCounts[KEK_DECL_COUNT];
-    size_t stmtKindCounts[KEK_STMT_COUNT];
-    size_t exprKindCounts[KEK_EXPR_COUNT];
-    size_t typeKindCounts[KEK_TYPE_COUNT];
-    size_t paramCount;
-    size_t fieldCount;
-    size_t variantCount;
-    size_t typedStmtCount;
-    size_t typedExprCount;
-    size_t typedTypeCount;
-    int errorCount;
-};
-
-struct KekSymbol {
-    enum KekSymbolKind kind;
-    struct SourceFile* file;
-    struct KekDecl* decl;
-    struct KekParam* param;
-    struct KekStmt* stmt;
-    struct AstNode* name;
-    struct KekScope* scope;
-    struct KekSymbol* nextInScope;
-};
-
-struct KekScope {
-    enum KekScopeKind kind;
-    struct SourceFile* file;
-    struct KekDecl* decl;
-    struct KekStmt* stmt;
-    struct KekScope* parent;
-    struct KekScope* next;
-    struct KekSymbol* firstSymbol;
-    struct KekSymbol* lastSymbol;
-    size_t symbolCount;
-    size_t symbolKindCounts[KEK_SYMBOL_COUNT];
-};
-
-struct KekProgram {
-    struct KekSymbol* symbols;
-    size_t symbolCount;
-    size_t symbolCapacity;
-    size_t symbolKindCounts[KEK_SYMBOL_COUNT];
-    struct KekScope* scopes;
-    size_t scopeCount;
-    size_t scopeCapacity;
-    size_t scopeKindCounts[KEK_SCOPE_COUNT];
-    size_t semanticCheckCount;
-    int errorCount;
-    struct KekDiagnosticBag* diagnostics;
-};
-
-struct KekCompilationUnit {
-    int fileIndex;
+struct SelfParser {
     struct Token* tokens;
-    struct AstNode* astNodes;
-    struct AstNode* ast;
-    struct KekDecl* decls;
-    struct KekType* types;
-    struct KekExpr* exprs;
-    struct KekStmt* stmts;
-    struct KekParam* params;
-    struct KekField* fields;
-    struct KekVariant* variants;
-    struct KekModule module;
+    usize count;
+    usize position;
+    struct String source;
+    i64 fileIndex;
+    struct SelfDiagnosticBag* diagnostics;
+    struct SelfAstTree tree;
+    usize errorCount;
 };
-
-struct KekCompilation {
-    struct FileTable fileTable;
-    struct KekCompilationUnit units[MAX_FILES];
-    struct KekModule modules[MAX_FILES];
-    size_t unitCount;
-    int entryFileIndex;
-    struct KekProgram program;
-    struct KekSymbol* symbols;
-    struct KekScope* scopes;
-    struct KekDiagnosticBag diagnostics;
-};
-
-struct KekLexOptions {
-    int emitComments;
-    struct KekDiagnosticBag* diagnostics;
-};
-
-void InitKekDiagnosticBag(struct KekDiagnosticBag* bag, struct KekDiagnostic* storage, size_t capacity);
-void KekAddDiagnostic(struct KekDiagnosticBag* bag, enum KekDiagnosticSeverity severity, enum KekDiagnosticPhase phase, int fileIndex, struct SourceLocation location, const char* message);
-void KekAddDiagnosticFormat(struct KekDiagnosticBag* bag, enum KekDiagnosticSeverity severity, enum KekDiagnosticPhase phase, int fileIndex, struct SourceLocation location, const char* format, ...);
-void PrintKekDiagnostics(FILE* out, struct KekDiagnosticBag* bag, struct FileTable* table);
-
-int ReadFile(const char* path, struct FileTable* table);
-int ReadFileWithDiagnostics(const char* path, struct FileTable* table, struct KekDiagnosticBag* diagnostics);
-void FreeFileTable(struct FileTable* table);
-const char* SourceLocationText(struct SourceFile* file, struct SourceLocation location, size_t* length);
-const char* TokenText(struct Token* token, struct SourceFile* file, size_t* length);
-const char* AstNodeText(struct AstNode* node, struct SourceFile* file, size_t* length);
-
-struct Tokenizer CreateTokenizer(int fileIndex, struct FileTable* table);
-struct Tokenizer CreateTokenizerWithOptions(int fileIndex, struct FileTable* table, struct KekLexOptions options);
-struct Token GetNextToken(struct Tokenizer* tokenizer);
-struct TokenArray TokenizeFile(struct Tokenizer* tokenizer, struct Token* storage, size_t capacity);
-const char* TokenLexeme(struct Token* token, struct SourceFile* file);
-void PrintToken(struct Token* token, struct SourceFile* file);
-void FreeTokenArray(struct TokenArray* array);
-
-void PrintAst(struct AstNode* node, struct SourceFile* file, int indent);
-void FreeAst(struct AstNode* node);
-
-void PrintKekModuleSummary(struct KekModule* module);
-int WriteKekModuleSummaryFile(const char* path, struct KekModule* modules, size_t moduleCount, struct KekProgram* program);
-
-int WriteAstJsonFile(const char* path, struct AstNode* ast, struct SourceFile* file);
-void WriteAstJson(FILE* out, struct AstNode* node, struct SourceFile* file, int indent);
-void WriteJsonEscaped(FILE* out, const char* text, size_t length);
-
-int WriteTypedCFileForModules(const char* path, struct KekModule* modules, size_t count);
-
-void FreeKekCompilationUnit(struct KekCompilationUnit* unit);
-void InitKekCompilation(struct KekCompilation* compilation, struct KekDiagnostic* diagnostics, size_t diagnosticCapacity);
-void FreeKekCompilation(struct KekCompilation* compilation);
-int LoadKekCompilation(struct KekCompilation* compilation, const char* entryPath);
-int BuildKekCompilation(struct KekCompilation* compilation);
-int WriteKekCompilationOutputs(struct KekCompilation* compilation, const char* cPath, const char* astJsonPath, const char* summaryPath);
-int CompileKekSmoke(const char* entryPath, const char* cPath, const char* astJsonPath, const char* summaryPath, struct KekCompilation* compilation);
-
-
-
-
-struct Parser {
+typedef enum SelfCDeclKind {
+    SelfCDeclKind_Unknown,
+    SelfCDeclKind_Alias,
+    SelfCDeclKind_Struct,
+    SelfCDeclKind_Union,
+    SelfCDeclKind_Enum,
+    SelfCDeclKind_Function,
+    SelfCDeclKind_ExternC,
+} SelfCDeclKind;
+typedef enum SelfCTypeKind {
+    SelfCTypeKind_Unknown,
+    SelfCTypeKind_Void,
+    SelfCTypeKind_Bool,
+    SelfCTypeKind_Integer,
+    SelfCTypeKind_Float,
+    SelfCTypeKind_Pointer,
+    SelfCTypeKind_Struct,
+    SelfCTypeKind_Union,
+    SelfCTypeKind_Enum,
+    SelfCTypeKind_Alias,
+} SelfCTypeKind;
+struct SelfCTokenFile {
     struct Token* tokens;
-    size_t count;
-    size_t position;
-    struct SourceFile* file;
-    struct AstNode* astNodes;
-    size_t astNodeCount;
-    size_t astNodeCapacity;
-    int errorCount;
-    struct KekDiagnosticBag* diagnostics;
+    usize tokenLen;
+    usize tokenCap;
+    struct String sourceText;
+    struct String path;
+    struct OwnedString packageName;
+    usize fileIndex;
+};
+struct SelfCTypeUse {
+    struct OwnedString key;
+    struct OwnedString cName;
+    struct OwnedString baseName;
+    struct OwnedString arg0;
+    struct OwnedString arg1;
+    struct OwnedString arg2;
+    usize argCount;
+    bool emitted;
+};
+struct SelfCFuncUse {
+    usize declIndex;
+    struct OwnedString key;
+    struct OwnedString cName;
+    struct OwnedString arg0;
+    struct OwnedString arg1;
+    struct OwnedString arg2;
+    usize argCount;
+    bool emitted;
+};
+struct SelfCParam {
+    usize fileIndex;
+    usize typeStart;
+    usize typeEnd;
+    usize nameIndex;
+    usize defaultStart;
+    usize defaultEnd;
+    bool hasDefault;
+};
+struct SelfCField {
+    usize fileIndex;
+    usize typeStart;
+    usize typeEnd;
+    usize nameIndex;
+    usize defaultStart;
+    usize defaultEnd;
+    usize arrayStart;
+    usize arrayEnd;
+    bool hasDefault;
+    bool isArray;
+    bool isNestedStruct;
+    usize nestedBodyStart;
+    usize nestedBodyEnd;
+};
+struct SelfCDecl {
+    SelfCDeclKind kind;
+    usize fileIndex;
+    usize start;
+    usize end;
+    usize nameIndex;
+    usize returnStart;
+    usize returnEnd;
+    usize receiverStart;
+    usize receiverEnd;
+    bool hasReceiver;
+    bool isOperator;
+    u8 operatorCode;
+    usize genericStart;
+    usize genericEnd;
+    bool isGeneric;
+    usize paramStart;
+    usize paramEnd;
+    usize bodyStart;
+    usize bodyEnd;
+    bool hasBody;
+    usize firstParam;
+    usize paramCount;
+    usize firstField;
+    usize fieldCount;
+    struct OwnedString packageName;
+    bool emitted;
+};
+struct SelfCLocal {
+    struct OwnedString name;
+    struct OwnedString typeKey;
+    struct OwnedString cType;
+    struct OwnedString arrayLen;
+    bool isArray;
+    bool isPointer;
+};
+struct SelfCEnv {
+    struct SelfCLocal locals[512];
+    usize localCount;
+    struct OwnedString returnTypeKey;
+    struct OwnedString returnCType;
+    struct OwnedString thisTypeKey;
+    struct OwnedString thisCType;
+    bool hasThis;
+    usize deferCounter;
+    usize eachCounter;
+};
+struct SelfCExpr {
+    struct OwnedString text;
+    struct OwnedString typeKey;
+    struct OwnedString cType;
+    struct OwnedString arrayLen;
+    bool isArray;
+    bool isLvalue;
+    bool isPointer;
+};
+struct SelfCExprParser {
+    struct SelfCProgram* program;
+    struct SelfCEnv* env;
+    usize fileIndex;
+    usize pos;
+    usize end;
+    struct OwnedString expectedTypeKey;
+    struct OwnedString expectedCType;
+    bool expectedIsArray;
+};
+struct SelfCTypeInfo {
+    struct OwnedString key;
+    struct OwnedString cType;
+    struct OwnedString baseName;
+    struct OwnedString arg0;
+    struct OwnedString arg1;
+    struct OwnedString arg2;
+    usize argCount;
+    bool isPointer;
+};
+struct SelfCProgram {
+    struct Allocator allocator;
+    struct SelfDiagnosticBag diagnostics;
+    struct SelfFileTable files;
+    struct SelfCTokenFile tokenFiles[96];
+    usize tokenFileCount;
+    struct SelfCDecl decls[4096];
+    usize declCount;
+    struct SelfCParam params[4096];
+    usize paramCount;
+    struct SelfCField fields[8192];
+    usize fieldCount;
+    struct SelfCTypeUse typeUses[2048];
+    usize typeUseCount;
+    struct SelfCFuncUse funcUses[2048];
+    usize funcUseCount;
+};
+struct Result__File {
+    Status status;
+    struct File value;
+};
+struct Result__usize {
+    Status status;
+    usize value;
+};
+struct Span__byte {
+    byte* data;
+    usize len;
+};
+struct Slice__byte {
+    byte* data;
+    usize len;
+};
+struct Result__OwnedString {
+    Status status;
+    struct OwnedString value;
+};
+struct Result__Directory {
+    Status status;
+    struct Directory value;
+};
+struct Result__String {
+    Status status;
+    struct String value;
+};
+struct Slice__Token {
+    struct Token* data;
+    usize len;
+};
+struct Span__Token {
+    struct Token* data;
+    usize len;
+};
+struct Result__Token {
+    Status status;
+    struct Token value;
+};
+struct Array__Token {
+    struct Token* data;
+    usize len;
+    usize cap;
+    struct Allocator allocator;
 };
 
-struct KekNodePool {
-    void* items;
-    size_t count;
-    size_t capacity;
-    size_t itemSize;
-};
+int main(int argc,str* argv);
+struct Allocator std_DefaultAllocator(void);
+void std_SetBytes(byte* dest,byte value,usize count);
+struct Result__File std_FileOpen(str path,FileMode mode);
+struct Result__usize File_Read(struct File* this,struct Span__byte out);
+struct Result__usize File_Write(struct File* this,struct Slice__byte data);
+Status File_Flush(struct File* this);
+Status std_ReadFileToOwnedString(str path,struct Allocator allocator,struct OwnedString* out);
+Status std_WriteFile(str path,struct String text);
+Status File_Close(struct File* this);
+struct File std_Stdin(void);
+struct File std_Stdout(void);
+struct File std_Stderr(void);
+Status std_ReadAllToOwnedString(struct File file,struct Allocator allocator,struct OwnedString* out);
+struct MemoryReader std_MemoryReaderNew(struct Slice__byte data);
+struct MemoryWriter std_MemoryWriterNew(struct Span__byte data);
+struct Result__usize MemoryReader_Read(struct MemoryReader* this,struct Span__byte out);
+struct Result__usize MemoryWriter_Write(struct MemoryWriter* this,struct Slice__byte data);
+usize MemoryWriter_Written(struct MemoryWriter* this);
+Status std_WriteByteToMemory(struct MemoryWriter* writer,byte value);
+struct String std_StringFromBytes(struct Slice__byte bytes);
+struct String std_StringFromCString(str text);
+struct Slice__byte String_Bytes(struct String* this);
+struct String String_Slice(struct String* this,usize start,usize length);
+bool String_Equals(struct String* this,struct String other);
+bool String_EqualsCString(struct String* this,str text);
+int String_Compare(struct String* this,struct String other);
+bool String_EqualsBytes(struct String* this,byte* data,usize len);
+struct Result__usize String_FindByte(struct String* this,byte value);
+bool String_ContainsByte(struct String* this,byte value);
+bool String_StartsWith(struct String* this,struct String prefix);
+bool String_EndsWith(struct String* this,struct String suffix);
+bool std_IsAsciiSpace(byte c);
+bool std_IsAsciiAlpha(byte c);
+bool std_IsAsciiDigit(byte c);
+bool std_IsAsciiWord(byte c);
+bool std_IsAsciiOperator(byte c);
+struct String OwnedString_View(struct OwnedString* this);
+struct String std_OwnedStringView(struct OwnedString* owned);
+Status std_DestroyOwnedString(struct OwnedString* owned);
+Status std_CloneString(struct String text,struct Allocator allocator,struct OwnedString* out);
+Status std_CloneCString(str text,struct Allocator allocator,struct OwnedString* out);
+Status OwnedString_Destroy(struct OwnedString* this);
+struct StringBuilder std_StringBuilderNew(struct Allocator allocator);
+Status StringBuilder_Destroy(struct StringBuilder* this);
+Status StringBuilder_Clear(struct StringBuilder* this);
+Status StringBuilder_Reserve(struct StringBuilder* this,usize additional);
+struct Result__usize StringBuilder_Write(struct StringBuilder* this,struct Slice__byte data);
+Status StringBuilder_WriteByte(struct StringBuilder* this,byte value);
+Status StringBuilder_WriteString(struct StringBuilder* this,struct String text);
+Status StringBuilder_WriteCString(struct StringBuilder* this,str text);
+Status StringBuilder_WriteRepeatByte(struct StringBuilder* this,byte value,usize count);
+Status StringBuilder_WriteIndent(struct StringBuilder* this,usize count);
+struct String StringBuilder_View(struct StringBuilder* this);
+struct Result__OwnedString StringBuilder_Detach(struct StringBuilder* this);
+struct Result__OwnedString StringBuilder_ToOwnedString(struct StringBuilder* this);
+Status std_WriteStringToBuilder(struct StringBuilder* builder,struct String text);
+Status std_WriteSliceToBuilder(struct StringBuilder* builder,struct Slice__byte data);
+Status std_DestroyStringBuilder(struct StringBuilder* builder);
+struct ByteCursor std_ByteCursorNew(struct String input);
+bool ByteCursor_AtEnd(struct ByteCursor* this);
+byte ByteCursor_Peek(struct ByteCursor* this);
+byte ByteCursor_PeekAt(struct ByteCursor* this,usize offset);
+byte ByteCursor_Advance(struct ByteCursor* this);
+bool ByteCursor_MatchByte(struct ByteCursor* this,byte value);
+Status ByteCursor_SkipAsciiWhitespace(struct ByteCursor* this);
+Status std_WriteByteToBuilder(struct StringBuilder* writer,byte value);
+Status std_WriteByteToFile(struct File* writer,byte value);
+Status std_WriteStringToMemory(struct MemoryWriter* writer,struct String text);
+Status std_WriteStringToFile(struct File* writer,struct String text);
+Status std_WriteBoolToBuilder(struct StringBuilder* writer,bool value);
+Status std_WriteBoolToMemory(struct MemoryWriter* writer,bool value);
+Status std_WriteBoolToFile(struct File* writer,bool value);
+Status std_FormatU64ToBuilder(struct StringBuilder* writer,u64 value,u8 base);
+Status std_FormatI64ToBuilder(struct StringBuilder* writer,i64 value);
+Status std_FormatBoolToBuilder(struct StringBuilder* writer,bool value);
+struct Result__Directory std_DirectoryOpen(str path);
+struct Result__String Directory_ReadName(struct Directory* this);
+Status Directory_Close(struct Directory* this);
+int std_ProcessRun(str command);
+struct SelfSourceLocation diagnostics_SelfSourceLocationNew(usize line,usize column,usize offset,usize length);
+void diagnostics_SelfDiagnosticBagInit(struct SelfDiagnosticBag* bag,struct Allocator allocator);
+Status diagnostics_SelfDiagnosticBagDestroy(struct SelfDiagnosticBag* bag);
+Status diagnostics_SelfDiagnosticAdd(struct SelfDiagnosticBag* bag,SelfDiagnosticSeverity severity,SelfDiagnosticPhase phase,i64 fileIndex,struct SelfSourceLocation location,struct String message);
+Status diagnostics_SelfDiagnosticAddCString(struct SelfDiagnosticBag* bag,SelfDiagnosticSeverity severity,SelfDiagnosticPhase phase,i64 fileIndex,struct SelfSourceLocation location,str message);
+Status diagnostics_SelfDiagnosticAddPathMessage(struct SelfDiagnosticBag* bag,SelfDiagnosticSeverity severity,SelfDiagnosticPhase phase,i64 fileIndex,struct SelfSourceLocation location,str prefix,struct String path);
+Status diagnostics_SelfWriteU64Field(struct StringBuilder* out,u64 value,bool separator);
+Status diagnostics_SelfWriteI64Field(struct StringBuilder* out,i64 value,bool separator);
+Status diagnostics_SelfWriteDiagnosticDump(struct SelfDiagnosticBag* bag,struct StringBuilder* out);
+void source_SelfFileTableInit(struct SelfFileTable* table,struct Allocator allocator);
+Status source_SelfFileTableDestroy(struct SelfFileTable* table);
+bool source_SelfStringEndsWithCString(struct String text,str suffixText);
+int source_SelfStdlibImportRank(struct String name);
+int source_SelfCompareImportName(struct String left,struct String right);
+Status source_SelfNormalizePath(struct String path,struct Allocator allocator,struct OwnedString* out);
+bool source_SelfFileAlreadyLoaded(struct SelfFileTable* table,struct String path);
+Status source_SelfAddSourceDiagnostic(struct SelfDiagnosticBag* diagnostics,str message);
+Status source_SelfReadFile(struct String path,struct SelfFileTable* table,struct SelfDiagnosticBag* diagnostics);
+Status source_SelfBuildPath(struct String directory,struct String name,struct Allocator allocator,struct OwnedString* out);
+void source_SelfSortImportNames(struct OwnedString* names,usize count);
+void source_SelfDestroyImportNames(struct OwnedString* names,usize start,usize count);
+void source_SelfFreeImportNames(struct Allocator allocator,struct OwnedString* names);
+Status source_SelfLoadImportDirectory(struct SelfFileTable* table,struct String path,struct SelfDiagnosticBag* diagnostics);
+Status source_SelfLoadImports(struct SelfFileTable* table,struct SelfSourceFile* file,struct SelfDiagnosticBag* diagnostics);
+Status source_SelfLoadCompilationSources(str entryPath,struct Allocator allocator,struct SelfFileTable* table,struct SelfDiagnosticBag* diagnostics);
+Status source_SelfWriteSourceDump(struct SelfFileTable* table,struct SelfDiagnosticBag* diagnostics,struct StringBuilder* out);
+usize tokenizer_TokenizerGenericFootprint(void);
+struct Token tokenizer_TokenNew(TokenKind kind,u64 subkind,usize line,usize column,usize offset,usize length);
+struct Tokenizer tokenizer_TokenizerNew(struct String source,bool emitComments);
+bool Tokenizer_AtEnd(struct Tokenizer* this);
+byte Tokenizer_Peek(struct Tokenizer* this);
+byte Tokenizer_PeekAt(struct Tokenizer* this,usize offset);
+byte Tokenizer_Advance(struct Tokenizer* this);
+bool tokenizer_TextAtEquals(str text,struct String source,usize start,usize length);
+bool Tokenizer_StartsWith(struct Tokenizer* this,str text);
+void Tokenizer_AdvanceMany(struct Tokenizer* this,usize count);
+void Tokenizer_SkipWhitespace(struct Tokenizer* this);
+void Tokenizer_SkipWhitespaceAndComments(struct Tokenizer* this);
+struct Token Tokenizer_ReadLineComment(struct Tokenizer* this);
+struct Token Tokenizer_ReadBlockComment(struct Tokenizer* this);
+u64 tokenizer_KeywordSubkind(struct String source,usize start,usize length);
+struct Token Tokenizer_ReadIdentifierOrKeyword(struct Tokenizer* this);
+struct Token Tokenizer_ReadNumber(struct Tokenizer* this);
+struct Token Tokenizer_ReadDelimited(struct Tokenizer* this,TokenKind kind,byte delimiter);
+bool Tokenizer_ReadOperator(struct Tokenizer* this,struct Token* out,usize start,usize line,usize column);
+bool Tokenizer_ReadPunctuation(struct Tokenizer* this,struct Token* out,usize start,usize line,usize column);
+struct Token Tokenizer_Next(struct Tokenizer* this);
+Status tokenizer_TokenArrayReserve(struct Array__Token* tokens,usize additional);
+Status tokenizer_TokenArrayPush(struct Array__Token* tokens,struct Token token);
+Status tokenizer_TokenArrayDestroy(struct Array__Token* tokens);
+Status tokenizer_TokenizeToArray(struct String source,bool emitComments,struct Allocator allocator,struct Array__Token* out);
+Status tokenizer_WriteTokenField(struct StringBuilder* out,u64 value,bool separator);
+Status tokenizer_WriteTokenDumpLine(struct Token token,struct StringBuilder* out);
+Status tokenizer_WriteTokenDump(struct String source,bool emitComments,struct StringBuilder* out);
+struct SelfSourceLocation ast_TokenLocation(struct Token token);
+Status ast_SelfAstTreeReserve(struct SelfAstTree* tree,usize additional);
+Status ast_SelfAstTreeInit(struct SelfAstTree* tree,struct Allocator allocator);
+Status ast_SelfAstTreeDestroy(struct SelfAstTree* tree);
+bool ast_IsPunctuationToken(struct Token* token,PunctuationKind punctuation);
+bool ast_IsOperatorToken(struct Token* token,OperatorKind operatorKind);
+bool ast_IsTriviaToken(struct Token* token);
+bool ast_IsClosingPunctuation(struct Token* token);
+bool ast_IsAstTerminator(struct Token* token,u64 closePunctuation);
+bool ast_IsGenericTerminator(struct Token* token);
+bool ast_SelfTokenTextEquals(struct SelfParser* parser,struct Token* token,str text);
+usize ast_SelfCreateAstNode(struct SelfParser* parser,SelfAstKind kind,struct SelfSourceLocation location);
+void ast_SelfAddAstChild(struct SelfAstTree* tree,usize parentIndex,usize childIndex);
+void ast_SelfFinishLocationFromChildren(struct SelfAstTree* tree,usize nodeIndex);
+usize ast_SelfParseTokenNode(struct SelfParser* parser);
+void ast_SelfReportParseError(struct SelfParser* parser,struct Token* token,str message);
+str ast_SelfPunctuationName(u64 punctuation);
+void ast_SelfReportExpected(struct SelfParser* parser,struct Token* token,u64 punctuation);
+bool ast_SelfShouldParseGenericList(struct SelfParser* parser,usize previousChildIndex);
+void ast_SelfParseChildrenInto(struct SelfParser* parser,usize parentIndex,u64 closePunctuation);
+usize ast_SelfParseDelimited(struct SelfParser* parser,SelfAstKind kind,u64 closePunctuation);
+usize ast_SelfParseGenericDelimited(struct SelfParser* parser);
+usize ast_SelfParseStatement(struct SelfParser* parser,u64 closePunctuation);
+usize ast_SelfParseList(struct SelfParser* parser,SelfAstKind listKind,u64 closePunctuation);
+Status ast_SelfParseTokens(struct Token* tokens,usize count,struct String source,i64 fileIndex,struct Allocator allocator,struct SelfDiagnosticBag* diagnostics,struct SelfAstTree* out);
+Status ast_SelfWriteAstNodeDump(struct SelfAstTree* tree,usize nodeIndex,usize depth,struct StringBuilder* out);
+Status ast_SelfWriteAstBridgeDump(struct String source,struct StringBuilder* out);
+bool compiler_SelfCIsOk(Status status);
+struct String compiler_SelfCTokenText(struct SelfCProgram* program,usize fileIndex,usize tokenIndex);
+bool compiler_SelfCTokenEquals(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,str text);
+bool compiler_SelfCStringEquals(struct String value,str text);
+bool compiler_SelfCIsTokenKind(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,TokenKind kind);
+bool compiler_SelfCIsPunctuation(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,PunctuationKind kind);
+bool compiler_SelfCIsOperator(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,OperatorKind kind);
+bool compiler_SelfCIsKeyword(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,KeywordKind kind);
+bool compiler_SelfCIsIdentifierText(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,str text);
+bool compiler_SelfCIsEof(struct SelfCProgram* program,usize fileIndex,usize tokenIndex);
+usize compiler_SelfCFileTokenCount(struct SelfCProgram* program,usize fileIndex);
+Status compiler_SelfCWrite(struct StringBuilder* out,str text);
+Status compiler_SelfCWriteString(struct StringBuilder* out,struct String text);
+Status compiler_SelfCWriteToken(struct SelfCProgram* program,struct StringBuilder* out,usize fileIndex,usize tokenIndex);
+Status compiler_SelfCCloneCString(struct SelfCProgram* program,str text,struct OwnedString* out);
+Status compiler_SelfCCloneString(struct SelfCProgram* program,struct String text,struct OwnedString* out);
+struct String compiler_SelfCOwnedView(struct OwnedString* value);
+bool compiler_SelfCOwnedEqualsCString(struct OwnedString* value,str text);
+bool compiler_SelfCOwnedEquals(struct OwnedString* left,struct OwnedString* right);
+Status compiler_SelfCDetachBuilder(struct StringBuilder* builder,struct OwnedString* out);
+Status compiler_SelfCMakeOwnedEmpty(struct SelfCProgram* program,struct OwnedString* out);
+Status compiler_SelfCWriteOwned(struct StringBuilder* out,struct OwnedString* text);
+usize compiler_SelfCStringLastSlash(struct String path);
+Status compiler_SelfCPackageNameFromPath(struct String path,struct Allocator allocator,struct OwnedString* out);
+Status compiler_SelfCProgramInit(struct SelfCProgram* program,struct Allocator allocator);
+Status compiler_SelfCProgramDestroy(struct SelfCProgram* program);
+Status compiler_SelfCAddDiagnostic(struct SelfCProgram* program,str message);
+Status compiler_SelfCLoadAndTokenize(struct SelfCProgram* program,str entryPath);
+int compiler_SelfCompilerFail(str text);
+int compiler_SelfCompilerPrintHelp(void);
+Status compiler_SelfCWriteDiagnostics(struct SelfCProgram* program);
+bool compiler_SelfCIsOpenDelimiter(struct SelfCProgram* program,usize fileIndex,usize index);
+bool compiler_SelfCDelimiterMatches(struct SelfCProgram* program,usize fileIndex,usize openIndex,usize closeIndex);
+usize compiler_SelfCFindMatching(struct SelfCProgram* program,usize fileIndex,usize openIndex);
+usize compiler_SelfCSkipDelimited(struct SelfCProgram* program,usize fileIndex,usize index);
+usize compiler_SelfCSkipAttributes(struct SelfCProgram* program,usize fileIndex,usize index);
+usize compiler_SelfCFindTopLevelColon(struct SelfCProgram* program,usize fileIndex,usize start,usize end);
+usize compiler_SelfCFindTokenAtDepthZero(struct SelfCProgram* program,usize fileIndex,usize start,usize end,PunctuationKind punctuation);
+usize compiler_SelfCFindOperatorScope(struct SelfCProgram* program,usize fileIndex,usize start,usize end);
+usize compiler_SelfCFindNextGroup(struct SelfCProgram* program,usize fileIndex,usize start,usize end);
+usize compiler_SelfCFindNextBlock(struct SelfCProgram* program,usize fileIndex,usize start,usize end);
+u8 compiler_SelfCOperatorCode(struct SelfCProgram* program,usize fileIndex,usize index);
+Status compiler_SelfCAddDecl(struct SelfCProgram* program,struct SelfCDecl* decl);
+Status compiler_SelfCAddParam(struct SelfCProgram* program,struct SelfCParam* param);
+Status compiler_SelfCAddField(struct SelfCProgram* program,struct SelfCField* field);
+Status compiler_SelfCParseParams(struct SelfCProgram* program,struct SelfCDecl* decl,usize fileIndex,usize start,usize end);
+Status compiler_SelfCParseFields(struct SelfCProgram* program,struct SelfCDecl* decl,usize fileIndex,usize start,usize end);
+bool compiler_SelfCDeclNameMatches(struct SelfCProgram* program,struct SelfCDecl* decl,struct String name);
+struct SelfCDecl* compiler_SelfCFindTypeDecl(struct SelfCProgram* program,struct String name);
+Status compiler_SelfCParseAliasDecl(struct SelfCProgram* program,usize fileIndex,usize start,usize* outEnd);
+Status compiler_SelfCParseTypeDecl(struct SelfCProgram* program,usize fileIndex,usize start,SelfCDeclKind kind,usize* outEnd);
+Status compiler_SelfCParseExternDecl(struct SelfCProgram* program,usize fileIndex,usize start,usize* outEnd);
+Status compiler_SelfCParseFunctionDecl(struct SelfCProgram* program,usize fileIndex,usize start,usize* outEnd);
+Status compiler_SelfCParseDeclarations(struct SelfCProgram* program);
+Status compiler_SelfCWriteTokenRangeRaw(struct SelfCProgram* program,struct StringBuilder* out,usize fileIndex,usize start,usize end);
+bool compiler_SelfCIsBuiltinTypeName(struct String name);
+Status compiler_SelfCWriteSanitized(struct StringBuilder* out,struct String text);
+Status compiler_SelfCWriteOperatorName(struct StringBuilder* out,u8 operatorCode);
+bool compiler_SelfCDeclPackageIsRoot(struct SelfCDecl* decl);
+Status compiler_SelfCWriteDeclCName(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl);
+Status compiler_SelfCWriteTypeSuffixFromRange(struct SelfCProgram* program,struct StringBuilder* out,usize fileIndex,usize start,usize end);
+Status compiler_SelfCTypeInfoDestroy(struct SelfCTypeInfo* info);
+Status compiler_SelfCTypeInfoInitEmpty(struct SelfCProgram* program,struct SelfCTypeInfo* info);
+Status compiler_SelfCReplaceOwned(struct OwnedString* target,struct OwnedString value);
+Status compiler_SelfCBuildTypeKey(struct SelfCProgram* program,usize fileIndex,usize start,usize end,struct OwnedString* out);
+Status compiler_SelfCWriteCTypeFromKey(struct SelfCProgram* program,struct StringBuilder* out,struct String key);
+Status compiler_SelfCMakeCTypeFromKey(struct SelfCProgram* program,struct String key,struct OwnedString* out);
+Status compiler_SelfCTypeInfoFromKey(struct SelfCProgram* program,struct String key,struct SelfCTypeInfo* info);
+Status compiler_SelfCRenderTypeInfo(struct SelfCProgram* program,usize fileIndex,usize start,usize end,struct SelfCTypeInfo* info);
+bool compiler_SelfCTypeUseExists(struct SelfCProgram* program,struct String key);
+Status compiler_SelfCAddTypeUse(struct SelfCProgram* program,struct SelfCTypeInfo* info);
+Status compiler_SelfCAddTypeUseFromBaseArg(struct SelfCProgram* program,str baseName,struct String arg0);
+bool compiler_SelfCConcreteTypeKey(struct SelfCProgram* program,struct String key);
+bool compiler_SelfCTypeInfoConcrete(struct SelfCProgram* program,struct SelfCTypeInfo* info);
+Status compiler_SelfCCollectTypeUsesInRange(struct SelfCProgram* program,usize fileIndex,usize start,usize end);
+struct SelfCDecl* compiler_SelfCFindFunctionDeclByName(struct SelfCProgram* program,struct String name,struct String packageName);
+bool compiler_SelfCFuncUseExists(struct SelfCProgram* program,usize declIndex,struct String key);
+usize compiler_SelfCDeclIndex(struct SelfCProgram* program,struct SelfCDecl* decl);
+Status compiler_SelfCBuildGenericFuncCName(struct SelfCProgram* program,struct SelfCDecl* decl,struct SelfCTypeInfo* arg0,struct SelfCTypeInfo* arg1,struct SelfCTypeInfo* arg2,usize argCount,struct OwnedString* out);
+Status compiler_SelfCAddFuncUse(struct SelfCProgram* program,struct SelfCDecl* decl,struct SelfCTypeInfo* arg0,struct SelfCTypeInfo* arg1,struct SelfCTypeInfo* arg2,usize argCount);
+Status compiler_SelfCCollectGenericFunctionUsesInRange(struct SelfCProgram* program,usize fileIndex,usize start,usize end);
+struct SelfCDecl* compiler_SelfCFindGenericMethodDecl(struct SelfCProgram* program,struct String receiverBase,str methodName);
+Status compiler_SelfCAddGenericMethodUseByName(struct SelfCProgram* program,struct SelfCTypeUse* typeUse,str methodName);
+Status compiler_SelfCCollectGenericCollectionMethods(struct SelfCProgram* program);
+Status compiler_SelfCCollectGenericFunctionUses(struct SelfCProgram* program);
+Status compiler_SelfCCollectTypeUses(struct SelfCProgram* program);
+Status compiler_SelfCWritePrelude(struct StringBuilder* out);
+Status compiler_SelfCWriteDeclarator(struct SelfCProgram* program,struct StringBuilder* out,usize fileIndex,usize typeStart,usize typeEnd,usize nameIndex,bool isArray,usize arrayStart,usize arrayEnd);
+Status compiler_SelfCWriteFields(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl);
+bool compiler_SelfCGenericParamEquals(struct SelfCProgram* program,struct SelfCDecl* decl,usize paramIndex,struct String name);
+Status compiler_SelfCWriteTypeSuffixSubst(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCTypeUse* use,usize fileIndex,usize start,usize end);
+Status compiler_SelfCMakeSubstTypeKey(struct SelfCProgram* program,struct SelfCDecl* decl,struct SelfCTypeUse* use,usize fileIndex,usize start,usize end,struct OwnedString* out);
+Status compiler_SelfCWriteDeclaratorSubst(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCTypeUse* use,usize fileIndex,usize typeStart,usize typeEnd,usize nameIndex,bool isArray,usize arrayStart,usize arrayEnd);
+Status compiler_SelfCWriteFieldsSubst(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCTypeUse* use);
+Status compiler_SelfCWriteStructDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct String specializedName);
+Status compiler_SelfCWriteUnionDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl);
+Status compiler_SelfCWriteEnumDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl);
+Status compiler_SelfCWriteAliasDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl);
+Status compiler_SelfCWriteExternDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl);
+Status compiler_SelfCWriteTypeDeclarations(struct SelfCProgram* program,struct StringBuilder* out);
+Status compiler_SelfCEnvInit(struct SelfCProgram* program,struct SelfCEnv* env);
+Status compiler_SelfCEnvDestroy(struct SelfCEnv* env);
+struct SelfCLocal* compiler_SelfCEnvFind(struct SelfCEnv* env,struct String name);
+Status compiler_SelfCEnvAdd(struct SelfCProgram* program,struct SelfCEnv* env,struct String name,struct String typeKey,struct String cType,bool isArray,struct String arrayLen,bool isPointer);
+Status compiler_SelfCExprInitEmpty(struct SelfCProgram* program,struct SelfCExpr* expr);
+Status compiler_SelfCExprDestroy(struct SelfCExpr* expr);
+Status compiler_SelfCExprSetText(struct SelfCProgram* program,struct SelfCExpr* expr,struct String text);
+Status compiler_SelfCExprSetCString(struct SelfCProgram* program,struct SelfCExpr* expr,str text);
+Status compiler_SelfCExprSetType(struct SelfCProgram* program,struct SelfCExpr* expr,struct String key,struct String cType,bool isPointer);
+Status compiler_SelfCExprFromBuilder(struct SelfCExpr* expr,struct StringBuilder* builder);
+u8 compiler_SelfCOperatorPrecedence(struct SelfCProgram* program,usize fileIndex,usize index);
+bool compiler_SelfCOperatorRightAssociative(struct SelfCProgram* program,usize fileIndex,usize index);
+Status compiler_SelfCWriteNumberToken(struct SelfCProgram* program,struct StringBuilder* out,usize fileIndex,usize index);
+struct SelfCDecl* compiler_SelfCFindFieldDecl(struct SelfCProgram* program,struct String typeKey);
+Status compiler_SelfCFieldType(struct SelfCProgram* program,struct String typeKey,struct String fieldName,struct SelfCTypeInfo* outInfo);
+struct SelfCDecl* compiler_SelfCFindMethod(struct SelfCProgram* program,struct String receiverType,struct String name,bool isOperator,u8 operatorCode,usize argCount);
+Status compiler_SelfCParserInit(struct SelfCProgram* program,struct SelfCEnv* env,usize fileIndex,usize start,usize end,struct String expectedKey,struct String expectedCType,bool expectedIsArray,struct SelfCExprParser* parser);
+Status compiler_SelfCParserDestroy(struct SelfCExprParser* parser);
+Status compiler_SelfCCompileExpressionRange(struct SelfCProgram* program,struct SelfCEnv* env,usize fileIndex,usize start,usize end,struct String expectedKey,struct String expectedCType,bool expectedIsArray,struct SelfCExpr* out);
+Status compiler_SelfCWriteInitializerList(struct SelfCExprParser* parser,usize start,usize end,struct StringBuilder* out);
+Status compiler_SelfCExprFromLiteralBlock(struct SelfCExprParser* parser,usize blockStart,usize blockEnd,struct SelfCExpr* out);
+Status compiler_SelfCCompilePrimary(struct SelfCExprParser* parser,struct SelfCExpr* out);
+Status compiler_SelfCWriteCallArgs(struct SelfCExprParser* parser,usize start,usize end,struct StringBuilder* out);
+usize compiler_SelfCCountCallArgs(struct SelfCProgram* program,usize fileIndex,usize start,usize end);
+Status compiler_SelfCApplyPostfix(struct SelfCExprParser* parser,struct SelfCExpr* expr);
+Status compiler_SelfCCompileUnary(struct SelfCExprParser* parser,struct SelfCExpr* out);
+Status compiler_SelfCCompileBinaryOperation(struct SelfCExprParser* parser,struct SelfCExpr* left,usize operatorIndex,struct SelfCExpr* right,struct SelfCExpr* out);
+Status compiler_SelfCCompileExpression(struct SelfCExprParser* parser,u8 minPrecedence,struct SelfCExpr* out);
+Status compiler_SelfCWriteIndent(struct StringBuilder* out,usize indent);
+usize compiler_SelfCFindStatementSemicolon(struct SelfCProgram* program,usize fileIndex,usize start,usize end);
+Status compiler_SelfCArrayLenString(struct SelfCProgram* program,usize fileIndex,usize start,usize end,struct OwnedString* out);
+bool compiler_SelfCFieldDefaultIsZero(struct SelfCProgram* program,struct SelfCField* field);
+Status compiler_SelfCWriteDefaultInitializer(struct SelfCProgram* program,struct StringBuilder* out,struct String typeKey);
+Status compiler_SelfCWriteVarDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize semicolon,usize indent);
+Status compiler_SelfCWriteExprStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize semicolon,usize indent);
+Status compiler_SelfCWriteIfStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent);
+Status compiler_SelfCWriteWhileStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent);
+Status compiler_SelfCWriteDoStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent);
+Status compiler_SelfCWriteForStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent);
+Status compiler_SelfCWriteEachStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent);
+Status compiler_SelfCWriteSwitchStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent);
+Status compiler_SelfCWriteReturnStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize semicolon,usize indent);
+Status compiler_SelfCWriteSingleStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent);
+Status compiler_SelfCWriteDeferred(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize end,usize indent);
+Status compiler_SelfCWriteBlock(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize end,usize indent);
+Status compiler_SelfCFuncUseTempTypeUse(struct SelfCFuncUse* funcUse,struct SelfCTypeUse* out);
+Status compiler_SelfCWriteSubstTypeForFunc(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCFuncUse* funcUse,usize fileIndex,usize start,usize end);
+Status compiler_SelfCWriteFunctionSignature(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct String nameOverride,struct SelfCFuncUse* funcUse);
+Status compiler_SelfCWriteFunctionPrototype(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl);
+Status compiler_SelfCWriteFunctionBody(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl);
+Status compiler_SelfCWriteManualLine(struct StringBuilder* out,str text);
+Status compiler_SelfCWriteArrayMethodRef(struct StringBuilder* out,struct SelfCFuncUse* use,str name);
+Status compiler_SelfCWriteLinkedListMethodRef(struct StringBuilder* out,struct SelfCFuncUse* use,str name);
+Status compiler_SelfCWriteResultTypeRef(struct StringBuilder* out,struct SelfCFuncUse* use);
+Status compiler_SelfCWriteListNodeTypeRef(struct StringBuilder* out,struct SelfCFuncUse* use);
+Status compiler_SelfCWriteManualArrayGenericBody(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCFuncUse* use,struct String argC);
+Status compiler_SelfCWriteManualLinkedListGenericBody(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCFuncUse* use);
+Status compiler_SelfCWriteManualGenericBody(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCFuncUse* use);
+Status compiler_SelfCWriteFunctionDeclarations(struct SelfCProgram* program,struct StringBuilder* out);
+Status compiler_SelfCWriteFunctionDefinitions(struct SelfCProgram* program,struct StringBuilder* out);
+Status compiler_SelfCWriteProgram(struct SelfCProgram* program,struct StringBuilder* out);
+Status compiler_SelfCompileToCString(str inputPath,struct Allocator allocator,struct StringBuilder* out,struct SelfDiagnosticBag* diagnostics);
+Status compiler_SelfCompileToC(str inputPath,str outputPath,struct Allocator allocator,struct SelfDiagnosticBag* diagnostics);
+Status compiler_SelfCompileToCStringWithoutDiagnostics(str inputPath,struct Allocator allocator,struct StringBuilder* out);
+Status compiler_SelfWriteCompileDiagnostics(str inputPath,struct Allocator allocator,struct StringBuilder* out);
+Status compiler_SelfCompilerRunBuild(str inputPath,str outputPath);
+int compiler_SelfCompilerMain(int argc,str* argv);
+struct Span__byte std_FixedSpan__byte(byte* data,usize len);
+struct Slice__byte std_FixedSlice__byte(byte* data,usize len);
+void std_Free__byte(struct Allocator allocator,byte* data,usize count);
+byte* std_Alloc__byte(struct Allocator allocator,usize count);
+byte* std_Resize__byte(struct Allocator allocator,byte* oldData,usize oldCount,usize newCount);
+void std_Free__OwnedString(struct Allocator allocator,struct OwnedString* data,usize count);
+struct OwnedString* std_Alloc__OwnedString(struct Allocator allocator,usize count);
+struct Token* std_Resize__Token(struct Allocator allocator,struct Token* oldData,usize oldCount,usize newCount);
+void std_Free__Token(struct Allocator allocator,struct Token* data,usize count);
+struct SelfAstNode* std_Resize__SelfAstNode(struct Allocator allocator,struct SelfAstNode* oldData,usize oldCount,usize newCount);
+void std_Free__SelfAstNode(struct Allocator allocator,struct SelfAstNode* data,usize count);
+Status Array__Token_Destroy(struct Array__Token* this);
+Status Array__Token_Clear(struct Array__Token* this);
+Status Array__Token_Reserve(struct Array__Token* this,usize additional);
+Status Array__Token_AppendSlice(struct Array__Token* this,struct Slice__Token items);
+Status Array__Token_Push(struct Array__Token* this,struct Token value);
+Status Array__Token_PushZeroed(struct Array__Token* this);
+struct Result__Token Array__Token_Pop(struct Array__Token* this);
+struct Result__Token Array__Token_Get(struct Array__Token* this,usize index);
+Status Array__Token_Set(struct Array__Token* this,usize index,struct Token value);
+struct Token* Array__Token_GetPtr(struct Array__Token* this,usize index);
+struct Token* Array__Token_LastPtr(struct Array__Token* this);
+struct Span__Token Array__Token_Span(struct Array__Token* this);
+struct Slice__Token Array__Token_Slice(struct Array__Token* this);
 
-struct KekFrontend {
-    struct SourceFile* file;
-    struct KekNodePool decls;
-    struct KekNodePool types;
-    struct KekNodePool exprs;
-    struct KekNodePool stmts;
-    struct KekNodePool params;
-    struct KekNodePool fields;
-    struct KekNodePool variants;
-    int errorCount;
-    struct KekDiagnosticBag* diagnostics;
-};
-
-struct AstNode* ParseAst(struct Parser* parser);
-struct KekModule ParseKekModule(struct KekFrontend* frontend, struct AstNode* ast, struct SourceFile* file);
-int BuildKekProgramSymbols(struct KekProgram* program, struct KekModule* modules, size_t moduleCount);
-void AttachKekDocComments(struct KekModule* module, struct TokenArray* tokens, struct SourceFile* file);
-
-
-
-/* BEGIN ast.c */
-#define CreateAstNode ast_CreateAstNode
-#define AddChild ast_AddChild
-#define IsPunctuationToken ast_IsPunctuationToken
-#define IsOperatorToken ast_IsOperatorToken
-#define TokenTextEquals ast_TokenTextEquals
-#define IsClosingPunctuation ast_IsClosingPunctuation
-#define IsTriviaToken ast_IsTriviaToken
-#define PunctuationName ast_PunctuationName
-#define ReportParseError ast_ReportParseError
-#define IsAstTerminator ast_IsAstTerminator
-#define IsGenericTerminator ast_IsGenericTerminator
-#define FinishLocationFromChildren ast_FinishLocationFromChildren
-#define ParseStatement ast_ParseStatement
-#define ShouldParseGenericList ast_ShouldParseGenericList
-#define ParseTokenNode ast_ParseTokenNode
-#define ParseChildrenInto ast_ParseChildrenInto
-#define ParseDelimited ast_ParseDelimited
-#define ParseGenericDelimited ast_ParseGenericDelimited
-#define ParseList ast_ParseList
-#define PrintIndent ast_PrintIndent
-
-const char* AstNodeTypeNames[] = {
-    "File",
-    "Statement",
-    "Block",
-    "Group",
-    "Index",
-    "Generic",
-    "Token",
-};
-
-static struct AstNode* CreateAstNode(struct Parser* parser, enum AstNodeType type, struct SourceLocation location) {
-    if (parser->astNodeCount >= parser->astNodeCapacity) {
-        KekAddDiagnostic(parser->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_PARSE,
-            parser->file ? parser->file->fileIndex : -1, location, "AST node storage capacity exceeded");
-        parser->errorCount++;
-        if (parser->astNodeCapacity > 0) {
-            return &parser->astNodes[parser->astNodeCapacity - 1];
-        }
-        return NULL;
-    }
-
-    struct AstNode* node = &parser->astNodes[parser->astNodeCount++];
-    memset(node, 0, sizeof(*node));
-    node->type = type;
-    node->location = location;
-    return node;
+struct Span__byte std_FixedSpan__byte(byte* data,usize len) {
+    struct Span__byte out={0};
+    out.data=data;
+    out.len=len;
+    return out;
 }
-
-static void AddChild(struct AstNode* parent, struct AstNode* child) {
-    child->nextSibling = NULL;
-    if (parent->lastChild) {
-        parent->lastChild->nextSibling = child;
+struct Slice__byte std_FixedSlice__byte(byte* data,usize len) {
+    struct Slice__byte out={0};
+    out.data=data;
+    out.len=len;
+    return out;
+}
+void std_Free__byte(struct Allocator allocator,byte* data,usize count) {
+    (void)allocator;
+    (void)count;
+    kek_std_free(data);
+}
+byte* std_Alloc__byte(struct Allocator allocator,usize count) {
+    (void)allocator;
+    return (byte*)kek_std_alloc(count*sizeof(byte));
+}
+byte* std_Resize__byte(struct Allocator allocator,byte* oldData,usize oldCount,usize newCount) {
+    (void)allocator;
+    (void)oldCount;
+    return (byte*)kek_std_resize(oldData,newCount*sizeof(byte));
+}
+void std_Free__OwnedString(struct Allocator allocator,struct OwnedString* data,usize count) {
+    (void)allocator;
+    (void)count;
+    kek_std_free(data);
+}
+struct OwnedString* std_Alloc__OwnedString(struct Allocator allocator,usize count) {
+    (void)allocator;
+    return (struct OwnedString*)kek_std_alloc(count*sizeof(struct OwnedString));
+}
+struct Token* std_Resize__Token(struct Allocator allocator,struct Token* oldData,usize oldCount,usize newCount) {
+    (void)allocator;
+    (void)oldCount;
+    return (struct Token*)kek_std_resize(oldData,newCount*sizeof(struct Token));
+}
+void std_Free__Token(struct Allocator allocator,struct Token* data,usize count) {
+    (void)allocator;
+    (void)count;
+    kek_std_free(data);
+}
+struct SelfAstNode* std_Resize__SelfAstNode(struct Allocator allocator,struct SelfAstNode* oldData,usize oldCount,usize newCount) {
+    (void)allocator;
+    (void)oldCount;
+    return (struct SelfAstNode*)kek_std_resize(oldData,newCount*sizeof(struct SelfAstNode));
+}
+void std_Free__SelfAstNode(struct Allocator allocator,struct SelfAstNode* data,usize count) {
+    (void)allocator;
+    (void)count;
+    kek_std_free(data);
+}
+Status Array__Token_Destroy(struct Array__Token* this) {
+    if(this->data!=0){
+        kek_std_free(this->data);
+    }
+    this->data=0;
+    this->len=0;
+    this->cap=0;
+    return Status_Ok;
+}
+Status Array__Token_Clear(struct Array__Token* this) {
+    this->len=0;
+    return Status_Ok;
+}
+Status Array__Token_Reserve(struct Array__Token* this,usize additional) {
+    usize needed=this->len+additional;
+    if(needed<=this->cap){return Status_Ok;}
+    usize newCap=this->cap;
+    if(newCap==0){newCap=8;}
+    while(newCap<needed){newCap=newCap*2;}
+    struct Token* newData=(struct Token*)kek_std_resize(
+        this->data,newCap*sizeof(struct Token));
+    if(newData==0){return Status_NoMemory;}
+    this->data=newData;
+    this->cap=newCap;
+    return Status_Ok;
+}
+Status Array__Token_AppendSlice(struct Array__Token* this,struct Slice__Token items) {
+    Status status=Array__Token_Reserve(this,items.len);
+    if(status!=Status_Ok){return status;}
+    for(usize i=0;i<items.len;i++){
+        this->data[this->len+i]=items.data[i];
+    }
+    this->len+=items.len;
+    return Status_Ok;
+}
+Status Array__Token_Push(struct Array__Token* this,struct Token value) {
+    Status status=Array__Token_Reserve(this,1);
+    if(status!=Status_Ok){return status;}
+    this->data[this->len]=value;
+    this->len+=1;
+    return Status_Ok;
+}
+Status Array__Token_PushZeroed(struct Array__Token* this) {
+    Status status=Array__Token_Reserve(this,1);
+    if(status!=Status_Ok){return status;}
+    kek_std_mem_set((void*)(&this->data[this->len]),0,sizeof(struct Token));
+    this->len+=1;
+    return Status_Ok;
+}
+struct Result__Token Array__Token_Pop(struct Array__Token* this) {
+    struct Result__Token result={0};
+    if(this->len==0){result.status=Status_End;return result;}
+    this->len-=1;
+    result.status=Status_Ok;
+    result.value=this->data[this->len];
+    return result;
+}
+struct Result__Token Array__Token_Get(struct Array__Token* this,usize index) {
+    struct Result__Token result={0};
+    if(index>=this->len){result.status=Status_Invalid;return result;}
+    result.status=Status_Ok;
+    result.value=this->data[index];
+    return result;
+}
+Status Array__Token_Set(struct Array__Token* this,usize index,struct Token value) {
+    if(index>=this->len){return Status_Invalid;}
+    this->data[index]=value;
+    return Status_Ok;
+}
+struct Token* Array__Token_GetPtr(struct Array__Token* this,usize index) {
+    if(index>=this->len){return 0;}
+    return &this->data[index];
+}
+struct Token* Array__Token_LastPtr(struct Array__Token* this) {
+    if(this->len==0){return 0;}
+    return &this->data[this->len-1];
+}
+struct Span__Token Array__Token_Span(struct Array__Token* this) {
+    struct Span__Token out={0};
+    out.data=this->data;
+    out.len=this->len;
+    return out;
+}
+struct Slice__Token Array__Token_Slice(struct Array__Token* this) {
+    struct Slice__Token out={0};
+    out.data=this->data;
+    out.len=this->len;
+    return out;
+}
+int main(int argc,str* argv) {
+    return (compiler_SelfCompilerMain(argc,argv));
+}
+struct Allocator std_DefaultAllocator(void) {
+    return ((struct Allocator){.context=0});
+}
+void std_SetBytes(byte* dest,byte value,usize count) {
+    kek_std_mem_set(dest,value,count);
+}
+struct Result__File std_FileOpen(str path,FileMode mode) {
+    struct Result__File result={0};
+    str modeText="rb";
+    if (mode==FileMode_Write) {
+        modeText="wb";
     } else {
-        parent->firstChild = child;
-    }
-    parent->lastChild = child;
-    parent->childCount++;
-}
-
-static int IsPunctuationToken(struct Token* token, enum PunctuationType punctuation) {
-    return token->type == TOKEN_PUNCTUATION && token->value.punctuation == punctuation;
-}
-
-static int IsOperatorToken(struct Token* token, enum OperatorType operator) {
-    return token->type == TOKEN_OPERATOR && token->value.operator == operator;
-}
-
-static int TokenTextEquals(struct Parser* parser, struct Token* token, const char* text) {
-    size_t length = strlen(text);
-    return (token->type == TOKEN_IDENTIFIER || token->type == TOKEN_NUMBER || token->type == TOKEN_STRING)
-        && token->location.length == length
-        && strncmp(parser->file->content + token->location.offset, text, length) == 0;
-}
-
-static int IsClosingPunctuation(struct Token* token) {
-    return IsPunctuationToken(token, PUNCTUATION_RIGHT_PAREN)
-        || IsPunctuationToken(token, PUNCTUATION_RIGHT_BRACE)
-        || IsPunctuationToken(token, PUNCTUATION_RIGHT_BRACKET);
-}
-
-static int IsTriviaToken(struct Token* token) {
-    return token->type == TOKEN_COMMENT || token->type == TOKEN_DOC_COMMENT;
-}
-
-static const char* PunctuationName(enum PunctuationType punctuation) {
-    return punctuation < PUNCTUATION_COUNT ? PunctuationNames[punctuation] : "<end of file>";
-}
-
-static void ReportParseError(struct Parser* parser, struct Token* token, const char* message) {
-    KekAddDiagnostic(parser->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_PARSE,
-        parser->file ? parser->file->fileIndex : -1, token->location, message);
-    parser->errorCount++;
-}
-
-static int IsAstTerminator(struct Token* token, enum PunctuationType closePunctuation) {
-    if (token->type == TOKEN_EOF) {
-        return 1;
-    }
-    if (closePunctuation < PUNCTUATION_COUNT && IsPunctuationToken(token, closePunctuation)) {
-        return 1;
-    }
-    if (IsClosingPunctuation(token)) {
-        return 1;
-    }
-    return 0;
-}
-
-static int IsGenericTerminator(struct Token* token) {
-    return token->type == TOKEN_EOF || IsOperatorToken(token, OPERATOR_GREATER);
-}
-
-static void FinishLocationFromChildren(struct AstNode* node) {
-    if (node->childCount == 0) {
-        return;
-    }
-
-    struct SourceLocation first = node->firstChild->location;
-    struct SourceLocation last = node->lastChild->location;
-    node->location = first;
-    if (last.offset + last.length >= first.offset) {
-        node->location.length = (last.offset + last.length) - first.offset;
-    }
-}
-
-static struct AstNode* ParseStatement(struct Parser* parser, enum PunctuationType closePunctuation);
-static int ShouldParseGenericList(struct Parser* parser, struct AstNode* previousChild);
-
-static struct AstNode* ParseTokenNode(struct Parser* parser) {
-    struct Token token = parser->tokens[parser->position++];
-    struct AstNode* node = CreateAstNode(parser, AST_TOKEN, token.location);
-    node->token = token;
-    return node;
-}
-
-static void ParseChildrenInto(struct Parser* parser, struct AstNode* parent, enum PunctuationType closePunctuation) {
-    while (parser->position < parser->count && !IsAstTerminator(&parser->tokens[parser->position], closePunctuation)) {
-        if (IsTriviaToken(&parser->tokens[parser->position])) {
-            parser->position++;
-            continue;
-        }
-        size_t previousPosition = parser->position;
-        struct AstNode* statement = ParseStatement(parser, closePunctuation);
-        if (statement->childCount > 0) {
-            AddChild(parent, statement);
-        } else if (parser->position == previousPosition) {
-            break;
+        if (mode==FileMode_Append) {
+            modeText="ab";
         } else {
-            continue;
-        }
-    }
-}
-
-static struct AstNode* ParseDelimited(struct Parser* parser, enum AstNodeType type, enum PunctuationType closePunctuation) {
-    struct Token open = parser->tokens[parser->position++];
-    struct AstNode* node = CreateAstNode(parser, type, open.location);
-
-    ParseChildrenInto(parser, node, closePunctuation);
-
-    if (parser->position < parser->count && IsPunctuationToken(&parser->tokens[parser->position], closePunctuation)) {
-        struct Token close = parser->tokens[parser->position++];
-        node->location = open.location;
-        node->location.length = (close.location.offset + close.location.length) - open.location.offset;
-    } else if (parser->position < parser->count) {
-        char message[128];
-        snprintf(message, sizeof(message), "expected '%s'", PunctuationName(closePunctuation));
-        ReportParseError(parser, &parser->tokens[parser->position], message);
-        if (IsClosingPunctuation(&parser->tokens[parser->position])) {
-            parser->position++;
-        }
-    } else {
-        ReportParseError(parser, &open, "unterminated delimiter");
-    }
-
-    if (node->childCount > 0 && node->location.length == open.location.length) {
-        FinishLocationFromChildren(node);
-        node->location.offset = open.location.offset;
-        node->location.line = open.location.line;
-        node->location.column = open.location.column;
-    }
-    return node;
-}
-
-static struct AstNode* ParseGenericDelimited(struct Parser* parser) {
-    struct Token open = parser->tokens[parser->position++];
-    struct AstNode* node = CreateAstNode(parser, AST_GENERIC, open.location);
-
-    while (parser->position < parser->count && !IsGenericTerminator(&parser->tokens[parser->position])) {
-        if (IsTriviaToken(&parser->tokens[parser->position])) {
-            parser->position++;
-            continue;
-        }
-        struct AstNode* statement = CreateAstNode(parser, AST_STATEMENT, parser->tokens[parser->position].location);
-        while (parser->position < parser->count && !IsGenericTerminator(&parser->tokens[parser->position])) {
-            struct Token* token = &parser->tokens[parser->position];
-            if (IsTriviaToken(token)) {
-                parser->position++;
-                continue;
+            if (mode==FileMode_ReadWrite) {
+                modeText="r+b";
             }
-            if (IsPunctuationToken(token, PUNCTUATION_COMMA)) {
-                parser->position++;
+        }
+    }
+    RawHandle handle=kek_std_file_open(path,modeText);
+    if (handle==0) {
+        result.status=Status_NotFound;
+        return (result);
+    }
+    struct File file={0};
+    file.handle=handle;
+    file.owned=1;
+    result.status=Status_Ok;
+    result.value=file;
+    return (result);
+}
+struct Result__usize File_Read(struct File* this,struct Span__byte out) {
+    struct Result__usize result={0};
+    if (this->handle==0) {
+        result.status=Status_Invalid;
+        return (result);
+    }
+    usize read=kek_std_file_read(out.data,1,out.len,this->handle);
+    if (read==0) {
+        result.status=Status_End;
+        return (result);
+    }
+    result.status=Status_Ok;
+    result.value=read;
+    return (result);
+}
+struct Result__usize File_Write(struct File* this,struct Slice__byte data) {
+    struct Result__usize result={0};
+    if (this->handle==0) {
+        result.status=Status_Invalid;
+        return (result);
+    }
+    usize written=kek_std_file_write(data.data,1,data.len,this->handle);
+    if (written!=data.len) {
+        result.status=Status_IoError;
+        result.value=written;
+        return (result);
+    }
+    result.status=Status_Ok;
+    result.value=written;
+    return (result);
+}
+Status File_Flush(struct File* this) {
+    if (this->handle==0) {
+        return (Status_Invalid);
+    }
+    if (kek_std_file_flush(this->handle)!=0) {
+        return (Status_IoError);
+    }
+    return (Status_Ok);
+}
+Status std_ReadFileToOwnedString(str path,struct Allocator allocator,struct OwnedString* out) {
+    struct Result__File opened=std_FileOpen(path,FileMode_Read);
+    if (opened.status!=Status_Ok) {
+        return (opened.status);
+    }
+    struct File file=opened.value;
+    Status status=std_ReadAllToOwnedString(file,allocator,out);
+    Status closeStatus=File_Close(&file);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    return (closeStatus);
+}
+Status std_WriteFile(str path,struct String text) {
+    struct Result__File opened=std_FileOpen(path,FileMode_Write);
+    if (opened.status!=Status_Ok) {
+        return (opened.status);
+    }
+    struct File file=opened.value;
+    struct Result__usize write=File_Write(&file,String_Bytes(&text));
+    Status closeStatus=File_Close(&file);
+    if (write.status!=Status_Ok) {
+        return (write.status);
+    }
+    return (closeStatus);
+}
+Status File_Close(struct File* this) {
+    if (this->handle==0) {
+        return (Status_Invalid);
+    }
+    if (!this->owned) {
+        return (Status_Unsupported);
+    }
+    if (kek_std_file_close(this->handle)!=0) {
+        return (Status_IoError);
+    }
+    this->handle=0;
+    this->owned=0;
+    return (Status_Ok);
+}
+struct File std_Stdin(void) {
+    struct File file={0};
+    file.handle=kek_std_stdin();
+    file.owned=0;
+    return (file);
+}
+struct File std_Stdout(void) {
+    struct File file={0};
+    file.handle=kek_std_stdout();
+    file.owned=0;
+    return (file);
+}
+struct File std_Stderr(void) {
+    struct File file={0};
+    file.handle=kek_std_stderr();
+    file.owned=0;
+    return (file);
+}
+Status std_ReadAllToOwnedString(struct File file,struct Allocator allocator,struct OwnedString* out) {
+    struct StringBuilder builder=std_StringBuilderNew(allocator);
+    byte buffer[4096]={0};
+    while (1) {
+        struct Result__usize read=File_Read(&file,std_FixedSpan__byte(buffer,((void)(buffer),4096)));
+        if (read.status==Status_End) {
+            break;
+        }
+        if (read.status!=Status_Ok) {
+            StringBuilder_Destroy(&builder);
+            return (read.status);
+        }
+        struct Result__usize write=StringBuilder_Write(&builder,std_FixedSlice__byte(buffer,read.value));
+        if (write.status!=Status_Ok) {
+            StringBuilder_Destroy(&builder);
+            return (write.status);
+        }
+    }
+    out->data=builder.data;
+    out->len=builder.len;
+    out->cap=builder.cap;
+    out->allocator=builder.allocator;
+    builder.data=0;
+    builder.len=0;
+    builder.cap=0;
+    return (Status_Ok);
+}
+struct MemoryReader std_MemoryReaderNew(struct Slice__byte data) {
+    struct MemoryReader reader={0};
+    reader.data=data.data;
+    reader.len=data.len;
+    reader.pos=0;
+    return (reader);
+}
+struct MemoryWriter std_MemoryWriterNew(struct Span__byte data) {
+    struct MemoryWriter writer={0};
+    writer.data=data.data;
+    writer.len=data.len;
+    writer.pos=0;
+    return (writer);
+}
+struct Result__usize MemoryReader_Read(struct MemoryReader* this,struct Span__byte out) {
+    struct Result__usize result={0};
+    if (this->pos>=this->len) {
+        result.status=Status_End;
+        return (result);
+    }
+    usize remaining=this->len-this->pos;
+    usize amount=out.len;
+    if (amount>remaining) {
+        amount=remaining;
+    }
+    for (usize i=0;i<amount;i++) {
+        out.data[i]=this->data[this->pos+i];
+    }
+    this->pos+=amount;
+    result.status=Status_Ok;
+    result.value=amount;
+    return (result);
+}
+struct Result__usize MemoryWriter_Write(struct MemoryWriter* this,struct Slice__byte data) {
+    struct Result__usize result={0};
+    usize remaining=this->len-this->pos;
+    if (data.len>remaining) {
+        result.status=Status_NoMemory;
+        result.value=this->pos;
+        return (result);
+    }
+    for (usize i=0;i<data.len;i++) {
+        this->data[this->pos+i]=data.data[i];
+    }
+    this->pos+=data.len;
+    result.status=Status_Ok;
+    result.value=data.len;
+    return (result);
+}
+usize MemoryWriter_Written(struct MemoryWriter* this) {
+    return (this->pos);
+}
+Status std_WriteByteToMemory(struct MemoryWriter* writer,byte value) {
+    byte buffer[1]={value};
+    struct Result__usize result=MemoryWriter_Write(writer,std_FixedSlice__byte(buffer,1));
+    return (result.status);
+}
+struct String std_StringFromBytes(struct Slice__byte bytes) {
+    struct String out={0};
+    out.data=bytes.data;
+    out.len=bytes.len;
+    return (out);
+}
+struct String std_StringFromCString(str text) {
+    struct String out={0};
+    usize count=0;
+    while (text[count]!=0) {
+        count+=1;
+    }
+    out.data=((ptr)(text));
+    out.len=count;
+    return (out);
+}
+struct Slice__byte String_Bytes(struct String* this) {
+    struct Slice__byte out={0};
+    out.data=this->data;
+    out.len=this->len;
+    return (out);
+}
+struct String String_Slice(struct String* this,usize start,usize length) {
+    struct String out={0};
+    if (start>=this->len) {
+        out.data=this->data+this->len;
+        out.len=0;
+        return (out);
+    }
+    usize available=this->len-start;
+    if (length>available) {
+        length=available;
+    }
+    out.data=this->data+start;
+    out.len=length;
+    return (out);
+}
+bool String_Equals(struct String* this,struct String other) {
+    if (this->len!=other.len) {
+        return (0);
+    }
+    for (usize i=0;i<this->len;i++) {
+        if (this->data[i]!=other.data[i]) {
+            return (0);
+        }
+    }
+    return (1);
+}
+bool String_EqualsCString(struct String* this,str text) {
+    return (String_Equals(this,std_StringFromCString(text)));
+}
+int String_Compare(struct String* this,struct String other) {
+    usize limit=this->len;
+    if (other.len<limit) {
+        limit=other.len;
+    }
+    for (usize i=0;i<limit;i++) {
+        if (this->data[i]<other.data[i]) {
+            return (-1);
+        }
+        if (this->data[i]>other.data[i]) {
+            return (1);
+        }
+    }
+    if (this->len<other.len) {
+        return (-1);
+    }
+    if (this->len>other.len) {
+        return (1);
+    }
+    return (0);
+}
+bool String_EqualsBytes(struct String* this,byte* data,usize len) {
+    if (this->len!=len) {
+        return (0);
+    }
+    for (usize i=0;i<len;i++) {
+        if (this->data[i]!=data[i]) {
+            return (0);
+        }
+    }
+    return (1);
+}
+struct Result__usize String_FindByte(struct String* this,byte value) {
+    struct Result__usize result={0};
+    for (usize i=0;i<this->len;i++) {
+        if (this->data[i]==value) {
+            result.status=Status_Ok;
+            result.value=i;
+            return (result);
+        }
+    }
+    result.status=Status_NotFound;
+    return (result);
+}
+bool String_ContainsByte(struct String* this,byte value) {
+    struct Result__usize found=String_FindByte(this,value);
+    return (found.status==Status_Ok);
+}
+bool String_StartsWith(struct String* this,struct String prefix) {
+    if (prefix.len>this->len) {
+        return (0);
+    }
+    for (usize i=0;i<prefix.len;i++) {
+        if (this->data[i]!=prefix.data[i]) {
+            return (0);
+        }
+    }
+    return (1);
+}
+bool String_EndsWith(struct String* this,struct String suffix) {
+    if (suffix.len>this->len) {
+        return (0);
+    }
+    usize offset=this->len-suffix.len;
+    for (usize i=0;i<suffix.len;i++) {
+        if (this->data[offset+i]!=suffix.data[i]) {
+            return (0);
+        }
+    }
+    return (1);
+}
+bool std_IsAsciiSpace(byte c) {
+    return (c==32||c==9||c==10||c==13);
+}
+bool std_IsAsciiAlpha(byte c) {
+    return ((c>=65&&c<=90)||(c>=97&&c<=122)||c==95);
+}
+bool std_IsAsciiDigit(byte c) {
+    return (c>=48&&c<=57);
+}
+bool std_IsAsciiWord(byte c) {
+    return (std_IsAsciiAlpha(c)||std_IsAsciiDigit(c));
+}
+bool std_IsAsciiOperator(byte c) {
+    return (c==33||c==37||c==38||c==42||c==43||c==45||c==47||c==60||c==61||c==62||c==94||c==124);
+}
+struct String OwnedString_View(struct OwnedString* this) {
+    struct String out={0};
+    out.data=this->data;
+    out.len=this->len;
+    return (out);
+}
+struct String std_OwnedStringView(struct OwnedString* owned) {
+    struct String out={0};
+    out.data=owned->data;
+    out.len=owned->len;
+    return (out);
+}
+Status std_DestroyOwnedString(struct OwnedString* owned) {
+    if (owned->data!=0) {
+        std_Free__byte(owned->allocator,owned->data,owned->cap);
+    }
+    owned->data=0;
+    owned->len=0;
+    owned->cap=0;
+    return (Status_Ok);
+}
+Status std_CloneString(struct String text,struct Allocator allocator,struct OwnedString* out) {
+    byte* data=std_Alloc__byte(allocator,text.len+1);
+    if (data==0) {
+        return (Status_NoMemory);
+    }
+    for (usize i=0;i<text.len;i++) {
+        data[i]=text.data[i];
+    }
+    data[text.len]=0;
+    out->data=data;
+    out->len=text.len;
+    out->cap=text.len+1;
+    out->allocator=allocator;
+    return (Status_Ok);
+}
+Status std_CloneCString(str text,struct Allocator allocator,struct OwnedString* out) {
+    return (std_CloneString(std_StringFromCString(text),allocator,out));
+}
+Status OwnedString_Destroy(struct OwnedString* this) {
+    if (this->data!=0) {
+        std_Free__byte(this->allocator,this->data,this->cap);
+    }
+    this->data=0;
+    this->len=0;
+    this->cap=0;
+    return (Status_Ok);
+}
+struct StringBuilder std_StringBuilderNew(struct Allocator allocator) {
+    struct StringBuilder builder={0};
+    builder.data=0;
+    builder.len=0;
+    builder.cap=0;
+    builder.allocator=allocator;
+    return (builder);
+}
+Status StringBuilder_Destroy(struct StringBuilder* this) {
+    if (this->data!=0) {
+        std_Free__byte(this->allocator,this->data,this->cap);
+    }
+    this->data=0;
+    this->len=0;
+    this->cap=0;
+    return (Status_Ok);
+}
+Status StringBuilder_Clear(struct StringBuilder* this) {
+    this->len=0;
+    return (Status_Ok);
+}
+Status StringBuilder_Reserve(struct StringBuilder* this,usize additional) {
+    usize needed=this->len+additional;
+    if (needed<=this->cap) {
+        return (Status_Ok);
+    }
+    usize newCap=this->cap;
+    if (newCap==0) {
+        newCap=16;
+    }
+    while (newCap<needed) {
+        newCap=newCap*2;
+    }
+    byte* newData=std_Resize__byte(this->allocator,this->data,this->cap,newCap);
+    if (newData==0) {
+        return (Status_NoMemory);
+    }
+    this->data=newData;
+    this->cap=newCap;
+    return (Status_Ok);
+}
+struct Result__usize StringBuilder_Write(struct StringBuilder* this,struct Slice__byte data) {
+    struct Result__usize result={0};
+    Status status=StringBuilder_Reserve(this,data.len);
+    if (status!=Status_Ok) {
+        result.status=status;
+        return (result);
+    }
+    for (usize i=0;i<data.len;i++) {
+        this->data[this->len+i]=data.data[i];
+    }
+    this->len+=data.len;
+    result.status=Status_Ok;
+    result.value=data.len;
+    return (result);
+}
+Status StringBuilder_WriteByte(struct StringBuilder* this,byte value) {
+    byte buffer[1]={value};
+    struct Result__usize result=StringBuilder_Write(this,std_FixedSlice__byte(buffer,1));
+    return (result.status);
+}
+Status StringBuilder_WriteString(struct StringBuilder* this,struct String text) {
+    struct Result__usize result=StringBuilder_Write(this,String_Bytes(&text));
+    return (result.status);
+}
+Status StringBuilder_WriteCString(struct StringBuilder* this,str text) {
+    return (StringBuilder_WriteString(this,std_StringFromCString(text)));
+}
+Status StringBuilder_WriteRepeatByte(struct StringBuilder* this,byte value,usize count) {
+    for (usize i=0;i<count;i++) {
+        Status status=StringBuilder_WriteByte(this,value);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+    }
+    return (Status_Ok);
+}
+Status StringBuilder_WriteIndent(struct StringBuilder* this,usize count) {
+    return (StringBuilder_WriteRepeatByte(this,' ',count));
+}
+struct String StringBuilder_View(struct StringBuilder* this) {
+    struct String out={0};
+    out.data=this->data;
+    out.len=this->len;
+    return (out);
+}
+struct Result__OwnedString StringBuilder_Detach(struct StringBuilder* this) {
+    struct OwnedString out={0};
+    out.data=this->data;
+    out.len=this->len;
+    out.cap=this->cap;
+    out.allocator=this->allocator;
+    this->data=0;
+    this->len=0;
+    this->cap=0;
+    struct Result__OwnedString result={0};
+    result.status=Status_Ok;
+    result.value=out;
+    return (result);
+}
+struct Result__OwnedString StringBuilder_ToOwnedString(struct StringBuilder* this) {
+    return (StringBuilder_Detach(this));
+}
+Status std_WriteStringToBuilder(struct StringBuilder* builder,struct String text) {
+    struct Result__usize result=StringBuilder_Write(builder,String_Bytes(&text));
+    return (result.status);
+}
+Status std_WriteSliceToBuilder(struct StringBuilder* builder,struct Slice__byte data) {
+    struct Result__usize result=StringBuilder_Write(builder,data);
+    return (result.status);
+}
+Status std_DestroyStringBuilder(struct StringBuilder* builder) {
+    return (StringBuilder_Destroy(builder));
+}
+struct ByteCursor std_ByteCursorNew(struct String input) {
+    struct ByteCursor cursor={0};
+    cursor.input=input;
+    cursor.pos=0;
+    cursor.line=1;
+    cursor.column=1;
+    return (cursor);
+}
+bool ByteCursor_AtEnd(struct ByteCursor* this) {
+    return (this->pos>=this->input.len);
+}
+byte ByteCursor_Peek(struct ByteCursor* this) {
+    if (ByteCursor_AtEnd(this)) {
+        return (0);
+    }
+    return (this->input.data[this->pos]);
+}
+byte ByteCursor_PeekAt(struct ByteCursor* this,usize offset) {
+    usize target=this->pos+offset;
+    if (target>=this->input.len) {
+        return (0);
+    }
+    return (this->input.data[target]);
+}
+byte ByteCursor_Advance(struct ByteCursor* this) {
+    byte value=ByteCursor_Peek(this);
+    if (ByteCursor_AtEnd(this)) {
+        return (0);
+    }
+    this->pos+=1;
+    if (value=='\n') {
+        this->line+=1;
+        this->column=1;
+    } else {
+        this->column+=1;
+    }
+    return (value);
+}
+bool ByteCursor_MatchByte(struct ByteCursor* this,byte value) {
+    if (ByteCursor_Peek(this)!=value) {
+        return (0);
+    }
+    ByteCursor_Advance(this);
+    return (1);
+}
+Status ByteCursor_SkipAsciiWhitespace(struct ByteCursor* this) {
+    while (!ByteCursor_AtEnd(this)&&std_IsAsciiSpace(ByteCursor_Peek(this))) {
+        ByteCursor_Advance(this);
+    }
+    return (Status_Ok);
+}
+Status std_WriteByteToBuilder(struct StringBuilder* writer,byte value) {
+    byte buffer[1]={value};
+    struct Result__usize result=StringBuilder_Write(writer,std_FixedSlice__byte(buffer,1));
+    return (result.status);
+}
+Status std_WriteByteToFile(struct File* writer,byte value) {
+    byte buffer[1]={value};
+    struct Result__usize result=File_Write(writer,std_FixedSlice__byte(buffer,1));
+    return (result.status);
+}
+Status std_WriteStringToMemory(struct MemoryWriter* writer,struct String text) {
+    struct Result__usize result=MemoryWriter_Write(writer,String_Bytes(&text));
+    return (result.status);
+}
+Status std_WriteStringToFile(struct File* writer,struct String text) {
+    struct Result__usize result=File_Write(writer,String_Bytes(&text));
+    return (result.status);
+}
+Status std_WriteBoolToBuilder(struct StringBuilder* writer,bool value) {
+    byte trueText[4]={116,114,117,101};
+    byte falseText[5]={102,97,108,115,101};
+    if (value) {
+        return (std_WriteStringToBuilder(writer,std_StringFromBytes(std_FixedSlice__byte(trueText,((void)(trueText),4)))));
+    }
+    return (std_WriteStringToBuilder(writer,std_StringFromBytes(std_FixedSlice__byte(falseText,((void)(falseText),5)))));
+}
+Status std_WriteBoolToMemory(struct MemoryWriter* writer,bool value) {
+    byte trueText[4]={116,114,117,101};
+    byte falseText[5]={102,97,108,115,101};
+    if (value) {
+        return (std_WriteStringToMemory(writer,std_StringFromBytes(std_FixedSlice__byte(trueText,((void)(trueText),4)))));
+    }
+    return (std_WriteStringToMemory(writer,std_StringFromBytes(std_FixedSlice__byte(falseText,((void)(falseText),5)))));
+}
+Status std_WriteBoolToFile(struct File* writer,bool value) {
+    byte trueText[4]={116,114,117,101};
+    byte falseText[5]={102,97,108,115,101};
+    if (value) {
+        return (std_WriteStringToFile(writer,std_StringFromBytes(std_FixedSlice__byte(trueText,((void)(trueText),4)))));
+    }
+    return (std_WriteStringToFile(writer,std_StringFromBytes(std_FixedSlice__byte(falseText,((void)(falseText),5)))));
+}
+Status std_FormatU64ToBuilder(struct StringBuilder* writer,u64 value,u8 base) {
+    byte digits[16]={48,49,50,51,52,53,54,55,56,57,65,66,67,68,69,70,};
+    byte buffer[64]={0};
+    usize len=0;
+    u64 radix=base;
+    if (radix<2) {
+        return (Status_Invalid);
+    }
+    if (radix>16) {
+        return (Status_Invalid);
+    }
+    if (value==0) {
+        return (std_WriteByteToBuilder(writer,48));
+    }
+    while (value>0) {
+        u64 digit=value%radix;
+        buffer[len]=digits[digit];
+        len+=1;
+        value=value/radix;
+    }
+    while (len>0) {
+        len-=1;
+        Status status=std_WriteByteToBuilder(writer,buffer[len]);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+    }
+    return (Status_Ok);
+}
+Status std_FormatI64ToBuilder(struct StringBuilder* writer,i64 value) {
+    if (value<0) {
+        Status status=std_WriteByteToBuilder(writer,45);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        return (std_FormatU64ToBuilder(writer,((u64)(0-value)),10));
+    }
+    return (std_FormatU64ToBuilder(writer,((u64)(value)),10));
+}
+Status std_FormatBoolToBuilder(struct StringBuilder* writer,bool value) {
+    return (std_WriteBoolToBuilder(writer,value));
+}
+struct Result__Directory std_DirectoryOpen(str path) {
+    struct Result__Directory result={0};
+    RawHandle handle=kek_std_dir_open(path);
+    if (handle==0) {
+        result.status=Status_NotFound;
+        return (result);
+    }
+    struct Directory directory={0};
+    directory.handle=handle;
+    result.status=Status_Ok;
+    result.value=directory;
+    return (result);
+}
+struct Result__String Directory_ReadName(struct Directory* this) {
+    struct Result__String result={0};
+    if (this->handle==0) {
+        result.status=Status_Invalid;
+        return (result);
+    }
+    str name=kek_std_dir_read_name(this->handle);
+    if (name==0) {
+        result.status=Status_End;
+        return (result);
+    }
+    result.status=Status_Ok;
+    result.value=std_StringFromCString(name);
+    return (result);
+}
+Status Directory_Close(struct Directory* this) {
+    if (this->handle==0) {
+        return (Status_Invalid);
+    }
+    if (kek_std_dir_close(this->handle)!=0) {
+        return (Status_IoError);
+    }
+    this->handle=0;
+    return (Status_Ok);
+}
+int std_ProcessRun(str command) {
+    return (kek_std_system(command));
+}
+struct SelfSourceLocation diagnostics_SelfSourceLocationNew(usize line,usize column,usize offset,usize length) {
+    struct SelfSourceLocation location={0};
+    location.line=line;
+    location.column=column;
+    location.offset=offset;
+    location.length=length;
+    return (location);
+}
+void diagnostics_SelfDiagnosticBagInit(struct SelfDiagnosticBag* bag,struct Allocator allocator) {
+    bag->count=0;
+    bag->errorCount=0;
+    bag->allocator=allocator;
+}
+Status diagnostics_SelfDiagnosticBagDestroy(struct SelfDiagnosticBag* bag) {
+    for (usize i=0;i<bag->count;i++) {
+        std_DestroyOwnedString(&bag->items[i].message);
+    }
+    bag->count=0;
+    bag->errorCount=0;
+    return (Status_Ok);
+}
+Status diagnostics_SelfDiagnosticAdd(struct SelfDiagnosticBag* bag,SelfDiagnosticSeverity severity,SelfDiagnosticPhase phase,i64 fileIndex,struct SelfSourceLocation location,struct String message) {
+    if (severity==SelfDiagnosticSeverity_Error) {
+        bag->errorCount+=1;
+    }
+    if (bag->count>=(sizeof(bag->items)/sizeof((bag->items)[0]))) {
+        return (Status_NoMemory);
+    }
+    struct SelfDiagnostic* diagnostic=&bag->items[bag->count];
+    diagnostic->severity=severity;
+    diagnostic->phase=phase;
+    diagnostic->fileIndex=fileIndex;
+    diagnostic->location=location;
+    Status status=std_CloneString(message,bag->allocator,&diagnostic->message);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    bag->count+=1;
+    return (Status_Ok);
+}
+Status diagnostics_SelfDiagnosticAddCString(struct SelfDiagnosticBag* bag,SelfDiagnosticSeverity severity,SelfDiagnosticPhase phase,i64 fileIndex,struct SelfSourceLocation location,str message) {
+    return (diagnostics_SelfDiagnosticAdd(bag,severity,phase,fileIndex,location,std_StringFromCString(message)));
+}
+Status diagnostics_SelfDiagnosticAddPathMessage(struct SelfDiagnosticBag* bag,SelfDiagnosticSeverity severity,SelfDiagnosticPhase phase,i64 fileIndex,struct SelfSourceLocation location,str prefix,struct String path) {
+    struct StringBuilder builder=std_StringBuilderNew(bag->allocator);
+    Status status=StringBuilder_WriteCString(&builder,prefix);
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteString(&builder,path);
+    }
+    if (status!=Status_Ok) {
+        StringBuilder_Destroy(&builder);
+        return (status);
+    }
+    struct String message=StringBuilder_View(&builder);
+    status=diagnostics_SelfDiagnosticAdd(bag,severity,phase,fileIndex,location,message);
+    StringBuilder_Destroy(&builder);
+    return (status);
+}
+Status diagnostics_SelfWriteU64Field(struct StringBuilder* out,u64 value,bool separator) {
+    Status status=std_FormatU64ToBuilder(out,value,10);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    if (separator) {
+        return (StringBuilder_WriteByte(out,'|'));
+    }
+    return (Status_Ok);
+}
+Status diagnostics_SelfWriteI64Field(struct StringBuilder* out,i64 value,bool separator) {
+    Status status=std_FormatI64ToBuilder(out,value);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    if (separator) {
+        return (StringBuilder_WriteByte(out,'|'));
+    }
+    return (Status_Ok);
+}
+Status diagnostics_SelfWriteDiagnosticDump(struct SelfDiagnosticBag* bag,struct StringBuilder* out) {
+    for (usize i=0;i<bag->count;i++) {
+        struct SelfDiagnostic* diagnostic=&bag->items[i];
+        Status status=StringBuilder_WriteCString(out,"diag|");
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        status=diagnostics_SelfWriteU64Field(out,((u64)(diagnostic->severity)),1);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        status=diagnostics_SelfWriteU64Field(out,((u64)(diagnostic->phase)),1);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        status=diagnostics_SelfWriteI64Field(out,diagnostic->fileIndex,1);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        status=diagnostics_SelfWriteU64Field(out,((u64)(diagnostic->location.line)),1);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        status=diagnostics_SelfWriteU64Field(out,((u64)(diagnostic->location.column)),1);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        status=diagnostics_SelfWriteU64Field(out,((u64)(diagnostic->location.offset)),1);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        status=diagnostics_SelfWriteU64Field(out,((u64)(diagnostic->location.length)),1);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        struct String message=std_OwnedStringView(&diagnostic->message);
+        status=StringBuilder_WriteString(out,message);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        status=StringBuilder_WriteByte(out,'\n');
+        if (status!=Status_Ok) {
+            return (status);
+        }
+    }
+    return (Status_Ok);
+}
+void source_SelfFileTableInit(struct SelfFileTable* table,struct Allocator allocator) {
+    table->count=0;
+    table->allocator=allocator;
+}
+Status source_SelfFileTableDestroy(struct SelfFileTable* table) {
+    for (usize i=0;i<table->count;i++) {
+        std_DestroyOwnedString(&table->files[i].path);
+        std_DestroyOwnedString(&table->files[i].content);
+    }
+    table->count=0;
+    return (Status_Ok);
+}
+bool source_SelfStringEndsWithCString(struct String text,str suffixText) {
+    struct String suffix=std_StringFromCString(suffixText);
+    return (String_EndsWith(&text,suffix));
+}
+int source_SelfStdlibImportRank(struct String name) {
+    if (String_EqualsCString(&name,"core.kek")) {
+        return (0);
+    }
+    if (String_EqualsCString(&name,"mem.kek")) {
+        return (1);
+    }
+    if (String_EqualsCString(&name,"file.kek")) {
+        return (2);
+    }
+    if (String_EqualsCString(&name,"io.kek")) {
+        return (3);
+    }
+    if (String_EqualsCString(&name,"string.kek")) {
+        return (4);
+    }
+    if (String_EqualsCString(&name,"scan.kek")) {
+        return (5);
+    }
+    if (String_EqualsCString(&name,"array.kek")) {
+        return (6);
+    }
+    if (String_EqualsCString(&name,"list.kek")) {
+        return (7);
+    }
+    if (String_EqualsCString(&name,"hash.kek")) {
+        return (8);
+    }
+    if (String_EqualsCString(&name,"collections.kek")) {
+        return (9);
+    }
+    if (String_EqualsCString(&name,"format.kek")) {
+        return (10);
+    }
+    return (1000);
+}
+int source_SelfCompareImportName(struct String left,struct String right) {
+    int leftRank=source_SelfStdlibImportRank(left);
+    int rightRank=source_SelfStdlibImportRank(right);
+    if (leftRank<rightRank) {
+        return (-1);
+    }
+    if (leftRank>rightRank) {
+        return (1);
+    }
+    return (String_Compare(&left,right));
+}
+Status source_SelfNormalizePath(struct String path,struct Allocator allocator,struct OwnedString* out) {
+    struct StringBuilder builder=std_StringBuilderNew(allocator);
+    bool previousSlash=0;
+    usize i=0;
+    while (i<path.len) {
+        byte c=path.data[i];
+        if (c=='\\') {
+            c='/';
+        }
+        if (c=='/'&&previousSlash) {
+            i+=1;
+            continue;
+        }
+        if (c=='.'&&i+1<path.len&&path.data[i+1]=='/') {
+            i+=2;
+            continue;
+        }
+        Status status=StringBuilder_WriteByte(&builder,c);
+        if (status!=Status_Ok) {
+            StringBuilder_Destroy(&builder);
+            return (status);
+        }
+        previousSlash=c=='/';
+        i+=1;
+    }
+    Status termStatus=StringBuilder_WriteByte(&builder,0);
+    if (termStatus!=Status_Ok) {
+        StringBuilder_Destroy(&builder);
+        return (termStatus);
+    }
+    struct Result__OwnedString detached=StringBuilder_Detach(&builder);
+    if (detached.status!=Status_Ok) {
+        StringBuilder_Destroy(&builder);
+        return (detached.status);
+    }
+    out->data=detached.value.data;
+    out->len=detached.value.len-1;
+    out->cap=detached.value.cap;
+    out->allocator=detached.value.allocator;
+    return (Status_Ok);
+}
+bool source_SelfFileAlreadyLoaded(struct SelfFileTable* table,struct String path) {
+    for (usize i=0;i<table->count;i++) {
+        struct String filePath=std_OwnedStringView(&table->files[i].path);
+        if (String_Equals(&filePath,path)) {
+            return (1);
+        }
+    }
+    return (0);
+}
+Status source_SelfAddSourceDiagnostic(struct SelfDiagnosticBag* diagnostics,str message) {
+    return (diagnostics_SelfDiagnosticAddCString(diagnostics,SelfDiagnosticSeverity_Error,SelfDiagnosticPhase_Source,-1,diagnostics_SelfSourceLocationNew(0,0,0,0),message));
+}
+Status source_SelfReadFile(struct String path,struct SelfFileTable* table,struct SelfDiagnosticBag* diagnostics) {
+    if (table->count>=(sizeof(table->files)/sizeof((table->files)[0]))) {
+        return (source_SelfAddSourceDiagnostic(diagnostics,"file table is full"));
+    }
+    struct OwnedString normalized={0};
+    Status status=source_SelfNormalizePath(path,table->allocator,&normalized);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    struct Result__File opened=std_FileOpen(((str)(normalized.data)),FileMode_Read);
+    if (opened.status!=Status_Ok) {
+        struct String normalizedPath=std_OwnedStringView(&normalized);
+        status=diagnostics_SelfDiagnosticAddPathMessage(diagnostics,SelfDiagnosticSeverity_Error,SelfDiagnosticPhase_Source,-1,diagnostics_SelfSourceLocationNew(0,0,0,0),"could not open file ",normalizedPath);
+        std_DestroyOwnedString(&normalized);
+        return (status);
+    }
+    struct OwnedString content={0};
+    struct File file=opened.value;
+    status=std_ReadAllToOwnedString(file,table->allocator,&content);
+    Status closeStatus=File_Close(&file);
+    if (status!=Status_Ok) {
+        struct String normalizedPath=std_OwnedStringView(&normalized);
+        diagnostics_SelfDiagnosticAddPathMessage(diagnostics,SelfDiagnosticSeverity_Error,SelfDiagnosticPhase_Source,-1,diagnostics_SelfSourceLocationNew(0,0,0,0),"could not read file ",normalizedPath);
+        std_DestroyOwnedString(&normalized);
+        return (status);
+    }
+    if (closeStatus!=Status_Ok) {
+        std_DestroyOwnedString(&content);
+        std_DestroyOwnedString(&normalized);
+        return (closeStatus);
+    }
+    struct SelfSourceFile* source=&table->files[table->count];
+    source->path=normalized;
+    source->content=content;
+    source->fileIndex=table->count;
+    table->count+=1;
+    return (Status_Ok);
+}
+Status source_SelfBuildPath(struct String directory,struct String name,struct Allocator allocator,struct OwnedString* out) {
+    struct StringBuilder builder=std_StringBuilderNew(allocator);
+    Status status=StringBuilder_WriteString(&builder,directory);
+    if (status==Status_Ok&&(directory.len==0||directory.data[directory.len-1]!='/')) {
+        status=StringBuilder_WriteByte(&builder,'/');
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteString(&builder,name);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(&builder,0);
+    }
+    if (status!=Status_Ok) {
+        StringBuilder_Destroy(&builder);
+        return (status);
+    }
+    struct Result__OwnedString detached=StringBuilder_Detach(&builder);
+    if (detached.status!=Status_Ok) {
+        StringBuilder_Destroy(&builder);
+        return (detached.status);
+    }
+    out->data=detached.value.data;
+    out->len=detached.value.len-1;
+    out->cap=detached.value.cap;
+    out->allocator=detached.value.allocator;
+    return (Status_Ok);
+}
+void source_SelfSortImportNames(struct OwnedString* names,usize count) {
+    for (usize i=1;i<count;i++) {
+        struct OwnedString key=names[i];
+        usize j=i;
+        struct String keyView=std_OwnedStringView(&key);
+        while (j>0&&source_SelfCompareImportName(std_OwnedStringView(&names[j-1]),keyView)>0) {
+            names[j]=names[j-1];
+            j-=1;
+        }
+        names[j]=key;
+    }
+}
+void source_SelfDestroyImportNames(struct OwnedString* names,usize start,usize count) {
+    for (usize i=start;i<count;i++) {
+        std_DestroyOwnedString(&names[i]);
+    }
+}
+void source_SelfFreeImportNames(struct Allocator allocator,struct OwnedString* names) {
+    if (names!=0) {
+        std_Free__OwnedString(allocator,names,256);
+    }
+}
+Status source_SelfLoadImportDirectory(struct SelfFileTable* table,struct String path,struct SelfDiagnosticBag* diagnostics) {
+    struct OwnedString normalizedPath={0};
+    Status pathStatus=source_SelfNormalizePath(path,table->allocator,&normalizedPath);
+    if (pathStatus!=Status_Ok) {
+        return (pathStatus);
+    }
+    struct String directoryPath=std_OwnedStringView(&normalizedPath);
+    struct Result__Directory opened=std_DirectoryOpen(((str)(normalizedPath.data)));
+    if (opened.status!=Status_Ok) {
+        Status status=diagnostics_SelfDiagnosticAddPathMessage(diagnostics,SelfDiagnosticSeverity_Error,SelfDiagnosticPhase_Source,-1,diagnostics_SelfSourceLocationNew(0,0,0,0),"could not open import directory ",directoryPath);
+        std_DestroyOwnedString(&normalizedPath);
+        return (status);
+    }
+    struct Directory directory=opened.value;
+    struct OwnedString* names=std_Alloc__OwnedString(table->allocator,256);
+    if (names==0) {
+        Directory_Close(&directory);
+        std_DestroyOwnedString(&normalizedPath);
+        return (Status_NoMemory);
+    }
+    std_SetBytes(((ptr)(names)),0,sizeof(struct OwnedString)*256);
+    usize nameCount=0;
+    while (1) {
+        struct Result__String read=Directory_ReadName(&directory);
+        if (read.status==Status_End) {
+            break;
+        }
+        if (read.status!=Status_Ok) {
+            Directory_Close(&directory);
+            source_SelfDestroyImportNames(names,0,nameCount);
+            source_SelfFreeImportNames(table->allocator,names);
+            std_DestroyOwnedString(&normalizedPath);
+            return (read.status);
+        }
+        struct String name=read.value;
+        if (name.len==0||name.data[0]=='.') {
+            continue;
+        }
+        if (!source_SelfStringEndsWithCString(name,".kek")) {
+            continue;
+        }
+        if (nameCount>=256) {
+            Directory_Close(&directory);
+            source_SelfDestroyImportNames(names,0,nameCount);
+            source_SelfFreeImportNames(table->allocator,names);
+            Status status=diagnostics_SelfDiagnosticAddPathMessage(diagnostics,SelfDiagnosticSeverity_Error,SelfDiagnosticPhase_Source,-1,diagnostics_SelfSourceLocationNew(0,0,0,0),"too many import files in ",directoryPath);
+            std_DestroyOwnedString(&normalizedPath);
+            return (status);
+        }
+        Status cloneStatus=std_CloneString(name,table->allocator,&names[nameCount]);
+        if (cloneStatus!=Status_Ok) {
+            Directory_Close(&directory);
+            source_SelfDestroyImportNames(names,0,nameCount);
+            source_SelfFreeImportNames(table->allocator,names);
+            std_DestroyOwnedString(&normalizedPath);
+            return (cloneStatus);
+        }
+        nameCount+=1;
+    }
+    Status closeStatus=Directory_Close(&directory);
+    if (closeStatus!=Status_Ok) {
+        source_SelfDestroyImportNames(names,0,nameCount);
+        source_SelfFreeImportNames(table->allocator,names);
+        std_DestroyOwnedString(&normalizedPath);
+        return (closeStatus);
+    }
+    source_SelfSortImportNames(names,nameCount);
+    for (usize i=0;i<nameCount;i++) {
+        struct OwnedString filePath={0};
+        struct String name=std_OwnedStringView(&names[i]);
+        Status status=source_SelfBuildPath(directoryPath,name,table->allocator,&filePath);
+        if (status!=Status_Ok) {
+            source_SelfDestroyImportNames(names,i,nameCount);
+            source_SelfFreeImportNames(table->allocator,names);
+            std_DestroyOwnedString(&normalizedPath);
+            return (status);
+        }
+        struct String filePathView=std_OwnedStringView(&filePath);
+        if (!source_SelfFileAlreadyLoaded(table,filePathView)) {
+            status=source_SelfReadFile(filePathView,table,diagnostics);
+            if (status!=Status_Ok) {
+                std_DestroyOwnedString(&filePath);
+                source_SelfDestroyImportNames(names,i,nameCount);
+                source_SelfFreeImportNames(table->allocator,names);
+                std_DestroyOwnedString(&normalizedPath);
+                return (status);
+            }
+        }
+        std_DestroyOwnedString(&filePath);
+        std_DestroyOwnedString(&names[i]);
+    }
+    source_SelfFreeImportNames(table->allocator,names);
+    std_DestroyOwnedString(&normalizedPath);
+    return (Status_Ok);
+}
+Status source_SelfLoadImports(struct SelfFileTable* table,struct SelfSourceFile* file,struct SelfDiagnosticBag* diagnostics) {
+    struct String source=std_OwnedStringView(&file->content);
+    struct String prefix=std_StringFromCString("#import");
+    usize cursor=0;
+    while (cursor+prefix.len+1<=source.len) {
+        bool matched=1;
+        for (usize i=0;i<prefix.len;i++) {
+            if (source.data[cursor+i]!=prefix.data[i]) {
+                matched=0;
                 break;
             }
-            if (IsPunctuationToken(token, PUNCTUATION_LEFT_PAREN)) {
-                AddChild(statement, ParseDelimited(parser, AST_GROUP, PUNCTUATION_RIGHT_PAREN));
-                continue;
-            }
-            if (IsPunctuationToken(token, PUNCTUATION_LEFT_BRACKET)) {
-                AddChild(statement, ParseDelimited(parser, AST_INDEX, PUNCTUATION_RIGHT_BRACKET));
-                continue;
-            }
-            if (ShouldParseGenericList(parser, statement->lastChild)) {
-                AddChild(statement, ParseGenericDelimited(parser));
-                continue;
-            }
-            AddChild(statement, ParseTokenNode(parser));
         }
-        FinishLocationFromChildren(statement);
-        if (statement->childCount > 0) {
-            AddChild(node, statement);
+        if (!matched) {
+            cursor+=1;
+            continue;
+        }
+        if (source.data[cursor+prefix.len]!='(') {
+            cursor+=1;
+            continue;
+        }
+        usize start=cursor+prefix.len+1;
+        usize end=start;
+        while (end<source.len&&source.data[end]!=')') {
+            end+=1;
+        }
+        struct SelfSourceLocation location=diagnostics_SelfSourceLocationNew(1,1,cursor,prefix.len);
+        if (end>=source.len) {
+            return (diagnostics_SelfDiagnosticAddCString(diagnostics,SelfDiagnosticSeverity_Error,SelfDiagnosticPhase_Source,((i64)(file->fileIndex)),location,"unterminated import"));
+        }
+        usize length=end-start;
+        if (length==0) {
+            return (diagnostics_SelfDiagnosticAddCString(diagnostics,SelfDiagnosticSeverity_Error,SelfDiagnosticPhase_Source,((i64)(file->fileIndex)),location,"invalid import path"));
+        }
+        struct String importPath=String_Slice(&source,start,length);
+        Status status=source_SelfLoadImportDirectory(table,importPath,diagnostics);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        cursor=end+1;
+    }
+    return (Status_Ok);
+}
+Status source_SelfLoadCompilationSources(str entryPath,struct Allocator allocator,struct SelfFileTable* table,struct SelfDiagnosticBag* diagnostics) {
+    source_SelfFileTableInit(table,allocator);
+    Status status=source_SelfReadFile(std_StringFromCString(entryPath),table,diagnostics);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    usize nextImportScan=0;
+    while (nextImportScan<table->count) {
+        status=source_SelfLoadImports(table,&table->files[nextImportScan],diagnostics);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        nextImportScan+=1;
+    }
+    return (Status_Ok);
+}
+Status source_SelfWriteSourceDump(struct SelfFileTable* table,struct SelfDiagnosticBag* diagnostics,struct StringBuilder* out) {
+    for (usize i=0;i<table->count;i++) {
+        struct SelfSourceFile* file=&table->files[i];
+        Status status=StringBuilder_WriteCString(out,"file|");
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        status=diagnostics_SelfWriteU64Field(out,((u64)(file->fileIndex)),1);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        struct String filePath=std_OwnedStringView(&file->path);
+        status=StringBuilder_WriteString(out,filePath);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        status=StringBuilder_WriteByte(out,'|');
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        status=diagnostics_SelfWriteU64Field(out,((u64)(file->content.len)),0);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        status=StringBuilder_WriteByte(out,'\n');
+        if (status!=Status_Ok) {
+            return (status);
         }
     }
-
-    if (parser->position < parser->count && IsOperatorToken(&parser->tokens[parser->position], OPERATOR_GREATER)) {
-        struct Token close = parser->tokens[parser->position++];
-        node->location = open.location;
-        node->location.length = (close.location.offset + close.location.length) - open.location.offset;
-    } else if (parser->position < parser->count) {
-        ReportParseError(parser, &parser->tokens[parser->position], "expected '>'");
+    return (diagnostics_SelfWriteDiagnosticDump(diagnostics,out));
+}
+usize tokenizer_TokenizerGenericFootprint(void) {
+    struct Slice__Token slice={0};
+    struct Span__Token span={0};
+    struct Result__Token result={0};
+    slice.len=0;
+    span.len=slice.len;
+    result.status=Status_Ok;
+    return (span.len+((usize)(result.status)));
+}
+struct Token tokenizer_TokenNew(TokenKind kind,u64 subkind,usize line,usize column,usize offset,usize length) {
+    struct Token token={0};
+    token.kind=kind;
+    token.subkind=subkind;
+    token.line=line;
+    token.column=column;
+    token.offset=offset;
+    token.length=length;
+    return (token);
+}
+struct Tokenizer tokenizer_TokenizerNew(struct String source,bool emitComments) {
+    struct Tokenizer tokenizer={0};
+    tokenizer.cursor=std_ByteCursorNew(source);
+    tokenizer.emitComments=emitComments;
+    return (tokenizer);
+}
+bool Tokenizer_AtEnd(struct Tokenizer* this) {
+    return (this->cursor.pos>=this->cursor.input.len);
+}
+byte Tokenizer_Peek(struct Tokenizer* this) {
+    if (Tokenizer_AtEnd(this)) {
+        return (0);
+    }
+    return (this->cursor.input.data[this->cursor.pos]);
+}
+byte Tokenizer_PeekAt(struct Tokenizer* this,usize offset) {
+    usize target=this->cursor.pos+offset;
+    if (target>=this->cursor.input.len) {
+        return (0);
+    }
+    return (this->cursor.input.data[target]);
+}
+byte Tokenizer_Advance(struct Tokenizer* this) {
+    byte value=Tokenizer_Peek(this);
+    if (Tokenizer_AtEnd(this)) {
+        return (0);
+    }
+    this->cursor.pos+=1;
+    if (value=='\n') {
+        this->cursor.line+=1;
+        this->cursor.column=1;
     } else {
-        ReportParseError(parser, &open, "unterminated generic list");
+        this->cursor.column+=1;
     }
-
-    if (node->childCount > 0 && node->location.length == open.location.length) {
-        FinishLocationFromChildren(node);
-        node->location.offset = open.location.offset;
-        node->location.line = open.location.line;
-        node->location.column = open.location.column;
-    }
-    return node;
+    return (value);
 }
-
-static int ShouldParseGenericList(struct Parser* parser, struct AstNode* previousChild) {
-    if (!previousChild || previousChild->type != AST_TOKEN) {
-        return 0;
+bool tokenizer_TextAtEquals(str text,struct String source,usize start,usize length) {
+    usize textLength=0;
+    while (text[textLength]!=0) {
+        textLength+=1;
     }
-    // Allow identifiers and keywords to have generic arguments
-    if (previousChild->token.type != TOKEN_IDENTIFIER && previousChild->token.type != TOKEN_KEYWORD) {
-        return 0;
+    if (textLength!=length) {
+        return (0);
     }
-    if (TokenTextEquals(parser, &previousChild->token, "cast")) {
-        return 0;
+    if (start+length>source.len) {
+        return (0);
     }
-    if (parser->position >= parser->count || !IsOperatorToken(&parser->tokens[parser->position], OPERATOR_LESS)) {
-        return 0;
-    }
-
-    int depth = 0;
-    for (size_t i = parser->position; i < parser->count; i++) {
-        struct Token* token = &parser->tokens[i];
-        if (IsOperatorToken(token, OPERATOR_LESS)) {
-            depth++;
-            continue;
+    for (usize i=0;i<length;i++) {
+        if (source.data[start+i]!=text[i]) {
+            return (0);
         }
-        if (IsOperatorToken(token, OPERATOR_GREATER)) {
-            depth--;
-            if (depth == 0) {
-                return 1;
+    }
+    return (1);
+}
+bool Tokenizer_StartsWith(struct Tokenizer* this,str text) {
+    usize i=0;
+    while (text[i]!=0) {
+        if (Tokenizer_PeekAt(this,i)!=text[i]) {
+            return (0);
+        }
+        i+=1;
+    }
+    return (1);
+}
+void Tokenizer_AdvanceMany(struct Tokenizer* this,usize count) {
+    for (usize i=0;i<count;i++) {
+        Tokenizer_Advance(this);
+    }
+}
+void Tokenizer_SkipWhitespace(struct Tokenizer* this) {
+    while (!Tokenizer_AtEnd(this)&&std_IsAsciiSpace(Tokenizer_Peek(this))) {
+        Tokenizer_Advance(this);
+    }
+}
+void Tokenizer_SkipWhitespaceAndComments(struct Tokenizer* this) {
+    while (1) {
+        Tokenizer_SkipWhitespace(this);
+        if (Tokenizer_Peek(this)=='/'&&Tokenizer_PeekAt(this,1)=='/') {
+            while (!Tokenizer_AtEnd(this)&&Tokenizer_Peek(this)!='\n') {
+                Tokenizer_Advance(this);
             }
             continue;
         }
-        if (depth == 1
-            && token->type == TOKEN_PUNCTUATION
-            && token->value.punctuation == PUNCTUATION_DOT) {
-            return 0;
-        }
-        if (token->type == TOKEN_EOF
-            || IsPunctuationToken(token, PUNCTUATION_SEMICOLON)
-            || IsPunctuationToken(token, PUNCTUATION_RIGHT_PAREN)
-            || IsPunctuationToken(token, PUNCTUATION_LEFT_BRACE)
-            || IsPunctuationToken(token, PUNCTUATION_RIGHT_BRACE)) {
-            return 0;
-        }
-    }
-    return 0;
-}
-
-static struct AstNode* ParseStatement(struct Parser* parser, enum PunctuationType closePunctuation) {
-    struct AstNode* statement = CreateAstNode(parser, AST_STATEMENT, parser->tokens[parser->position].location);
-
-    while (parser->position < parser->count && !IsAstTerminator(&parser->tokens[parser->position], closePunctuation)) {
-        struct Token* token = &parser->tokens[parser->position];
-
-        if (IsTriviaToken(token)) {
-            parser->position++;
-            continue;
-        }
-
-        if (IsPunctuationToken(token, PUNCTUATION_SEMICOLON) || IsPunctuationToken(token, PUNCTUATION_COMMA)) {
-            parser->position++;
-            break;
-        }
-
-        if (IsClosingPunctuation(token)) {
-            break;
-        }
-
-        if (IsPunctuationToken(token, PUNCTUATION_LEFT_BRACE)) {
-            AddChild(statement, ParseDelimited(parser, AST_BLOCK, PUNCTUATION_RIGHT_BRACE));
-            break;
-        }
-
-        if (IsPunctuationToken(token, PUNCTUATION_LEFT_PAREN)) {
-            AddChild(statement, ParseDelimited(parser, AST_GROUP, PUNCTUATION_RIGHT_PAREN));
-            continue;
-        }
-
-        if (IsPunctuationToken(token, PUNCTUATION_LEFT_BRACKET)) {
-            AddChild(statement, ParseDelimited(parser, AST_INDEX, PUNCTUATION_RIGHT_BRACKET));
-            continue;
-        }
-
-        if (ShouldParseGenericList(parser, statement->lastChild)) {
-            AddChild(statement, ParseGenericDelimited(parser));
-            continue;
-        }
-
-        AddChild(statement, ParseTokenNode(parser));
-    }
-
-    FinishLocationFromChildren(statement);
-    return statement;
-}
-
-static struct AstNode* ParseList(struct Parser* parser, enum AstNodeType listType, enum PunctuationType closePunctuation) {
-    struct AstNode* list = CreateAstNode(parser, listType, parser->tokens[parser->position].location);
-
-    ParseChildrenInto(parser, list, closePunctuation);
-
-    if (closePunctuation == PUNCTUATION_COUNT
-        && parser->position < parser->count
-        && IsClosingPunctuation(&parser->tokens[parser->position])) {
-        ReportParseError(parser, &parser->tokens[parser->position], "unexpected closing delimiter");
-        parser->position++;
-    }
-
-    FinishLocationFromChildren(list);
-    return list;
-}
-
-struct AstNode* ParseAst(struct Parser* parser) {
-    struct SourceLocation location = {1, 1, 0, parser->file->length};
-    struct AstNode* root = ParseList(parser, AST_FILE, PUNCTUATION_COUNT);
-    root->location = location;
-    return root;
-}
-
-static void PrintIndent(int indent) {
-    for (int i = 0; i < indent; i++) {
-        printf("  ");
-    }
-}
-
-void PrintAst(struct AstNode* node, struct SourceFile* file, int indent) {
-    PrintIndent(indent);
-    printf("%s", AstNodeTypeNames[node->type]);
-    if (node->type == AST_TOKEN) {
-        printf(" %s", TokenTypeNames[node->token.type]);
-        if (node->token.type == TOKEN_IDENTIFIER || node->token.type == TOKEN_NUMBER || node->token.type == TOKEN_STRING || node->token.type == TOKEN_CHAR) {
-            printf(" '%.*s'", (int)node->token.location.length, file->content + node->token.location.offset);
-        } else if (node->token.type != TOKEN_EOF) {
-            printf(" '%s'", TokenLexeme(&node->token, file));
-        }
-    }
-    printf(" @ %zu:%zu len=%zu\n", node->location.line, node->location.column, node->location.length);
-
-    for (struct AstNode* child = node->firstChild; child; child = child->nextSibling) {
-        PrintAst(child, file, indent + 1);
-    }
-}
-
-void FreeAst(struct AstNode* node) {
-    (void)node;
-}
-#undef PrintIndent
-#undef ParseList
-#undef ParseGenericDelimited
-#undef ParseDelimited
-#undef ParseChildrenInto
-#undef ParseTokenNode
-#undef ShouldParseGenericList
-#undef ParseStatement
-#undef FinishLocationFromChildren
-#undef IsGenericTerminator
-#undef IsAstTerminator
-#undef ReportParseError
-#undef PunctuationName
-#undef IsTriviaToken
-#undef IsClosingPunctuation
-#undef TokenTextEquals
-#undef IsOperatorToken
-#undef IsPunctuationToken
-#undef AddChild
-#undef CreateAstNode
-/* END ast.c */
-
-/* BEGIN parser.c */
-#define IsTokenNode parser_IsTokenNode
-#define IsKeywordNode parser_IsKeywordNode
-#define IsPunctuationNode parser_IsPunctuationNode
-#define IsGenericNode parser_IsGenericNode
-#define IsOperatorNode parser_IsOperatorNode
-#define IsAnyOverloadableOperatorNode parser_IsAnyOverloadableOperatorNode
-#define TokenTextEquals parser_TokenTextEquals
-#define Next parser_Next
-#define AddFrontendNode parser_AddFrontendNode
-#define AddType parser_AddType
-#define AddExpr parser_AddExpr
-#define AddStmt parser_AddStmt
-#define AddParam parser_AddParam
-#define AddField parser_AddField
-#define AddVariant parser_AddVariant
-#define AddDecl parser_AddDecl
-#define ParseExprUntil parser_ParseExprUntil
-#define ParseType parser_ParseType
-#define AddTypedParseDiagnostic parser_AddTypedParseDiagnostic
-#define ParsePointerElementType parser_ParsePointerElementType
-#define AddExprArg parser_AddExprArg
-#define AddStructLiteralFields parser_AddStructLiteralFields
-#define ParseStructLiteralExpr parser_ParseStructLiteralExpr
-#define ParseGroupExpr parser_ParseGroupExpr
-#define IsExpressionEnd parser_IsExpressionEnd
-#define IsAssignmentExprOperator parser_IsAssignmentExprOperator
-#define ExprOperatorPrecedence parser_ExprOperatorPrecedence
-#define IsRightAssociativeExprOperator parser_IsRightAssociativeExprOperator
-#define IsUnaryExprOperator parser_IsUnaryExprOperator
-#define ParseExprPrecedence parser_ParseExprPrecedence
-#define AddCallArgs parser_AddCallArgs
-#define ParsePrimaryExpr parser_ParsePrimaryExpr
-#define ParsePostfixExpr parser_ParsePostfixExpr
-#define IsBuiltinTypeName parser_IsBuiltinTypeName
-#define AddChildStmt parser_AddChildStmt
-#define LooksLikeDecl parser_LooksLikeDecl
-#define DeclColonAfterType parser_DeclColonAfterType
-#define DeclNameAfterType parser_DeclNameAfterType
-#define AfterNameAndArraySuffixes parser_AfterNameAndArraySuffixes
-#define ParseFirstGroupStatementExpr parser_ParseFirstGroupStatementExpr
-#define ClassifyStatementKind parser_ClassifyStatementKind
-#define ParseStatementList parser_ParseStatementList
-#define ParseStatement parser_ParseStatement
-#define IsDoWhileConditionStatement parser_IsDoWhileConditionStatement
-#define ClassifyColonDecl parser_ClassifyColonDecl
-#define ClassifyKeywordDecl parser_ClassifyKeywordDecl
-#define ClassifyDecl parser_ClassifyDecl
-#define AddDeclStmt parser_AddDeclStmt
-#define AddDeclParam parser_AddDeclParam
-#define AddDeclField parser_AddDeclField
-#define AddDeclVariant parser_AddDeclVariant
-#define BuildParamList parser_BuildParamList
-#define IsNestedStructDecl parser_IsNestedStructDecl
-#define BuildNestedStructFields parser_BuildNestedStructFields
-#define BuildStructFields parser_BuildStructFields
-#define BuildEnumVariants parser_BuildEnumVariants
-#define BuildDeclDetails parser_BuildDeclDetails
-#define WriteKekModuleSummary parser_WriteKekModuleSummary
-
-const char* KekDeclKindNames[] = {
-    "Import",
-    "Using",
-    "Alias",
-    "ExternC",
-    "Struct",
-    "Enum",
-    "Union",
-    "Function",
-    "Variable",
-    "Unknown",
-};
-
-const char* KekStmtKindNames[] = {
-    "Block",
-    "Decl",
-    "Expr",
-    "If",
-    "Else",
-    "While",
-    "DoWhile",
-    "For",
-    "Each",
-    "Switch",
-    "Case",
-    "Default",
-    "Defer",
-    "Return",
-    "Break",
-    "Continue",
-    "Unreachable",
-    "Panic",
-    "Unknown",
-};
-
-const char* KekExprKindNames[] = {
-    "Name",
-    "Number",
-    "String",
-    "Bool",
-    "Call",
-    "Field",
-    "Scope",
-    "Index",
-    "Group",
-    "StructLiteral",
-    "Unary",
-    "Binary",
-    "Assign",
-    "Cast",
-    "Sizeof",
-    "Alignof",
-    "Offsetof",
-    "Len",
-    "Range",
-    "Unknown",
-};
-
-const char* KekTypeKindNames[] = {
-    "Builtin",
-    "Name",
-    "Pointer",
-    "Array",
-    "Function",
-    "Unknown",
-};
-
-static int IsTokenNode(struct AstNode* node) {
-    return node && node->type == AST_TOKEN;
-}
-
-static int IsKeywordNode(struct AstNode* node, enum KeywordType keyword) {
-    return IsTokenNode(node)
-        && node->token.type == TOKEN_KEYWORD
-        && node->token.value.keyword == keyword;
-}
-
-static int IsPunctuationNode(struct AstNode* node, enum PunctuationType punctuation) {
-    return IsTokenNode(node)
-        && node->token.type == TOKEN_PUNCTUATION
-        && node->token.value.punctuation == punctuation;
-}
-
-static int IsGenericNode(struct AstNode* node) {
-    return node && node->type == AST_GENERIC;
-}
-
-static int IsOperatorNode(struct AstNode* node, enum OperatorType operator) {
-    return IsTokenNode(node)
-        && node->token.type == TOKEN_OPERATOR
-        && node->token.value.operator == operator;
-}
-
-static int IsAnyOverloadableOperatorNode(struct AstNode* node) {
-    return IsTokenNode(node)
-        && node->token.type == TOKEN_OPERATOR
-        && node->token.value.operator != OPERATOR_SCOPE
-        && node->token.value.operator != OPERATOR_ASSIGN;
-}
-
-static int TokenTextEquals(struct AstNode* node, struct SourceFile* file, const char* text) {
-    size_t length = strlen(text);
-    return IsTokenNode(node)
-        && (node->token.type == TOKEN_IDENTIFIER || node->token.type == TOKEN_NUMBER || node->token.type == TOKEN_STRING || node->token.type == TOKEN_CHAR)
-        && node->token.location.length == length
-        && strncmp(file->content + node->token.location.offset, text, length) == 0;
-}
-
-static struct AstNode* Next(struct AstNode* node) {
-    return node ? node->nextSibling : NULL;
-}
-
-static void* AddFrontendNode(struct KekFrontend* frontend, struct KekModule* module, struct KekNodePool* pool, struct AstNode* source, const char* message) {
-    if (pool->count >= pool->capacity) {
-        KekAddDiagnostic(frontend->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_TYPED_PARSE,
-            module->file ? module->file->fileIndex : -1,
-            source ? source->location : (struct SourceLocation){0},
-            message);
-        frontend->errorCount++;
-        module->errorCount++;
-        return NULL;
-    }
-
-    char* items = pool->items;
-    void* node = items + pool->itemSize * pool->count++;
-    memset(node, 0, pool->itemSize);
-    return node;
-}
-
-static struct KekType* AddType(struct KekFrontend* frontend, struct KekModule* module, enum KekTypeKind kind, struct AstNode* source) {
-    struct KekType* type = AddFrontendNode(frontend, module, &frontend->types, source, "typed type storage capacity exceeded");
-    if (!type) {
-        return NULL;
-    }
-    type->kind = kind;
-    type->source = source;
-    type->location = source ? source->location : (struct SourceLocation){0};
-    if (kind < KEK_TYPE_COUNT) {
-        module->typeKindCounts[kind]++;
-    }
-    module->typedTypeCount++;
-    return type;
-}
-
-static struct KekExpr* AddExpr(struct KekFrontend* frontend, struct KekModule* module, enum KekExprKind kind, struct AstNode* source) {
-    struct KekExpr* expr = AddFrontendNode(frontend, module, &frontend->exprs, source, "typed expression storage capacity exceeded");
-    if (!expr) {
-        return NULL;
-    }
-    expr->kind = kind;
-    expr->source = source;
-    expr->location = source ? source->location : (struct SourceLocation){0};
-    if (IsTokenNode(source)) {
-        expr->token = source;
-    }
-    if (kind < KEK_EXPR_COUNT) {
-        module->exprKindCounts[kind]++;
-    }
-    module->typedExprCount++;
-    return expr;
-}
-
-static struct KekStmt* AddStmt(struct KekFrontend* frontend, struct KekModule* module, enum KekStmtKind kind, struct AstNode* source) {
-    struct KekStmt* stmt = AddFrontendNode(frontend, module, &frontend->stmts, source, "typed statement storage capacity exceeded");
-    if (!stmt) {
-        return NULL;
-    }
-    stmt->kind = kind;
-    stmt->source = source;
-    stmt->location = source ? source->location : (struct SourceLocation){0};
-    if (kind < KEK_STMT_COUNT) {
-        module->stmtKindCounts[kind]++;
-    }
-    module->typedStmtCount++;
-    return stmt;
-}
-
-static struct KekParam* AddParam(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* source) {
-    struct KekParam* param = AddFrontendNode(frontend, module, &frontend->params, source, "typed parameter storage capacity exceeded");
-    if (!param) {
-        return NULL;
-    }
-    param->source = source;
-    param->location = source ? source->location : (struct SourceLocation){0};
-    module->paramCount++;
-    return param;
-}
-
-static struct KekField* AddField(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* source) {
-    struct KekField* field = AddFrontendNode(frontend, module, &frontend->fields, source, "typed field storage capacity exceeded");
-    if (!field) {
-        return NULL;
-    }
-    field->source = source;
-    field->location = source ? source->location : (struct SourceLocation){0};
-    module->fieldCount++;
-    return field;
-}
-
-static struct KekVariant* AddVariant(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* source) {
-    struct KekVariant* variant = AddFrontendNode(frontend, module, &frontend->variants, source, "typed variant storage capacity exceeded");
-    if (!variant) {
-        return NULL;
-    }
-    variant->source = source;
-    variant->location = source ? source->location : (struct SourceLocation){0};
-    module->variantCount++;
-    return variant;
-}
-
-static struct KekDecl* AddDecl(struct KekFrontend* frontend, struct KekModule* module, enum KekDeclKind kind, struct AstNode* source) {
-    struct KekDecl* decl = AddFrontendNode(frontend, module, &frontend->decls, source, "typed declaration storage capacity exceeded");
-    if (!decl) {
-        return NULL;
-    }
-    decl->kind = kind;
-    decl->source = source;
-    decl->location = source ? source->location : (struct SourceLocation){0};
-
-    if (module->lastDecl) {
-        module->lastDecl->next = decl;
-    } else {
-        module->firstDecl = decl;
-    }
-    module->lastDecl = decl;
-    module->declCount++;
-    if (kind < KEK_DECL_COUNT) {
-        module->declKindCounts[kind]++;
-    }
-    return decl;
-}
-
-static struct KekExpr* ParseExprUntil(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* first, struct AstNode* stop);
-static struct KekType* ParseType(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* typeNode, struct AstNode* afterName);
-
-static void AddTypedParseDiagnostic(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* source, const char* message) {
-    KekAddDiagnostic(frontend->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_TYPED_PARSE,
-        module->file ? module->file->fileIndex : -1,
-        source ? source->location : (struct SourceLocation){0},
-        message);
-    frontend->errorCount++;
-    module->errorCount++;
-}
-
-static struct KekType* ParsePointerElementType(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* genericArgs) {
-    if (!genericArgs) {
-        return NULL;
-    }
-    if (!genericArgs->firstChild || genericArgs->childCount != 1) {
-        AddTypedParseDiagnostic(frontend, module, genericArgs, "ptr<T> requires exactly one type argument");
-        return AddType(frontend, module, KEK_TYPE_UNKNOWN, genericArgs);
-    }
-
-    struct AstNode* arg = genericArgs->firstChild;
-    if (!arg || arg->type != AST_STATEMENT || !arg->firstChild) {
-        AddTypedParseDiagnostic(frontend, module, genericArgs, "ptr<T> requires a type argument");
-        return AddType(frontend, module, KEK_TYPE_UNKNOWN, genericArgs);
-    }
-
-    return ParseType(frontend, module, arg->firstChild, NULL);
-}
-
-static void AddExprArg(struct KekExpr* call, struct KekExpr* arg) {
-    if (!call || !arg) {
-        return;
-    }
-    if (call->lastArg) {
-        call->lastArg->next = arg;
-    } else {
-        call->firstArg = arg;
-    }
-    call->lastArg = arg;
-}
-
-static void AddStructLiteralFields(struct KekFrontend* frontend, struct KekModule* module, struct KekExpr* literal, struct AstNode* block) {
-    if (!literal || !block || block->type != AST_BLOCK) {
-        return;
-    }
-
-    for (struct AstNode* field = block->firstChild; field; field = field->nextSibling) {
-        if (field->firstChild) {
-            AddExprArg(literal, ParseExprUntil(frontend, module, field->firstChild, NULL));
-        }
-    }
-}
-
-static struct KekExpr* ParseStructLiteralExpr(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* typeNode, struct AstNode* block) {
-    struct KekExpr* expr = AddExpr(frontend, module, KEK_EXPR_STRUCT_LITERAL, block ? block : typeNode);
-    if (expr) {
-        if (typeNode) {
-            expr->type = ParseType(frontend, module, typeNode, NULL);
-        }
-        AddStructLiteralFields(frontend, module, expr, block);
-    }
-    return expr;
-}
-
-static struct KekExpr* ParseGroupExpr(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* group) {
-    if (!group || (group->type != AST_GROUP && group->type != AST_INDEX) || !group->firstChild) {
-        return AddExpr(frontend, module, KEK_EXPR_UNKNOWN, group);
-    }
-    struct KekExpr* expr = AddExpr(frontend, module, KEK_EXPR_GROUP, group);
-    if (expr) {
-        expr->right = ParseExprUntil(frontend, module, group->firstChild->firstChild, NULL);
-    }
-    return expr;
-}
-
-static int IsExpressionEnd(struct AstNode* node, struct AstNode* stop) {
-    return !node || node == stop;
-}
-
-static int IsAssignmentExprOperator(struct AstNode* node) {
-    return IsOperatorNode(node, OPERATOR_ASSIGN)
-        || IsOperatorNode(node, OPERATOR_PLUS_ASSIGN)
-        || IsOperatorNode(node, OPERATOR_MINUS_ASSIGN);
-}
-
-static int ExprOperatorPrecedence(struct AstNode* node) {
-    if (IsAssignmentExprOperator(node)) {
-        return 1;
-    }
-    if (IsOperatorNode(node, OPERATOR_LOGICAL_OR)) {
-        return 2;
-    }
-    if (IsOperatorNode(node, OPERATOR_LOGICAL_AND)) {
-        return 3;
-    }
-    if (IsOperatorNode(node, OPERATOR_BITWISE_OR)) {
-        return 4;
-    }
-    if (IsOperatorNode(node, OPERATOR_BITWISE_AND)) {
-        return 5;
-    }
-    if (IsOperatorNode(node, OPERATOR_EQUAL) || IsOperatorNode(node, OPERATOR_NOT_EQUAL)) {
-        return 6;
-    }
-    if (IsOperatorNode(node, OPERATOR_LESS)
-        || IsOperatorNode(node, OPERATOR_LESS_EQUAL)
-        || IsOperatorNode(node, OPERATOR_GREATER)
-        || IsOperatorNode(node, OPERATOR_GREATER_EQUAL)) {
-        return 7;
-    }
-    if (IsOperatorNode(node, OPERATOR_PLUS) || IsOperatorNode(node, OPERATOR_MINUS)) {
-        return 8;
-    }
-    if (IsOperatorNode(node, OPERATOR_MULTIPLY)
-        || IsOperatorNode(node, OPERATOR_DIVIDE)
-        || IsOperatorNode(node, OPERATOR_MODULO)) {
-        return 9;
-    }
-    return 0;
-}
-
-static int IsRightAssociativeExprOperator(struct AstNode* node) {
-    return IsAssignmentExprOperator(node);
-}
-
-static int IsUnaryExprOperator(struct AstNode* node) {
-    return IsOperatorNode(node, OPERATOR_LOGICAL_NOT)
-        || IsOperatorNode(node, OPERATOR_BITWISE_NOT)
-        || IsOperatorNode(node, OPERATOR_MINUS)
-        || IsOperatorNode(node, OPERATOR_BITWISE_AND)
-        || IsOperatorNode(node, OPERATOR_MULTIPLY);
-}
-
-static struct KekExpr* ParseExprPrecedence(struct KekFrontend* frontend, struct KekModule* module, struct AstNode** current, struct AstNode* stop, int minPrecedence);
-
-static void AddCallArgs(struct KekFrontend* frontend, struct KekModule* module, struct KekExpr* call, struct AstNode* group) {
-    if (!call || !group || group->type != AST_GROUP) {
-        return;
-    }
-
-    for (struct AstNode* arg = group->firstChild; arg; arg = arg->nextSibling) {
-        if (arg->firstChild) {
-            AddExprArg(call, ParseExprUntil(frontend, module, arg->firstChild, NULL));
-        }
-    }
-}
-
-static struct KekExpr* ParsePrimaryExpr(struct KekFrontend* frontend, struct KekModule* module, struct AstNode** current, struct AstNode* stop) {
-    struct AstNode* node = *current;
-    if (IsExpressionEnd(node, stop)) {
-        return AddExpr(frontend, module, KEK_EXPR_UNKNOWN, node);
-    }
-
-    if (node->type == AST_GROUP) {
-        *current = Next(node);
-        return ParseGroupExpr(frontend, module, node);
-    }
-
-    if (node->type == AST_BLOCK) {
-        *current = Next(node);
-        return ParseStructLiteralExpr(frontend, module, NULL, node);
-    }
-
-    if (IsTokenNode(node)
-        && node->token.type == TOKEN_IDENTIFIER
-        && IsPunctuationNode(Next(node), PUNCTUATION_COLON)
-        && Next(Next(node))
-        && Next(Next(node))->type == AST_BLOCK) {
-        struct AstNode* block = Next(Next(node));
-        *current = Next(block);
-        return ParseStructLiteralExpr(frontend, module, node, block);
-    }
-
-    if (IsOperatorNode(node, OPERATOR_SCOPE)) {
-        struct AstNode* name = Next(node);
-        struct KekExpr* expr = AddExpr(frontend, module, KEK_EXPR_SCOPE, node);
-        if (expr) {
-            expr->right = AddExpr(frontend, module, KEK_EXPR_NAME, name);
-        }
-        *current = name ? Next(name) : Next(node);
-        return expr;
-    }
-
-    if (IsTokenNode(node) && TokenTextEquals(node, module->file, "cast")) {
-        struct KekExpr* expr = AddExpr(frontend, module, KEK_EXPR_CAST, node);
-        struct AstNode* less = Next(node);
-        struct AstNode* typeNode = Next(less);
-        struct AstNode* greater = Next(typeNode);
-        struct AstNode* valueGroup = Next(greater);
-        if (expr
-            && IsOperatorNode(less, OPERATOR_LESS)
-            && typeNode
-            && IsOperatorNode(greater, OPERATOR_GREATER)
-            && valueGroup
-            && valueGroup->type == AST_GROUP) {
-            expr->type = ParseType(frontend, module, typeNode, NULL);
-            expr->right = ParseGroupExpr(frontend, module, valueGroup);
-            *current = Next(valueGroup);
-        } else {
-            *current = Next(node);
-        }
-        return expr;
-    }
-
-    // sizeof(Type) or sizeof(expr)
-    if (IsTokenNode(node) && TokenTextEquals(node, module->file, "sizeof")) {
-        struct KekExpr* expr = AddExpr(frontend, module, KEK_EXPR_SIZEOF, node);
-        struct AstNode* argGroup = Next(node);
-        if (expr && argGroup && argGroup->type == AST_GROUP && argGroup->firstChild) {
-            // AST_GROUP contains AST_STATEMENT, which contains the actual tokens
-            struct AstNode* arg = argGroup->firstChild->firstChild;
-            // Try to parse as type first, fallback to expression
-            expr->type = ParseType(frontend, module, arg, NULL);
-            if (!expr->type || expr->type->kind == KEK_TYPE_UNKNOWN) {
-                expr->right = ParseGroupExpr(frontend, module, argGroup);
-                expr->type = NULL;
-            }
-            *current = Next(argGroup);
-        } else {
-            *current = Next(node);
-        }
-        return expr;
-    }
-
-    // alignof(Type)
-    if (IsTokenNode(node) && TokenTextEquals(node, module->file, "alignof")) {
-        struct KekExpr* expr = AddExpr(frontend, module, KEK_EXPR_ALIGNOF, node);
-        struct AstNode* argGroup = Next(node);
-        if (expr && argGroup && argGroup->type == AST_GROUP && argGroup->firstChild) {
-            struct AstNode* arg = argGroup->firstChild->firstChild;
-            expr->type = ParseType(frontend, module, arg, NULL);
-            *current = Next(argGroup);
-        } else {
-            *current = Next(node);
-        }
-        return expr;
-    }
-
-    // offsetof(Type, field)
-    if (IsTokenNode(node) && TokenTextEquals(node, module->file, "offsetof")) {
-        struct KekExpr* expr = AddExpr(frontend, module, KEK_EXPR_OFFSETOF, node);
-        struct AstNode* argGroup = Next(node);
-        if (expr && argGroup && argGroup->type == AST_GROUP && argGroup->firstChild) {
-            struct AstNode* stmt = argGroup->firstChild;
-            struct AstNode* arg = stmt->firstChild;
-            // First arg is type
-            expr->type = ParseType(frontend, module, arg, NULL);
-            // Skip comma (which separates statements in the group), field is in next statement
-            struct AstNode* fieldStmt = stmt->nextSibling;
-            if (fieldStmt && fieldStmt->firstChild && IsTokenNode(fieldStmt->firstChild)) {
-                expr->right = AddExpr(frontend, module, KEK_EXPR_NAME, fieldStmt->firstChild);
-            }
-            *current = Next(argGroup);
-        } else {
-            *current = Next(node);
-        }
-        return expr;
-    }
-
-    // len(array)
-    if (IsTokenNode(node) && TokenTextEquals(node, module->file, "len") && Next(node) && Next(node)->type == AST_GROUP) {
-        struct KekExpr* expr = AddExpr(frontend, module, KEK_EXPR_LEN, node);
-        struct AstNode* argGroup = Next(node);
-        if (expr && argGroup && argGroup->type == AST_GROUP) {
-            expr->right = ParseGroupExpr(frontend, module, argGroup);
-            *current = Next(argGroup);
-        } else {
-            *current = Next(node);
-        }
-        return expr;
-    }
-
-    // range<Type>(start, end[, step])
-    if (IsTokenNode(node) && TokenTextEquals(node, module->file, "range")) {
-        struct KekExpr* expr = AddExpr(frontend, module, KEK_EXPR_RANGE, node);
-        struct AstNode* generic = Next(node);
-        struct AstNode* argGroup = NULL;
-
-        // Parse generic type argument <Type>
-        if (expr && IsGenericNode(generic)) {
-            struct AstNode* typeArg = generic->firstChild ? generic->firstChild->firstChild : NULL;
-            if (typeArg) {
-                expr->type = ParseType(frontend, module, typeArg, NULL);
-            }
-            argGroup = Next(generic);
-        } else {
-            argGroup = generic;
-        }
-
-        // Parse arguments (start, end[, step])
-        if (expr && argGroup && argGroup->type == AST_GROUP) {
-            struct AstNode* startStmt = argGroup->firstChild;
-            struct AstNode* endStmt = startStmt ? startStmt->nextSibling : NULL;
-            struct AstNode* stepStmt = endStmt ? endStmt->nextSibling : NULL;
-
-            if (startStmt && startStmt->firstChild) {
-                expr->left = ParseExprUntil(frontend, module, startStmt->firstChild, NULL);
-            }
-            if (endStmt && endStmt->firstChild) {
-                expr->right = ParseExprUntil(frontend, module, endStmt->firstChild, NULL);
-            }
-            if (stepStmt && stepStmt->firstChild) {
-                expr->step = ParseExprUntil(frontend, module, stepStmt->firstChild, NULL);
-            }
-            *current = Next(argGroup);
-        } else {
-            *current = Next(node);
-        }
-        return expr;
-    }
-
-    if (IsUnaryExprOperator(node)) {
-        struct KekExpr* expr = AddExpr(frontend, module, KEK_EXPR_UNARY, node);
-        *current = Next(node);
-        if (expr) {
-            expr->right = ParseExprPrecedence(frontend, module, current, stop, 10);
-        }
-        return expr;
-    }
-
-    enum KekExprKind kind = KEK_EXPR_UNKNOWN;
-    if (IsTokenNode(node) && node->token.type == TOKEN_IDENTIFIER) {
-        kind = KEK_EXPR_NAME;
-    } else if (IsTokenNode(node) && (node->token.type == TOKEN_NUMBER || node->token.type == TOKEN_CHAR)) {
-        kind = KEK_EXPR_NUMBER;
-    } else if (IsTokenNode(node) && node->token.type == TOKEN_STRING) {
-        kind = KEK_EXPR_STRING;
-    } else if (IsKeywordNode(node, KEYWORD_TRUE) || IsKeywordNode(node, KEYWORD_FALSE)) {
-        kind = KEK_EXPR_BOOL;
-    }
-
-    struct KekExpr* expr = AddExpr(frontend, module, kind, node);
-    *current = Next(node);
-    return expr;
-}
-
-static struct KekExpr* ParsePostfixExpr(struct KekFrontend* frontend, struct KekModule* module, struct AstNode** current, struct AstNode* stop) {
-    struct KekExpr* expr = ParsePrimaryExpr(frontend, module, current, stop);
-
-    while (!IsExpressionEnd(*current, stop)) {
-        struct AstNode* node = *current;
-
-        if (node->type == AST_GROUP) {
-            struct KekExpr* call = AddExpr(frontend, module, KEK_EXPR_CALL, node);
-            if (call) {
-                call->callee = expr;
-                AddCallArgs(frontend, module, call, node);
-            }
-            expr = call;
-            *current = Next(node);
-            continue;
-        }
-
-        if (node->type == AST_INDEX) {
-            struct KekExpr* index = AddExpr(frontend, module, KEK_EXPR_INDEX, node);
-            if (index) {
-                index->left = expr;
-                index->right = ParseGroupExpr(frontend, module, node);
-            }
-            expr = index;
-            *current = Next(node);
-            continue;
-        }
-
-        if (IsGenericNode(node)) {
-            if (expr) {
-                expr->genericArgs = node;
-            }
-            *current = Next(node);
-            continue;
-        }
-
-        if (IsPunctuationNode(node, PUNCTUATION_DOT)) {
-            struct AstNode* name = Next(node);
-            struct KekExpr* field = AddExpr(frontend, module, KEK_EXPR_FIELD, node);
-            if (field) {
-                field->left = expr;
-                field->right = AddExpr(frontend, module, KEK_EXPR_NAME, name);
-            }
-            expr = field;
-            *current = name ? Next(name) : Next(node);
-            continue;
-        }
-
-        if (IsOperatorNode(node, OPERATOR_SCOPE)) {
-            struct AstNode* name = Next(node);
-            struct KekExpr* scoped = AddExpr(frontend, module, KEK_EXPR_SCOPE, node);
-            if (scoped) {
-                scoped->left = expr;
-                scoped->right = AddExpr(frontend, module, KEK_EXPR_NAME, name);
-            }
-            expr = scoped;
-            *current = name ? Next(name) : Next(node);
-            continue;
-        }
-
-        break;
-    }
-
-    return expr;
-}
-
-static struct KekExpr* ParseExprPrecedence(struct KekFrontend* frontend, struct KekModule* module, struct AstNode** current, struct AstNode* stop, int minPrecedence) {
-    struct KekExpr* left = ParsePostfixExpr(frontend, module, current, stop);
-
-    while (!IsExpressionEnd(*current, stop)) {
-        struct AstNode* op = *current;
-        int precedence = ExprOperatorPrecedence(op);
-        if (precedence == 0 || precedence < minPrecedence) {
-            break;
-        }
-
-        *current = Next(op);
-        struct KekExpr* right = ParseExprPrecedence(frontend, module, current, stop,
-            precedence + (IsRightAssociativeExprOperator(op) ? 0 : 1));
-        struct KekExpr* combined = AddExpr(frontend, module,
-            IsAssignmentExprOperator(op) ? KEK_EXPR_ASSIGN : KEK_EXPR_BINARY, op);
-        if (combined) {
-            combined->left = left;
-            combined->right = right;
-        }
-        left = combined;
-    }
-
-    return left;
-}
-
-static struct KekExpr* ParseExprUntil(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* first, struct AstNode* stop) {
-    struct AstNode* current = first;
-    if (!current) {
-        return AddExpr(frontend, module, KEK_EXPR_UNKNOWN, NULL);
-    }
-
-    return ParseExprPrecedence(frontend, module, &current, stop, 1);
-}
-
-static int IsBuiltinTypeName(struct AstNode* typeNode, struct SourceFile* file) {
-    return TokenTextEquals(typeNode, file, "void")
-        || TokenTextEquals(typeNode, file, "bool")
-        || TokenTextEquals(typeNode, file, "char")
-        || TokenTextEquals(typeNode, file, "int")
-        || TokenTextEquals(typeNode, file, "u8")
-        || TokenTextEquals(typeNode, file, "u16")
-        || TokenTextEquals(typeNode, file, "u32")
-        || TokenTextEquals(typeNode, file, "u64")
-        || TokenTextEquals(typeNode, file, "i8")
-        || TokenTextEquals(typeNode, file, "i16")
-        || TokenTextEquals(typeNode, file, "i32")
-        || TokenTextEquals(typeNode, file, "i64")
-        || TokenTextEquals(typeNode, file, "f32")
-        || TokenTextEquals(typeNode, file, "f64");
-}
-
-static struct KekType* ParseType(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* typeNode, struct AstNode* afterName) {
-    if (!typeNode) {
-        return AddType(frontend, module, KEK_TYPE_UNKNOWN, NULL);
-    }
-
-    enum KekTypeKind baseKind = KEK_TYPE_NAME;
-    if (TokenTextEquals(typeNode, module->file, "ptr")) {
-        baseKind = KEK_TYPE_POINTER;
-    } else if (IsBuiltinTypeName(typeNode, module->file)) {
-        baseKind = KEK_TYPE_BUILTIN;
-    }
-
-    struct KekType* base = AddType(frontend, module, baseKind, typeNode);
-    if (!base) {
-        return NULL;
-    }
-    base->name = typeNode;
-    if (baseKind == KEK_TYPE_POINTER && IsGenericNode(Next(typeNode))) {
-        base->element = ParsePointerElementType(frontend, module, Next(typeNode));
-    } else if (IsGenericNode(Next(typeNode))) {
-        base->genericArgs = Next(typeNode);
-    }
-
-    struct AstNode* arrayNode = NULL;
-    if (afterName && afterName->type == AST_INDEX) {
-        arrayNode = afterName;
-    } else if (afterName && Next(afterName) && Next(afterName)->type == AST_INDEX) {
-        arrayNode = Next(afterName);
-    }
-
-    while (arrayNode) {
-        struct KekType* array = AddType(frontend, module, KEK_TYPE_ARRAY, arrayNode);
-        if (array) {
-            array->element = base;
-            array->arraySize = ParseGroupExpr(frontend, module, arrayNode);
-            base = array;
-        }
-        arrayNode = Next(arrayNode) && Next(arrayNode)->type == AST_INDEX ? Next(arrayNode) : NULL;
-    }
-
-    return base;
-}
-
-static void AddChildStmt(struct KekStmt* parent, struct KekStmt* child) {
-    if (!parent || !child) {
-        return;
-    }
-    if (parent->lastChild) {
-        parent->lastChild->next = child;
-    } else {
-        parent->firstChild = child;
-    }
-    parent->lastChild = child;
-}
-
-static int LooksLikeDecl(struct AstNode* first) {
-    struct AstNode* colon = Next(first);
-    if (IsGenericNode(colon)) {
-        colon = Next(colon);
-    }
-    return IsTokenNode(first)
-        && colon
-        && IsPunctuationNode(colon, PUNCTUATION_COLON)
-        && Next(colon)
-        && IsTokenNode(Next(colon));
-}
-
-static struct AstNode* DeclColonAfterType(struct AstNode* type) {
-    struct AstNode* colon = Next(type);
-    if (IsGenericNode(colon)) {
-        colon = Next(colon);
-    }
-    return colon;
-}
-
-static struct AstNode* DeclNameAfterType(struct AstNode* type) {
-    struct AstNode* colon = DeclColonAfterType(type);
-    return colon ? Next(colon) : NULL;
-}
-
-static struct AstNode* AfterNameAndArraySuffixes(struct AstNode* name) {
-    struct AstNode* node = Next(name);
-    if (IsGenericNode(node)) {
-        node = Next(node);
-    }
-    while (node && node->type == AST_INDEX) {
-        node = Next(node);
-    }
-    return node;
-}
-
-static struct KekExpr* ParseFirstGroupStatementExpr(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* group) {
-    if (!group || group->type != AST_GROUP || !group->firstChild) {
-        return AddExpr(frontend, module, KEK_EXPR_UNKNOWN, group);
-    }
-    return ParseExprUntil(frontend, module, group->firstChild->firstChild, NULL);
-}
-
-static enum KekStmtKind ClassifyStatementKind(struct AstNode* first) {
-    if (IsKeywordNode(first, KEYWORD_IF)) {
-        return KEK_STMT_IF;
-    }
-    if (IsKeywordNode(first, KEYWORD_ELSE)) {
-        return KEK_STMT_ELSE;
-    }
-    if (IsKeywordNode(first, KEYWORD_WHILE)) {
-        return KEK_STMT_WHILE;
-    }
-    if (IsKeywordNode(first, KEYWORD_DO)) {
-        return KEK_STMT_DO_WHILE;
-    }
-    if (IsKeywordNode(first, KEYWORD_FOR)) {
-        return KEK_STMT_FOR;
-    }
-    if (IsKeywordNode(first, KEYWORD_EACH)) {
-        return KEK_STMT_EACH;
-    }
-    if (IsKeywordNode(first, KEYWORD_SWITCH)) {
-        return KEK_STMT_SWITCH;
-    }
-    if (IsKeywordNode(first, KEYWORD_CASE)) {
-        return KEK_STMT_CASE;
-    }
-    if (IsKeywordNode(first, KEYWORD_DEFAULT)) {
-        return KEK_STMT_DEFAULT;
-    }
-    if (IsKeywordNode(first, KEYWORD_DEFER)) {
-        return KEK_STMT_DEFER;
-    }
-    if (IsKeywordNode(first, KEYWORD_RETURN)) {
-        return KEK_STMT_RETURN;
-    }
-    if (IsKeywordNode(first, KEYWORD_BREAK)) {
-        return KEK_STMT_BREAK;
-    }
-    if (IsKeywordNode(first, KEYWORD_CONTINUE)) {
-        return KEK_STMT_CONTINUE;
-    }
-    if (IsKeywordNode(first, KEYWORD_UNREACHABLE)) {
-        return KEK_STMT_UNREACHABLE;
-    }
-    if (IsKeywordNode(first, KEYWORD_PANIC)) {
-        return KEK_STMT_PANIC;
-    }
-    if (LooksLikeDecl(first)) {
-        return KEK_STMT_DECL;
-    }
-    return KEK_STMT_EXPR;
-}
-
-static struct KekStmt* ParseStatementList(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* block);
-
-static struct KekStmt* ParseStatement(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* statement) {
-    if (!statement || statement->type != AST_STATEMENT || !statement->firstChild) {
-        return AddStmt(frontend, module, KEK_STMT_UNKNOWN, statement);
-    }
-
-    struct AstNode* first = statement->firstChild;
-    enum KekStmtKind kind = ClassifyStatementKind(first);
-
-    struct KekStmt* stmt = AddStmt(frontend, module, kind, statement);
-    if (!stmt) {
-        return NULL;
-    }
-
-    if (kind == KEK_STMT_DECL) {
-        stmt->declName = DeclNameAfterType(first);
-        stmt->declType = ParseType(frontend, module, first, stmt->declName);
-        struct AstNode* afterDecl = AfterNameAndArraySuffixes(stmt->declName);
-        if (afterDecl && IsOperatorNode(afterDecl, OPERATOR_ASSIGN)) {
-            stmt->expr = ParseExprUntil(frontend, module, Next(afterDecl), NULL);
-            if (stmt->expr && stmt->expr->kind == KEK_EXPR_STRUCT_LITERAL && !stmt->expr->type) {
-                stmt->expr->type = stmt->declType;
-            }
-        }
-    } else if (kind == KEK_STMT_FOR) {
-        struct AstNode* group = Next(first);
-        struct AstNode* afterGroup = group ? Next(group) : NULL;
-        if (TokenTextEquals(afterGroup, module->file, "in")) {
-            AddTypedParseDiagnostic(frontend, module, afterGroup, "for-in syntax is not supported; use each");
-        }
-        struct AstNode* init = group && group->type == AST_GROUP ? group->firstChild : NULL;
-        struct AstNode* condition = init ? init->nextSibling : NULL;
-        struct AstNode* step = condition ? condition->nextSibling : NULL;
-        if (init && init->firstChild) {
-            if (LooksLikeDecl(init->firstChild)) {
-                stmt->initStmt = ParseStatement(frontend, module, init);
-            } else {
-                stmt->expr = ParseExprUntil(frontend, module, init->firstChild, NULL);
-            }
-        }
-        if (condition && condition->firstChild) {
-            stmt->condition = ParseExprUntil(frontend, module, condition->firstChild, NULL);
-        }
-        if (step && step->firstChild) {
-            stmt->step = ParseExprUntil(frontend, module, step->firstChild, NULL);
-        }
-    } else if (kind == KEK_STMT_EACH) {
-        // each<Type:varName>(iterable){ body }
-        // each<IndexType:idx, Type:varName>(iterable){ body }
-        struct AstNode* generic = Next(first);
-        struct AstNode* iterableGroup = NULL;
-
-        if (IsGenericNode(generic)) {
-            // Parse variable declarations from generic args
-            struct AstNode* firstDecl = generic->firstChild;
-            struct AstNode* secondDecl = firstDecl ? firstDecl->nextSibling : NULL;
-
-            if (secondDecl) {
-                // Two declarations: index and value
-                // Parse index variable (first declaration)
-                struct AstNode* indexTypeNode = firstDecl->firstChild;
-                if (indexTypeNode && LooksLikeDecl(indexTypeNode)) {
-                    stmt->indexName = DeclNameAfterType(indexTypeNode);
-                    stmt->indexType = ParseType(frontend, module, indexTypeNode, stmt->indexName);
-                }
-                // Parse value variable (second declaration)
-                struct AstNode* valueTypeNode = secondDecl->firstChild;
-                if (valueTypeNode && LooksLikeDecl(valueTypeNode)) {
-                    stmt->declName = DeclNameAfterType(valueTypeNode);
-                    stmt->declType = ParseType(frontend, module, valueTypeNode, stmt->declName);
-                }
-            } else if (firstDecl) {
-                // Single declaration: value only
-                struct AstNode* valueTypeNode = firstDecl->firstChild;
-                if (valueTypeNode && LooksLikeDecl(valueTypeNode)) {
-                    stmt->declName = DeclNameAfterType(valueTypeNode);
-                    stmt->declType = ParseType(frontend, module, valueTypeNode, stmt->declName);
-                }
-            }
-
-            iterableGroup = Next(generic);
-        } else {
-            iterableGroup = generic;
-        }
-
-        // Parse iterable expression from group
-        if (iterableGroup && iterableGroup->type == AST_GROUP) {
-            stmt->expr = ParseFirstGroupStatementExpr(frontend, module, iterableGroup);
-        }
-    } else if (kind == KEK_STMT_IF || kind == KEK_STMT_WHILE || kind == KEK_STMT_SWITCH || kind == KEK_STMT_CASE) {
-        stmt->condition = ParseFirstGroupStatementExpr(frontend, module, Next(first));
-        stmt->expr = stmt->condition;
-    } else if (kind == KEK_STMT_RETURN) {
-        struct AstNode* value = Next(first);
-        if (value) {
-            stmt->expr = ParseExprUntil(frontend, module, value, NULL);
-        }
-    } else if (kind == KEK_STMT_DEFAULT) {
-        struct AstNode* colon = Next(first);
-        if (IsPunctuationNode(colon, PUNCTUATION_COLON) && Next(colon)) {
-            struct AstNode* afterColon = Next(colon);
-            // If it's a block, don't parse as expression - it will be handled as child statements
-            if (afterColon->type != AST_BLOCK) {
-                stmt->expr = ParseExprUntil(frontend, module, afterColon, NULL);
-            }
-        }
-    } else if (kind == KEK_STMT_PANIC) {
-        // panic("message") - parse the argument from the group
-        struct AstNode* argGroup = Next(first);
-        if (argGroup && argGroup->type == AST_GROUP) {
-            stmt->expr = ParseGroupExpr(frontend, module, argGroup);
-        }
-    } else if (kind == KEK_STMT_DEFER) {
-        struct AstNode* deferred = Next(first);
-        if (deferred && deferred->type != AST_BLOCK) {
-            stmt->expr = ParseExprUntil(frontend, module, deferred, NULL);
-        }
-    } else if (kind == KEK_STMT_EXPR) {
-        stmt->expr = ParseExprUntil(frontend, module, first, NULL);
-    }
-
-    for (struct AstNode* child = statement->firstChild; child; child = child->nextSibling) {
-        if (child->type == AST_BLOCK) {
-            if (kind == KEK_STMT_DECL && stmt->expr && stmt->expr->source == child) {
-                continue;
-            }
-            AddChildStmt(stmt, ParseStatementList(frontend, module, child));
-        }
-    }
-
-    return stmt;
-}
-
-static int IsDoWhileConditionStatement(struct AstNode* statement) {
-    return statement
-        && statement->type == AST_STATEMENT
-        && IsKeywordNode(statement->firstChild, KEYWORD_WHILE)
-        && Next(statement->firstChild)
-        && Next(statement->firstChild)->type == AST_GROUP
-        && !Next(Next(statement->firstChild));
-}
-
-static struct KekStmt* ParseStatementList(struct KekFrontend* frontend, struct KekModule* module, struct AstNode* block) {
-    if (!block || block->type != AST_BLOCK) {
-        return NULL;
-    }
-
-    struct KekStmt* blockStmt = AddStmt(frontend, module, KEK_STMT_BLOCK, block);
-    for (struct AstNode* statement = block->firstChild; statement; statement = statement->nextSibling) {
-        struct KekStmt* parsed = ParseStatement(frontend, module, statement);
-        if (parsed && parsed->kind == KEK_STMT_DO_WHILE && IsDoWhileConditionStatement(statement->nextSibling)) {
-            parsed->condition = ParseFirstGroupStatementExpr(frontend, module, Next(statement->nextSibling->firstChild));
-            parsed->expr = parsed->condition;
-            statement = statement->nextSibling;
-        }
-        AddChildStmt(blockStmt, parsed);
-    }
-    return blockStmt;
-}
-
-static enum KekDeclKind ClassifyColonDecl(struct AstNode* first, struct SourceFile* file, struct KekDecl* decl) {
-    struct AstNode* colon = Next(first);
-    if (IsGenericNode(colon)) {
-        colon = Next(colon);
-    }
-    struct AstNode* name = Next(colon);
-    if (!IsPunctuationNode(colon, PUNCTUATION_COLON) || !IsTokenNode(name) || name->token.type != TOKEN_IDENTIFIER) {
-        return KEK_DECL_UNKNOWN;
-    }
-
-    decl->type = first;
-    decl->name = name;
-
-    struct AstNode* afterName = Next(name);
-    if (IsTokenNode(name)
-        && name->token.type == TOKEN_IDENTIFIER
-        && afterName
-        && IsAnyOverloadableOperatorNode(afterName)
-        && TokenTextEquals(name, file, "operator")) {
-        decl->name = afterName;
-        afterName = Next(afterName);
-    }
-    if (IsGenericNode(afterName)) {
-        decl->genericParams = afterName;
-        afterName = Next(afterName);
-    }
-    if (afterName && afterName->type == AST_GROUP) {
-        decl->body = Next(afterName);
-        return KEK_DECL_FUNCTION;
-    }
-
-    decl->body = afterName;
-    return KEK_DECL_VARIABLE;
-}
-
-static enum KekDeclKind ClassifyKeywordDecl(struct AstNode* first, struct SourceFile* file, struct KekDecl* decl) {
-    if (IsKeywordNode(first, KEYWORD_USING)) {
-        decl->name = Next(first);
-        return KEK_DECL_USING;
-    }
-
-    if (IsKeywordNode(first, KEYWORD_ALIAS)) {
-        struct AstNode* colon = Next(first);
-        struct AstNode* name = Next(colon);
-        struct AstNode* equals = Next(name);
-        if (IsPunctuationNode(colon, PUNCTUATION_COLON)
-            && IsTokenNode(name)
-            && IsOperatorNode(equals, OPERATOR_ASSIGN)) {
-            decl->name = name;
-            decl->type = Next(equals);
-        }
-        return KEK_DECL_ALIAS;
-    }
-
-    if (IsKeywordNode(first, KEYWORD_EXTERN)
-        && TokenTextEquals(Next(first), file, "\"C\"")
-        && Next(Next(first))
-        && Next(Next(first))->type == AST_BLOCK) {
-        decl->body = Next(Next(first));
-        return KEK_DECL_EXTERN_C;
-    }
-
-    if (IsKeywordNode(first, KEYWORD_STRUCT)
-        || IsKeywordNode(first, KEYWORD_UNION)) {
-        struct AstNode* colon = Next(first);
-        struct AstNode* name = Next(colon);
-        if (IsPunctuationNode(colon, PUNCTUATION_COLON) && IsTokenNode(name)) {
-            decl->name = name;
-            decl->genericParams = IsGenericNode(Next(name)) ? Next(name) : NULL;
-            decl->body = decl->genericParams ? Next(decl->genericParams) : Next(name);
-        }
-        return IsKeywordNode(first, KEYWORD_STRUCT) ? KEK_DECL_STRUCT : KEK_DECL_UNION;
-    }
-
-    if (IsKeywordNode(first, KEYWORD_ENUM)) {
-        struct AstNode* firstColon = Next(first);
-        struct AstNode* underlyingType = Next(firstColon);
-        struct AstNode* secondColon = Next(underlyingType);
-        struct AstNode* name = Next(secondColon);
-        if (IsPunctuationNode(firstColon, PUNCTUATION_COLON)
-            && IsPunctuationNode(secondColon, PUNCTUATION_COLON)
-            && IsTokenNode(name)) {
-            decl->type = underlyingType;
-            decl->name = name;
-            decl->body = Next(name);
-        }
-        return KEK_DECL_ENUM;
-    }
-
-    (void)file;
-    return KEK_DECL_UNKNOWN;
-}
-
-static enum KekDeclKind ClassifyDecl(struct KekDecl* decl, struct SourceFile* file) {
-    struct AstNode* first = decl->source ? decl->source->firstChild : NULL;
-    if (!first) {
-        return KEK_DECL_UNKNOWN;
-    }
-
-    if (IsPunctuationNode(first, PUNCTUATION_HASH) && TokenTextEquals(Next(first), file, "import")) {
-        decl->body = Next(Next(first));
-        return KEK_DECL_IMPORT;
-    }
-
-    if (first->type == AST_INDEX) {
-        first = Next(first);
-    }
-
-    if (IsKeywordNode(first, KEYWORD_USING)
-        || IsKeywordNode(first, KEYWORD_ALIAS)
-        || IsKeywordNode(first, KEYWORD_EXTERN)
-        || IsKeywordNode(first, KEYWORD_STRUCT)
-        || IsKeywordNode(first, KEYWORD_ENUM)
-        || IsKeywordNode(first, KEYWORD_UNION)) {
-        return ClassifyKeywordDecl(first, file, decl);
-    }
-
-    struct AstNode* colon = IsTokenNode(first) ? Next(first) : NULL;
-    if (IsGenericNode(colon)) {
-        colon = Next(colon);
-    }
-    if (IsTokenNode(first) && colon && IsPunctuationNode(colon, PUNCTUATION_COLON)) {
-        struct AstNode* name = Next(colon);
-        struct AstNode* afterName = Next(name);
-        if (IsGenericNode(afterName)) {
-            afterName = Next(afterName);
-        }
-        if (IsTokenNode(name) && afterName && IsOperatorNode(afterName, OPERATOR_SCOPE)) {
-            decl->type = first;
-            decl->name = Next(afterName);
-            if (IsTokenNode(decl->name)
-                && decl->name->token.type == TOKEN_IDENTIFIER
-                && IsAnyOverloadableOperatorNode(Next(decl->name))
-                && TokenTextEquals(decl->name, file, "operator")) {
-                decl->name = Next(decl->name);
-            }
-            struct AstNode* receiverGenericParams = IsGenericNode(Next(name)) ? Next(name) : NULL;
-            decl->genericParams = IsGenericNode(Next(decl->name)) ? Next(decl->name) : receiverGenericParams;
-            struct AstNode* params = Next(decl->genericParams ? decl->genericParams : decl->name);
-            if (receiverGenericParams && decl->genericParams == receiverGenericParams) {
-                params = Next(decl->name);
-            }
-            decl->body = params ? Next(params) : NULL;
-            return KEK_DECL_FUNCTION;
-        }
-        return ClassifyColonDecl(first, file, decl);
-    }
-
-    return KEK_DECL_UNKNOWN;
-}
-
-static void AddDeclStmt(struct KekDecl* decl, struct KekStmt* stmt) {
-    if (!decl || !stmt) {
-        return;
-    }
-    if (decl->lastStmt) {
-        decl->lastStmt->next = stmt;
-    } else {
-        decl->firstStmt = stmt;
-    }
-    decl->lastStmt = stmt;
-}
-
-static void AddDeclParam(struct KekDecl* decl, struct KekParam* param) {
-    if (!decl || !param) {
-        return;
-    }
-    if (decl->lastParam) {
-        decl->lastParam->next = param;
-    } else {
-        decl->firstParam = param;
-    }
-    decl->lastParam = param;
-}
-
-static void AddDeclField(struct KekDecl* decl, struct KekField* field) {
-    if (!decl || !field) {
-        return;
-    }
-    if (decl->lastField) {
-        decl->lastField->next = field;
-    } else {
-        decl->firstField = field;
-    }
-    decl->lastField = field;
-}
-
-static void AddDeclVariant(struct KekDecl* decl, struct KekVariant* variant) {
-    if (!decl || !variant) {
-        return;
-    }
-    if (decl->lastVariant) {
-        decl->lastVariant->next = variant;
-    } else {
-        decl->firstVariant = variant;
-    }
-    decl->lastVariant = variant;
-}
-
-static void BuildParamList(struct KekFrontend* frontend, struct KekModule* module, struct KekDecl* decl, struct AstNode* group) {
-    if (!group || group->type != AST_GROUP) {
-        return;
-    }
-
-    for (struct AstNode* paramNode = group->firstChild; paramNode; paramNode = paramNode->nextSibling) {
-        struct AstNode* typeNode = paramNode->firstChild;
-        if (!LooksLikeDecl(typeNode)) {
-            continue;
-        }
-
-        struct AstNode* name = DeclNameAfterType(typeNode);
-        struct KekParam* param = AddParam(frontend, module, paramNode);
-        if (!param) {
-            return;
-        }
-        param->type = ParseType(frontend, module, typeNode, name);
-        param->name = name;
-        struct AstNode* afterParam = AfterNameAndArraySuffixes(name);
-        if (afterParam && IsOperatorNode(afterParam, OPERATOR_ASSIGN)) {
-            param->defaultValue = ParseExprUntil(frontend, module, Next(afterParam), NULL);
-        }
-        AddDeclParam(decl, param);
-    }
-}
-
-// Check if a node is a nested struct definition: struct:Name { ... }
-static int IsNestedStructDecl(struct AstNode* first) {
-    if (!IsKeywordNode(first, KEYWORD_STRUCT)) {
-        return 0;
-    }
-    struct AstNode* colon = Next(first);
-    if (!IsPunctuationNode(colon, PUNCTUATION_COLON)) {
-        return 0;
-    }
-    struct AstNode* name = Next(colon);
-    if (!IsTokenNode(name) || name->token.type != TOKEN_IDENTIFIER) {
-        return 0;
-    }
-    struct AstNode* block = Next(name);
-    return block && block->type == AST_BLOCK;
-}
-
-static void BuildNestedStructFields(struct KekFrontend* frontend, struct KekModule* module, struct KekField* parentField, struct AstNode* block);
-
-static void BuildStructFields(struct KekFrontend* frontend, struct KekModule* module, struct KekDecl* decl) {
-    if (!decl->body || decl->body->type != AST_BLOCK) {
-        return;
-    }
-
-    for (struct AstNode* field = decl->body->firstChild; field; field = field->nextSibling) {
-        // Check for nested struct FIRST (before LooksLikeDecl, since struct:Name also matches Type:Name pattern)
-        if (IsNestedStructDecl(field->firstChild)) {
-            // Nested struct: struct:Name { ... }
-            struct AstNode* keyword = field->firstChild;
-            struct AstNode* colon = Next(keyword);
-            struct AstNode* name = Next(colon);
-            struct AstNode* block = Next(name);
-
-            struct KekField* nestedField = AddField(frontend, module, field);
-            if (!nestedField) {
-                return;
-            }
-            nestedField->name = name;
-            nestedField->isNestedStruct = 1;
-
-            // Recursively parse nested struct fields
-            BuildNestedStructFields(frontend, module, nestedField, block);
-
-            AddDeclField(decl, nestedField);
-        } else if (LooksLikeDecl(field->firstChild)) {
-            struct AstNode* fieldName = DeclNameAfterType(field->firstChild);
-            struct KekField* typedField = AddField(frontend, module, field);
-            if (!typedField) {
-                return;
-            }
-            typedField->type = ParseType(frontend, module, field->firstChild, fieldName);
-            typedField->name = fieldName;
-            struct AstNode* afterField = AfterNameAndArraySuffixes(fieldName);
-            if (afterField && IsOperatorNode(afterField, OPERATOR_ASSIGN)) {
-                typedField->defaultValue = ParseExprUntil(frontend, module, Next(afterField), NULL);
-            }
-            AddDeclField(decl, typedField);
-        }
-    }
-}
-
-static void BuildNestedStructFields(struct KekFrontend* frontend, struct KekModule* module, struct KekField* parentField, struct AstNode* block) {
-    if (!block || block->type != AST_BLOCK) {
-        return;
-    }
-
-    for (struct AstNode* field = block->firstChild; field; field = field->nextSibling) {
-        if (LooksLikeDecl(field->firstChild)) {
-            struct AstNode* fieldName = DeclNameAfterType(field->firstChild);
-            struct KekField* typedField = AddField(frontend, module, field);
-            if (!typedField) {
-                return;
-            }
-            typedField->type = ParseType(frontend, module, field->firstChild, fieldName);
-            typedField->name = fieldName;
-            struct AstNode* afterField = AfterNameAndArraySuffixes(fieldName);
-            if (afterField && IsOperatorNode(afterField, OPERATOR_ASSIGN)) {
-                typedField->defaultValue = ParseExprUntil(frontend, module, Next(afterField), NULL);
-            }
-            // Add to nested fields list
-            if (parentField->lastNestedField) {
-                parentField->lastNestedField->next = typedField;
-            } else {
-                parentField->nestedFields = typedField;
-            }
-            parentField->lastNestedField = typedField;
-            typedField->next = NULL;
-        }
-    }
-}
-
-static void BuildEnumVariants(struct KekFrontend* frontend, struct KekModule* module, struct KekDecl* decl) {
-    if (!decl->body || decl->body->type != AST_BLOCK) {
-        return;
-    }
-
-    for (struct AstNode* variantNode = decl->body->firstChild; variantNode; variantNode = variantNode->nextSibling) {
-        struct AstNode* name = variantNode->firstChild;
-        if (!IsTokenNode(name) || name->token.type != TOKEN_IDENTIFIER) {
-            continue;
-        }
-        struct KekVariant* variant = AddVariant(frontend, module, variantNode);
-        if (!variant) {
-            return;
-        }
-        variant->name = name;
-        if (Next(name) && IsOperatorNode(Next(name), OPERATOR_ASSIGN)) {
-            variant->value = ParseExprUntil(frontend, module, Next(Next(name)), NULL);
-        }
-        AddDeclVariant(decl, variant);
-    }
-}
-
-static void BuildDeclDetails(struct KekFrontend* frontend, struct KekModule* module, struct KekDecl* decl) {
-    if (!decl) {
-        return;
-    }
-
-    if (decl->type) {
-        decl->parsedType = ParseType(frontend, module, decl->type, decl->name);
-    }
-
-    if (decl->kind == KEK_DECL_FUNCTION) {
-        struct AstNode* params = decl->name ? Next(decl->name) : NULL;
-        if (IsGenericNode(params)) {
-            params = Next(params);
-        }
-        if (params && params->type == AST_GROUP) {
-            BuildParamList(frontend, module, decl, params);
-        }
-        if (decl->body && decl->body->type == AST_BLOCK) {
-            AddDeclStmt(decl, ParseStatementList(frontend, module, decl->body));
-        }
-    }
-
-    if (decl->kind == KEK_DECL_STRUCT || decl->kind == KEK_DECL_UNION) {
-        BuildStructFields(frontend, module, decl);
-    }
-
-    if (decl->kind == KEK_DECL_ENUM) {
-        BuildEnumVariants(frontend, module, decl);
-    }
-}
-
-struct KekModule ParseKekModule(struct KekFrontend* frontend, struct AstNode* ast, struct SourceFile* file) {
-    struct KekModule module = {0};
-    module.file = file;
-
-    if (!frontend || !ast || ast->type != AST_FILE || !file) {
-        if (frontend) {
-            frontend->errorCount++;
-        }
-        module.errorCount++;
-        return module;
-    }
-
-    frontend->file = file;
-
-    for (struct AstNode* statement = ast->firstChild; statement; statement = statement->nextSibling) {
-        if (statement->type != AST_STATEMENT || statement->childCount == 0) {
-            continue;
-        }
-
-        struct KekDecl* decl = AddDecl(frontend, &module, KEK_DECL_UNKNOWN, statement);
-        if (!decl) {
-            break;
-        }
-
-        decl->kind = ClassifyDecl(decl, file);
-        module.declKindCounts[KEK_DECL_UNKNOWN]--;
-        module.declKindCounts[decl->kind]++;
-        if (decl->kind == KEK_DECL_UNKNOWN) {
-            KekAddDiagnostic(frontend->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_TYPED_PARSE,
-                file ? file->fileIndex : -1, decl->location, "unknown top-level declaration");
-            module.errorCount++;
-            frontend->errorCount++;
-        }
-        BuildDeclDetails(frontend, &module, decl);
-    }
-
-    return module;
-}
-
-static void WriteKekModuleSummary(FILE* out, struct KekModule* module) {
-    if (!module) {
-        return;
-    }
-
-    fprintf(out, "Typed module %s: %zu declarations", module->file ? module->file->path : "<unknown>", module->declCount);
-    if (module->errorCount > 0) {
-        fprintf(out, ", %d errors", module->errorCount);
-    }
-    fprintf(out, "\n");
-
-    for (size_t i = 0; i < KEK_DECL_COUNT; i++) {
-        if (module->declKindCounts[i] > 0) {
-            fprintf(out, "  %s: %zu\n", KekDeclKindNames[i], module->declKindCounts[i]);
-        }
-    }
-
-    fprintf(out, "Typed nodes\n");
-    fprintf(out, "  Params: %zu\n", module->paramCount);
-    fprintf(out, "  Fields: %zu\n", module->fieldCount);
-    fprintf(out, "  Variants: %zu\n", module->variantCount);
-    fprintf(out, "  Statements: %zu\n", module->typedStmtCount);
-    fprintf(out, "  Expressions: %zu\n", module->typedExprCount);
-    fprintf(out, "  Types: %zu\n", module->typedTypeCount);
-
-    fprintf(out, "Statements\n");
-    for (size_t i = 0; i < KEK_STMT_COUNT; i++) {
-        if (module->stmtKindCounts[i] > 0) {
-            fprintf(out, "  %s: %zu\n", KekStmtKindNames[i], module->stmtKindCounts[i]);
-        }
-    }
-
-    fprintf(out, "Expressions\n");
-    for (size_t i = 0; i < KEK_EXPR_COUNT; i++) {
-        if (module->exprKindCounts[i] > 0) {
-            fprintf(out, "  %s: %zu\n", KekExprKindNames[i], module->exprKindCounts[i]);
-        }
-    }
-
-    fprintf(out, "Types\n");
-    for (size_t i = 0; i < KEK_TYPE_COUNT; i++) {
-        if (module->typeKindCounts[i] > 0) {
-            fprintf(out, "  %s: %zu\n", KekTypeKindNames[i], module->typeKindCounts[i]);
-        }
-    }
-}
-
-void PrintKekModuleSummary(struct KekModule* module) {
-    WriteKekModuleSummary(stdout, module);
-}
-
-int WriteKekModuleSummaryFile(const char* path, struct KekModule* modules, size_t moduleCount, struct KekProgram* program) {
-    FILE* out = fopen(path, "w");
-    if (!out) {
-        return -1;
-    }
-
-    for (size_t i = 0; i < moduleCount; i++) {
-        if (i > 0) {
-            fputc('\n', out);
-        }
-        WriteKekModuleSummary(out, &modules[i]);
-    }
-
-    if (program) {
-        fprintf(out, "\nTyped program symbols: %zu", program->symbolCount);
-        if (program->errorCount > 0) {
-            fprintf(out, ", %d errors", program->errorCount);
-        }
-        fputc('\n', out);
-        for (size_t i = 0; i < KEK_SYMBOL_COUNT; i++) {
-            if (program->symbolKindCounts[i] > 0) {
-                fprintf(out, "  %s: %zu\n", KekSymbolKindNames[i], program->symbolKindCounts[i]);
-            }
-        }
-        fprintf(out, "Typed scopes: %zu\n", program->scopeCount);
-        for (size_t i = 0; i < KEK_SCOPE_COUNT; i++) {
-            if (program->scopeKindCounts[i] > 0) {
-                fprintf(out, "  %s: %zu\n", KekScopeKindNames[i], program->scopeKindCounts[i]);
-            }
-        }
-        fprintf(out, "Semantic checks: %zu\n", program->semanticCheckCount);
-    }
-
-    fclose(out);
-    return 0;
-}
-#undef WriteKekModuleSummary
-#undef BuildDeclDetails
-#undef BuildEnumVariants
-#undef BuildStructFields
-#undef BuildNestedStructFields
-#undef IsNestedStructDecl
-#undef BuildParamList
-#undef AddDeclVariant
-#undef AddDeclField
-#undef AddDeclParam
-#undef AddDeclStmt
-#undef ClassifyDecl
-#undef ClassifyKeywordDecl
-#undef ClassifyColonDecl
-#undef IsDoWhileConditionStatement
-#undef ParseStatement
-#undef ParseStatementList
-#undef ClassifyStatementKind
-#undef ParseFirstGroupStatementExpr
-#undef AfterNameAndArraySuffixes
-#undef DeclNameAfterType
-#undef DeclColonAfterType
-#undef LooksLikeDecl
-#undef AddChildStmt
-#undef IsBuiltinTypeName
-#undef ParsePostfixExpr
-#undef ParsePrimaryExpr
-#undef AddCallArgs
-#undef ParseExprPrecedence
-#undef IsUnaryExprOperator
-#undef IsRightAssociativeExprOperator
-#undef ExprOperatorPrecedence
-#undef IsAssignmentExprOperator
-#undef IsExpressionEnd
-#undef ParseGroupExpr
-#undef ParseStructLiteralExpr
-#undef AddStructLiteralFields
-#undef AddExprArg
-#undef ParsePointerElementType
-#undef AddTypedParseDiagnostic
-#undef ParseType
-#undef ParseExprUntil
-#undef AddDecl
-#undef AddVariant
-#undef AddField
-#undef AddParam
-#undef AddStmt
-#undef AddExpr
-#undef AddType
-#undef AddFrontendNode
-#undef Next
-#undef TokenTextEquals
-#undef IsAnyOverloadableOperatorNode
-#undef IsOperatorNode
-#undef IsGenericNode
-#undef IsPunctuationNode
-#undef IsKeywordNode
-#undef IsTokenNode
-/* END parser.c */
-
-/* BEGIN sema.c */
-#define SymbolKindForDecl sema_SymbolKindForDecl
-#define SameSymbolNameInFile sema_SameSymbolNameInFile
-#define SameSymbolNameAcrossFiles sema_SameSymbolNameAcrossFiles
-#define IsOperatorDeclName sema_IsOperatorDeclName
-#define DeclIsMethod sema_DeclIsMethod
-#define DeclReceiverName sema_DeclReceiverName
-#define DeclParamCount sema_DeclParamCount
-#define SameFunctionSymbolSlot sema_SameFunctionSymbolSlot
-#define AddScope sema_AddScope
-#define ScopeFindDuplicate sema_ScopeFindDuplicate
-#define AddSymbolWithFile sema_AddSymbolWithFile
-#define AddSymbol sema_AddSymbol
-#define IsTokenText sema_IsTokenText
-#define IsBuiltinType sema_IsBuiltinType
-#define LookupSymbol sema_LookupSymbol
-#define ProgramScopeHasSymbol sema_ProgramScopeHasSymbol
-#define AddExternCStructSymbols sema_AddExternCStructSymbols
-#define IsAssignableExpr sema_IsAssignableExpr
-#define CheckTypeSemantics sema_CheckTypeSemantics
-#define CheckExprSemantics sema_CheckExprSemantics
-#define BuildStmtSymbols sema_BuildStmtSymbols
-#define BuildChildStmtSymbols sema_BuildChildStmtSymbols
-#define BuildFunctionSymbols sema_BuildFunctionSymbols
-
-const char* KekSymbolKindNames[] = {
-    "Type",
-    "Function",
-    "Global",
-    "Param",
-    "Local",
-    "Import",
-    "Unknown",
-};
-
-const char* KekScopeKindNames[] = {
-    "Program",
-    "Module",
-    "Function",
-    "Block",
-    "Loop",
-};
-
-static enum KekSymbolKind SymbolKindForDecl(enum KekDeclKind kind) {
-    switch (kind) {
-        case KEK_DECL_IMPORT:
-        case KEK_DECL_USING:
-            return KEK_SYMBOL_IMPORT;
-        case KEK_DECL_STRUCT:
-        case KEK_DECL_ENUM:
-        case KEK_DECL_UNION:
-        case KEK_DECL_ALIAS:
-            return KEK_SYMBOL_TYPE;
-        case KEK_DECL_FUNCTION:
-        case KEK_DECL_EXTERN_C:
-            return KEK_SYMBOL_FUNCTION;
-        case KEK_DECL_VARIABLE:
-            return KEK_SYMBOL_GLOBAL;
-        case KEK_DECL_UNKNOWN:
-        case KEK_DECL_COUNT:
-            return KEK_SYMBOL_UNKNOWN;
-    }
-
-    return KEK_SYMBOL_UNKNOWN;
-}
-
-static int SameSymbolNameInFile(struct AstNode* left, struct AstNode* right, struct SourceFile* file) {
-    if (!left || !right || !file) {
-        return 0;
-    }
-    if (left->token.location.length != right->token.location.length) {
-        return 0;
-    }
-    return strncmp(file->content + left->token.location.offset,
-        file->content + right->token.location.offset,
-        left->token.location.length) == 0;
-}
-
-static int SameSymbolNameAcrossFiles(struct AstNode* left, struct SourceFile* leftFile, struct AstNode* right, struct SourceFile* rightFile) {
-    if (!left || !leftFile || !right || !rightFile) {
-        return 0;
-    }
-    if (left->token.location.length != right->token.location.length) {
-        return 0;
-    }
-    return strncmp(leftFile->content + left->token.location.offset,
-        rightFile->content + right->token.location.offset,
-        left->token.location.length) == 0;
-}
-
-static int IsOperatorDeclName(struct AstNode* name) {
-    return name
-        && name->type == AST_TOKEN
-        && name->token.type == TOKEN_OPERATOR
-        && name->token.value.operator != OPERATOR_SCOPE
-        && name->token.value.operator != OPERATOR_ASSIGN;
-}
-
-static int DeclIsMethod(struct KekDecl* decl) {
-    struct AstNode* type = decl ? decl->type : NULL;
-    return decl
-        && decl->kind == KEK_DECL_FUNCTION
-        && type
-        && type->nextSibling
-        && type->nextSibling->nextSibling
-        && type->nextSibling->nextSibling->nextSibling
-        && type->nextSibling->nextSibling->nextSibling->type == AST_TOKEN
-        && type->nextSibling->nextSibling->nextSibling->token.type == TOKEN_OPERATOR
-        && type->nextSibling->nextSibling->nextSibling->token.value.operator == OPERATOR_SCOPE;
-}
-
-static struct AstNode* DeclReceiverName(struct KekDecl* decl) {
-    return DeclIsMethod(decl) ? decl->type->nextSibling->nextSibling : NULL;
-}
-
-static size_t DeclParamCount(struct KekDecl* decl) {
-    size_t count = 0;
-    for (struct KekParam* param = decl ? decl->firstParam : NULL; param; param = param->next) {
-        count++;
-    }
-    return count;
-}
-
-static int SameFunctionSymbolSlot(struct KekDecl* left, struct KekDecl* right, struct SourceFile* file) {
-    if (!left || !right || left->kind != KEK_DECL_FUNCTION || right->kind != KEK_DECL_FUNCTION) {
-        return 0;
-    }
-    if (!SameSymbolNameInFile(left->name, right->name, file)) {
-        return 0;
-    }
-
-    struct AstNode* leftReceiver = DeclReceiverName(left);
-    struct AstNode* rightReceiver = DeclReceiverName(right);
-    if ((leftReceiver || rightReceiver) && !SameSymbolNameInFile(leftReceiver, rightReceiver, file)) {
-        return 0;
-    }
-
-    if (IsOperatorDeclName(left->name) || IsOperatorDeclName(right->name)) {
-        return DeclParamCount(left) == DeclParamCount(right);
-    }
-    return 1;
-}
-
-static struct KekScope* AddScope(struct KekProgram* program, enum KekScopeKind kind, struct SourceFile* file, struct KekScope* parent) {
-    if (program->scopeCount >= program->scopeCapacity) {
-        KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
-            file ? file->fileIndex : -1, (struct SourceLocation){0}, "symbol scope storage capacity exceeded");
-        program->errorCount++;
-        return NULL;
-    }
-
-    struct KekScope* scope = &program->scopes[program->scopeCount++];
-    memset(scope, 0, sizeof(*scope));
-    scope->kind = kind;
-    scope->file = file;
-    scope->parent = parent;
-    if (kind < KEK_SCOPE_COUNT) {
-        program->scopeKindCounts[kind]++;
-    }
-    return scope;
-}
-
-static struct KekSymbol* ScopeFindDuplicate(struct KekScope* scope, struct AstNode* name, struct KekDecl* decl) {
-    if (!scope || !name) {
-        return NULL;
-    }
-
-    for (struct KekSymbol* symbol = scope->firstSymbol; symbol; symbol = symbol->nextInScope) {
-        if (decl && symbol->decl && SameFunctionSymbolSlot(symbol->decl, decl, scope->file)) {
-            return symbol;
-        }
-        if ((!decl || !symbol->decl || decl->kind != KEK_DECL_FUNCTION || symbol->decl->kind != KEK_DECL_FUNCTION)
-            && SameSymbolNameInFile(symbol->name, name, scope->file)) {
-            return symbol;
-        }
-    }
-    return NULL;
-}
-
-static int AddSymbolWithFile(struct KekProgram* program, struct KekScope* scope, enum KekSymbolKind kind, struct AstNode* name, struct KekDecl* decl, struct KekParam* param, struct KekStmt* stmt, struct SourceFile* file) {
-    if (!scope) {
-        return -1;
-    }
-    if (program->symbolCount >= program->symbolCapacity) {
-        KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
-            scope->file ? scope->file->fileIndex : -1, name ? name->location : (struct SourceLocation){0},
-            "symbol storage capacity exceeded");
-        program->errorCount++;
-        return -1;
-    }
-    struct KekSymbol* existing = name ? ScopeFindDuplicate(scope, name, decl) : NULL;
-    if (existing) {
-        KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
-            scope->file ? scope->file->fileIndex : -1, name->location, "duplicate symbol");
-        if (existing->name) {
-            KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_NOTE, KEK_PHASE_SEMANTIC,
-                existing->file ? existing->file->fileIndex : -1, existing->name->location, "previously defined here");
-        }
-        program->errorCount++;
-        return -1;
-    }
-
-    struct KekSymbol* symbol = &program->symbols[program->symbolCount++];
-    memset(symbol, 0, sizeof(*symbol));
-    symbol->kind = kind;
-    symbol->file = file ? file : scope->file;
-    symbol->decl = decl;
-    symbol->param = param;
-    symbol->stmt = stmt;
-    symbol->name = name;
-    symbol->scope = scope;
-
-    if (scope->lastSymbol) {
-        scope->lastSymbol->nextInScope = symbol;
-    } else {
-        scope->firstSymbol = symbol;
-    }
-    scope->lastSymbol = symbol;
-    scope->symbolCount++;
-
-    if (kind < KEK_SYMBOL_COUNT) {
-        scope->symbolKindCounts[kind]++;
-        program->symbolKindCounts[kind]++;
-    }
-    return 0;
-}
-
-static int AddSymbol(struct KekProgram* program, struct KekScope* scope, enum KekSymbolKind kind, struct AstNode* name, struct KekDecl* decl, struct KekParam* param, struct KekStmt* stmt) {
-    return AddSymbolWithFile(program, scope, kind, name, decl, param, stmt, NULL);
-}
-
-static int IsTokenText(struct AstNode* node, struct SourceFile* file, const char* text) {
-    size_t length = strlen(text);
-    return node
-        && file
-        && node->token.location.length == length
-        && strncmp(file->content + node->token.location.offset, text, length) == 0;
-}
-
-static int IsBuiltinType(struct AstNode* name, struct SourceFile* file) {
-    return IsTokenText(name, file, "void")
-        || IsTokenText(name, file, "bool")
-        || IsTokenText(name, file, "byte")
-        || IsTokenText(name, file, "char")
-        || IsTokenText(name, file, "str")
-        || IsTokenText(name, file, "int")
-        || IsTokenText(name, file, "uint")
-        || IsTokenText(name, file, "i8")
-        || IsTokenText(name, file, "i16")
-        || IsTokenText(name, file, "i32")
-        || IsTokenText(name, file, "i64")
-        || IsTokenText(name, file, "u8")
-        || IsTokenText(name, file, "u16")
-        || IsTokenText(name, file, "u32")
-        || IsTokenText(name, file, "u64")
-        || IsTokenText(name, file, "f32")
-        || IsTokenText(name, file, "f64")
-        || IsTokenText(name, file, "size")
-        || IsTokenText(name, file, "usize")
-        || IsTokenText(name, file, "isize")
-        || IsTokenText(name, file, "uptr")
-        || IsTokenText(name, file, "iptr");
-}
-
-static struct KekSymbol* LookupSymbol(struct KekScope* scope, struct AstNode* name) {
-    for (struct KekScope* current = scope; current; current = current->parent) {
-        for (struct KekSymbol* symbol = current->firstSymbol; symbol; symbol = symbol->nextInScope) {
-            if (SameSymbolNameAcrossFiles(symbol->name, symbol->file, name, scope->file)) {
-                return symbol;
-            }
-        }
-    }
-    return NULL;
-}
-
-static int ProgramScopeHasSymbol(struct KekScope* programScope, struct AstNode* name, struct SourceFile* file) {
-    for (struct KekSymbol* symbol = programScope ? programScope->firstSymbol : NULL; symbol; symbol = symbol->nextInScope) {
-        if (SameSymbolNameAcrossFiles(symbol->name, symbol->file, name, file)) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-static int AddExternCStructSymbols(struct KekProgram* program, struct KekScope* programScope, struct KekDecl* decl, struct SourceFile* file) {
-    if (!decl || decl->kind != KEK_DECL_EXTERN_C || !decl->body || decl->body->type != AST_BLOCK) {
-        return 0;
-    }
-
-    for (struct AstNode* statement = decl->body->firstChild; statement; statement = statement->nextSibling) {
-        struct AstNode* keyword = statement->firstChild;
-        struct AstNode* name = keyword ? keyword->nextSibling : NULL;
-        if (!keyword
-            || !name
-            || keyword->type != AST_TOKEN
-            || keyword->token.type != TOKEN_KEYWORD
-            || keyword->token.value.keyword != KEYWORD_STRUCT
-            || name->type != AST_TOKEN
-            || name->token.type != TOKEN_IDENTIFIER) {
-            continue;
-        }
-        if (ProgramScopeHasSymbol(programScope, name, file)) {
-            continue;
-        }
-        if (AddSymbolWithFile(program, programScope, KEK_SYMBOL_TYPE, name, decl, NULL, NULL, file) != 0) {
-            return -1;
-        }
-    }
-
-    return 0;
-}
-
-static int IsAssignableExpr(struct KekExpr* expr) {
-    return expr
-        && (expr->kind == KEK_EXPR_NAME
-            || expr->kind == KEK_EXPR_FIELD
-            || expr->kind == KEK_EXPR_SCOPE
-            || expr->kind == KEK_EXPR_INDEX);
-}
-
-static void CheckTypeSemantics(struct KekProgram* program, struct KekScope* scope, struct KekType* type) {
-    if (!type || !scope) {
-        return;
-    }
-
-    if (type->kind == KEK_TYPE_NAME && type->name) {
-        if (!IsBuiltinType(type->name, scope->file) && !LookupSymbol(scope, type->name)) {
-            KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
-                scope->file ? scope->file->fileIndex : -1, type->name->location, "unknown type");
-            program->errorCount++;
-        }
-    }
-
-    // Recursively check element types (for pointers, arrays, etc.)
-    if (type->element) {
-        CheckTypeSemantics(program, scope, type->element);
-    }
-}
-
-static void CheckExprSemantics(struct KekProgram* program, struct KekScope* scope, struct KekExpr* expr, int allowUnresolvedName) {
-    if (!expr || !scope) {
-        return;
-    }
-    program->semanticCheckCount++;
-
-    switch (expr->kind) {
-        case KEK_EXPR_NAME:
-            if (!allowUnresolvedName
-                && !IsTokenText(expr->token, scope->file, "this")
-                && !LookupSymbol(scope, expr->token)) {
-                KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
-                    scope->file ? scope->file->fileIndex : -1, expr->location, "unresolved name");
-                program->errorCount++;
-            }
-            break;
-        case KEK_EXPR_CALL:
-            if (!expr->callee) {
-                KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
-                    scope->file ? scope->file->fileIndex : -1, expr->location, "call without callee");
-                program->errorCount++;
-            }
-            CheckExprSemantics(program, scope, expr->callee, 1);
-            for (struct KekExpr* arg = expr->firstArg; arg; arg = arg->next) {
-                if (arg->kind == KEK_EXPR_ASSIGN && arg->left && arg->left->kind == KEK_EXPR_NAME) {
-                    program->semanticCheckCount++;
-                    CheckExprSemantics(program, scope, arg->right, 0);
-                } else {
-                    CheckExprSemantics(program, scope, arg, 0);
-                }
-            }
-            break;
-        case KEK_EXPR_FIELD:
-            CheckExprSemantics(program, scope, expr->left, 0);
-            break;
-        case KEK_EXPR_SCOPE:
-            CheckExprSemantics(program, scope, expr->left, 1);
-            break;
-        case KEK_EXPR_INDEX:
-            CheckExprSemantics(program, scope, expr->left, 0);
-            CheckExprSemantics(program, scope, expr->right, 0);
-            break;
-        case KEK_EXPR_UNARY:
-        case KEK_EXPR_CAST:
-        case KEK_EXPR_GROUP:
-            CheckExprSemantics(program, scope, expr->right, 0);
-            break;
-        case KEK_EXPR_SIZEOF:
-        case KEK_EXPR_ALIGNOF:
-        case KEK_EXPR_OFFSETOF:
-            // Type-based builtins - type is checked separately, right may be field name
-            break;
-        case KEK_EXPR_LEN:
-            CheckExprSemantics(program, scope, expr->right, 0);
-            break;
-        case KEK_EXPR_RANGE:
-            // Range expression: check start, end, and optional step
-            CheckExprSemantics(program, scope, expr->left, 0);
-            CheckExprSemantics(program, scope, expr->right, 0);
-            if (expr->step) {
-                CheckExprSemantics(program, scope, expr->step, 0);
-            }
-            break;
-        case KEK_EXPR_STRUCT_LITERAL:
-            for (struct KekExpr* arg = expr->firstArg; arg; arg = arg->next) {
-                if (arg->kind == KEK_EXPR_ASSIGN && arg->left && arg->left->kind == KEK_EXPR_NAME) {
-                    program->semanticCheckCount++;
-                    CheckExprSemantics(program, scope, arg->right, 0);
-                } else {
-                    CheckExprSemantics(program, scope, arg, 0);
-                }
-            }
-            break;
-        case KEK_EXPR_BINARY:
-            CheckExprSemantics(program, scope, expr->left, 0);
-            CheckExprSemantics(program, scope, expr->right, 0);
-            break;
-        case KEK_EXPR_ASSIGN:
-            if (!IsAssignableExpr(expr->left)) {
-                KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
-                    scope->file ? scope->file->fileIndex : -1, expr->location, "assignment target is not assignable");
-                program->errorCount++;
-            }
-            CheckExprSemantics(program, scope, expr->left, 0);
-            CheckExprSemantics(program, scope, expr->right, 0);
-            break;
-        case KEK_EXPR_NUMBER:
-        case KEK_EXPR_STRING:
-        case KEK_EXPR_BOOL:
-        case KEK_EXPR_UNKNOWN:
-        case KEK_EXPR_COUNT:
-            break;
-    }
-}
-
-static void BuildStmtSymbols(struct KekProgram* program, struct KekScope* scope, struct KekStmt* stmt, int inFunction, int loopDepth, int switchDepth);
-
-static void BuildChildStmtSymbols(struct KekProgram* program, struct KekScope* scope, struct KekStmt* firstStmt, int inFunction, int loopDepth, int switchDepth) {
-    for (struct KekStmt* child = firstStmt; child; child = child->next) {
-        BuildStmtSymbols(program, scope, child, inFunction, loopDepth, switchDepth);
-    }
-}
-
-static void BuildStmtSymbols(struct KekProgram* program, struct KekScope* scope, struct KekStmt* stmt, int inFunction, int loopDepth, int switchDepth) {
-    if (!stmt || !scope) {
-        return;
-    }
-
-    if (stmt->kind == KEK_STMT_BLOCK) {
-        struct KekScope* blockScope = AddScope(program, KEK_SCOPE_BLOCK, scope->file, scope);
-        if (blockScope) {
-            blockScope->stmt = stmt;
-            BuildChildStmtSymbols(program, blockScope, stmt->firstChild, inFunction, loopDepth, switchDepth);
-        }
-        return;
-    }
-
-    if (stmt->kind == KEK_STMT_FOR) {
-        struct KekScope* loopScope = AddScope(program, KEK_SCOPE_LOOP, scope->file, scope);
-        if (loopScope) {
-            loopScope->stmt = stmt;
-            if (stmt->initStmt) {
-                BuildStmtSymbols(program, loopScope, stmt->initStmt, inFunction, loopDepth + 1, switchDepth);
-            }
-            CheckExprSemantics(program, loopScope, stmt->expr, 0);
-            CheckExprSemantics(program, loopScope, stmt->condition, 0);
-            CheckExprSemantics(program, loopScope, stmt->step, 0);
-            BuildChildStmtSymbols(program, loopScope, stmt->firstChild, inFunction, loopDepth + 1, switchDepth);
-        }
-        return;
-    }
-
-    if (stmt->kind == KEK_STMT_EACH) {
-        struct KekScope* loopScope = AddScope(program, KEK_SCOPE_LOOP, scope->file, scope);
-        if (loopScope) {
-            loopScope->stmt = stmt;
-            // Check the iterable expression
-            CheckExprSemantics(program, loopScope, stmt->expr, 0);
-            // Check types (indexType and declType are parsed types, not expressions)
-            CheckTypeSemantics(program, loopScope, stmt->indexType);
-            CheckTypeSemantics(program, loopScope, stmt->declType);
-            // Add loop variables as local symbols in the loop scope
-            if (stmt->indexName) {
-                (void)AddSymbol(program, loopScope, KEK_SYMBOL_LOCAL, stmt->indexName, NULL, NULL, stmt);
-            }
-            if (stmt->declName) {
-                (void)AddSymbol(program, loopScope, KEK_SYMBOL_LOCAL, stmt->declName, NULL, NULL, stmt);
-            }
-            BuildChildStmtSymbols(program, loopScope, stmt->firstChild, inFunction, loopDepth + 1, switchDepth);
-        }
-        return;
-    }
-
-    if (stmt->kind == KEK_STMT_DECL) {
-        CheckTypeSemantics(program, scope, stmt->declType);
-        (void)AddSymbol(program, scope, KEK_SYMBOL_LOCAL, stmt->declName, NULL, NULL, stmt);
-    }
-
-    if (stmt->kind == KEK_STMT_RETURN && !inFunction) {
-        KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
-            scope->file ? scope->file->fileIndex : -1, stmt->location, "return outside function");
-        program->errorCount++;
-    }
-    if (stmt->kind == KEK_STMT_BREAK && loopDepth == 0 && switchDepth == 0) {
-        KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
-            scope->file ? scope->file->fileIndex : -1, stmt->location, "break outside loop or switch");
-        program->errorCount++;
-    }
-    if (stmt->kind == KEK_STMT_CONTINUE && loopDepth == 0) {
-        KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
-            scope->file ? scope->file->fileIndex : -1, stmt->location, "continue outside loop");
-        program->errorCount++;
-    }
-    if (stmt->kind == KEK_STMT_DEFER && !inFunction) {
-        KekAddDiagnostic(program->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
-            scope->file ? scope->file->fileIndex : -1, stmt->location, "defer outside function");
-        program->errorCount++;
-    }
-
-    CheckExprSemantics(program, scope, stmt->expr, 0);
-    CheckExprSemantics(program, scope, stmt->condition, 0);
-    CheckExprSemantics(program, scope, stmt->step, 0);
-
-    if (stmt->kind == KEK_STMT_WHILE || stmt->kind == KEK_STMT_DO_WHILE || stmt->kind == KEK_STMT_EACH) {
-        BuildChildStmtSymbols(program, scope, stmt->firstChild, inFunction, loopDepth + 1, switchDepth);
-    } else if (stmt->kind == KEK_STMT_SWITCH) {
-        BuildChildStmtSymbols(program, scope, stmt->firstChild, inFunction, loopDepth, switchDepth + 1);
-    } else {
-        BuildChildStmtSymbols(program, scope, stmt->firstChild, inFunction, loopDepth, switchDepth);
-    }
-}
-
-static void BuildFunctionSymbols(struct KekProgram* program, struct KekScope* moduleScope, struct KekDecl* decl) {
-    struct KekScope* functionScope = AddScope(program, KEK_SCOPE_FUNCTION, moduleScope->file, moduleScope);
-    if (!functionScope) {
-        return;
-    }
-    functionScope->decl = decl;
-
-    for (struct AstNode* param = decl->genericParams ? decl->genericParams->firstChild : NULL; param; param = param->nextSibling) {
-        struct AstNode* name = param->firstChild;
-        if (name) {
-            (void)AddSymbol(program, functionScope, KEK_SYMBOL_TYPE, name, decl, NULL, NULL);
-        }
-    }
-
-    for (struct KekParam* param = decl->firstParam; param; param = param->next) {
-        (void)AddSymbol(program, functionScope, KEK_SYMBOL_PARAM, param->name, NULL, param, NULL);
-    }
-
-    BuildChildStmtSymbols(program, functionScope, decl->firstStmt, 1, 0, 0);
-}
-
-int BuildKekProgramSymbols(struct KekProgram* program, struct KekModule* modules, size_t moduleCount) {
-    if (!program || !modules) {
-        return -1;
-    }
-
-    struct KekScope* programScope = AddScope(program, KEK_SCOPE_PROGRAM, NULL, NULL);
-    if (!programScope) {
-        return -1;
-    }
-
-    for (size_t moduleIndex = 0; moduleIndex < moduleCount; moduleIndex++) {
-        struct KekModule* module = &modules[moduleIndex];
-        for (struct KekDecl* decl = module->firstDecl; decl; decl = decl->next) {
-            enum KekSymbolKind kind = SymbolKindForDecl(decl->kind);
-            if (kind == KEK_SYMBOL_UNKNOWN || kind == KEK_SYMBOL_IMPORT || !decl->name) {
-                if (decl->kind == KEK_DECL_EXTERN_C && AddExternCStructSymbols(program, programScope, decl, module->file) != 0) {
-                    return -1;
-                }
-                continue;
-            }
-            if (ProgramScopeHasSymbol(programScope, decl->name, module->file)) {
-                continue;
-            }
-            if (AddSymbolWithFile(program, programScope, kind, decl->name, decl, NULL, NULL, module->file) != 0) {
-                return -1;
-            }
-        }
-    }
-
-    for (size_t moduleIndex = 0; moduleIndex < moduleCount; moduleIndex++) {
-        struct KekModule* module = &modules[moduleIndex];
-        struct KekScope* moduleScope = AddScope(program, KEK_SCOPE_MODULE, module->file, programScope);
-        if (!moduleScope) {
-            return -1;
-        }
-
-        for (struct KekDecl* decl = module->firstDecl; decl; decl = decl->next) {
-            enum KekSymbolKind kind = SymbolKindForDecl(decl->kind);
-            if (AddSymbol(program, moduleScope, kind, decl->name, decl, NULL, NULL) != 0) {
-                return -1;
-            }
-            if (decl->kind == KEK_DECL_FUNCTION) {
-                BuildFunctionSymbols(program, moduleScope, decl);
-            }
-        }
-    }
-
-    return program->errorCount == 0 ? 0 : -1;
-}
-#undef BuildFunctionSymbols
-#undef BuildChildStmtSymbols
-#undef BuildStmtSymbols
-#undef CheckExprSemantics
-#undef CheckTypeSemantics
-#undef IsAssignableExpr
-#undef AddExternCStructSymbols
-#undef ProgramScopeHasSymbol
-#undef LookupSymbol
-#undef IsBuiltinType
-#undef IsTokenText
-#undef AddSymbol
-#undef AddSymbolWithFile
-#undef ScopeFindDuplicate
-#undef AddScope
-#undef SameFunctionSymbolSlot
-#undef DeclParamCount
-#undef DeclReceiverName
-#undef DeclIsMethod
-#undef IsOperatorDeclName
-#undef SameSymbolNameAcrossFiles
-#undef SameSymbolNameInFile
-#undef SymbolKindForDecl
-/* END sema.c */
-
-/* BEGIN tokenizer.c */
-#define PeekChar tokenizer_PeekChar
-#define PeekCharAt tokenizer_PeekCharAt
-#define Advance tokenizer_Advance
-#define CreateTextToken tokenizer_CreateTextToken
-#define CreateCommentToken tokenizer_CreateCommentToken
-#define CreateOperatorToken tokenizer_CreateOperatorToken
-#define CreateKeywordToken tokenizer_CreateKeywordToken
-#define CreatePunctuationToken tokenizer_CreatePunctuationToken
-#define IsPunctuation tokenizer_IsPunctuation
-#define IsOperator tokenizer_IsOperator
-#define IsKeywordAt tokenizer_IsKeywordAt
-#define SkipWhitespace tokenizer_SkipWhitespace
-#define SkipWhitespaceAndComments tokenizer_SkipWhitespaceAndComments
-#define ReadLineComment tokenizer_ReadLineComment
-#define ReadBlockComment tokenizer_ReadBlockComment
-#define PushToken tokenizer_PushToken
-
-const char* TokenTypeNames[] = {
-    "EOF",
-    "IDENTIFIER",
-    "NUMBER",
-    "STRING",
-    "CHAR",
-    "COMMENT",
-    "DOC_COMMENT",
-    "OPERATOR",
-    "KEYWORD",
-    "PUNCTUATION",
-};
-
-const char* OperatorNames[] = {
-    "::", "==", "!=", "<=", ">=", "&&", "||", "+=", "-=", "->",
-    "+", "-", "*", "/", "%", "=", "<", ">", "!", "&", "|", "~",
-};
-
-const char* KeywordNames[] = {
-    "if", "else", "while", "for", "return", "do", "break", "continue",
-    "using", "alias", "export", "extern", "enum", "struct", "union",
-    "switch", "case", "default", "each", "packed", "aligned", "comptime",
-    "defer", "tagged", "true", "false", "unreachable", "panic"
-};
-
-const char* PunctuationNames[] = {
-    "(", ")", "{", "}", "[", "]", ";", ",", ":", ".", "#"
-};
-
-struct Tokenizer CreateTokenizer(int fileIndex, struct FileTable* table) {
-    struct KekLexOptions options = {0};
-    return CreateTokenizerWithOptions(fileIndex, table, options);
-}
-
-struct Tokenizer CreateTokenizerWithOptions(int fileIndex, struct FileTable* table, struct KekLexOptions options) {
-    struct Tokenizer tokenizer = {0};
-    tokenizer.file = &table->files[fileIndex];
-    tokenizer.fileIndex = fileIndex;
-    tokenizer.position = 0;
-    tokenizer.line = 1;
-    tokenizer.column = 1;
-    tokenizer.emitComments = options.emitComments;
-    tokenizer.diagnostics = options.diagnostics;
-    return tokenizer;
-}
-
-static char PeekChar(struct Tokenizer* tokenizer) {
-    if (tokenizer->position >= tokenizer->file->length) {
-        return '\0';
-    }
-    return tokenizer->file->content[tokenizer->position];
-}
-
-static char PeekCharAt(struct Tokenizer* tokenizer, size_t offset) {
-    size_t position = tokenizer->position + offset;
-    if (position >= tokenizer->file->length) {
-        return '\0';
-    }
-    return tokenizer->file->content[position];
-}
-
-static void Advance(struct Tokenizer* tokenizer, size_t count) {
-    for (size_t i = 0; i < count; i++) {
-        if (tokenizer->position < tokenizer->file->length) {
-            char c = tokenizer->file->content[tokenizer->position];
-            if (c == '\n') {
-                tokenizer->line++;
-                tokenizer->column = 1;
-            } else {
-                tokenizer->column++;
-            }
-            tokenizer->position++;
-        }
-    }
-}
-
-static struct Token CreateTextToken(enum TokenType type, size_t start, size_t length, size_t line, size_t column) {
-    struct Token token = {0};
-    token.type = type;
-    token.value.text.offset = start;
-    token.value.text.length = length;
-    token.location.line = line;
-    token.location.column = column;
-    token.location.offset = start;
-    token.location.length = length;
-    return token;
-}
-
-static struct Token CreateCommentToken(enum TokenType type, size_t start, size_t length, size_t line, size_t column) {
-    struct Token token = {0};
-    token.type = type;
-    token.value.text.offset = start;
-    token.value.text.length = length;
-    token.location.line = line;
-    token.location.column = column;
-    token.location.offset = start;
-    token.location.length = length;
-    return token;
-}
-
-static struct Token CreateOperatorToken(enum OperatorType opType, size_t start, size_t length, size_t line, size_t column) {
-    struct Token token = {0};
-    token.type = TOKEN_OPERATOR;
-    token.value.operator = opType;
-    token.location.line = line;
-    token.location.column = column;
-    token.location.offset = start;
-    token.location.length = length;
-    return token;
-}
-
-static struct Token CreateKeywordToken(enum KeywordType kwType, size_t start, size_t length, size_t line, size_t column) {
-    struct Token token = {0};
-    token.type = TOKEN_KEYWORD;
-    token.value.keyword = kwType;
-    token.location.line = line;
-    token.location.column = column;
-    token.location.offset = start;
-    token.location.length = length;
-    return token;
-}
-
-static struct Token CreatePunctuationToken(enum PunctuationType puncType, size_t start, size_t length, size_t line, size_t column) {
-    struct Token token = {0};
-    token.type = TOKEN_PUNCTUATION;
-    token.value.punctuation = puncType;
-    token.location.line = line;
-    token.location.column = column;
-    token.location.offset = start;
-    token.location.length = length;
-    return token;
-}
-
-static int IsPunctuation(struct Tokenizer* tokenizer) {
-    for (size_t i = 0; i < PUNCTUATION_COUNT; i++) {
-        const char* punc = PunctuationNames[i];
-        size_t len = strlen(punc);
-        if (strncmp(&tokenizer->file->content[tokenizer->position], punc, len) == 0) {
-            return (int)i;
-        }
-    }
-    return -1;
-}
-
-static int IsOperator(struct Tokenizer* tokenizer) {
-    for (size_t i = 0; i < OPERATOR_COUNT; i++) {
-        const char* op = OperatorNames[i];
-        size_t len = strlen(op);
-        if (strncmp(&tokenizer->file->content[tokenizer->position], op, len) == 0) {
-            return (int)i;
-        }
-    }
-    return -1;
-}
-
-static int IsKeywordAt(struct Tokenizer* tokenizer, size_t start, size_t length) {
-    for (size_t i = 0; i < KEYWORD_COUNT; i++) {
-        const char* kw = KeywordNames[i];
-        size_t kwLen = strlen(kw);
-        if (length == kwLen && strncmp(&tokenizer->file->content[start], kw, kwLen) == 0) {
-            return (int)i;
-        }
-    }
-    return -1;
-}
-
-static void SkipWhitespace(struct Tokenizer* tokenizer) {
-    char c = PeekChar(tokenizer);
-    while (c != '\0' && isspace((unsigned char)c)) {
-        Advance(tokenizer, 1);
-        c = PeekChar(tokenizer);
-    }
-}
-
-static void SkipWhitespaceAndComments(struct Tokenizer* tokenizer) {
-    for (;;) {
-        SkipWhitespace(tokenizer);
-
-        if (PeekChar(tokenizer) == '/' && PeekCharAt(tokenizer, 1) == '/') {
-            while (PeekChar(tokenizer) != '\0' && PeekChar(tokenizer) != '\n') {
-                Advance(tokenizer, 1);
-            }
-            continue;
-        }
-
-        if (PeekChar(tokenizer) == '/' && PeekCharAt(tokenizer, 1) == '*') {
-            Advance(tokenizer, 2);
-            while (PeekChar(tokenizer) != '\0') {
-                if (PeekChar(tokenizer) == '*' && PeekCharAt(tokenizer, 1) == '/') {
-                    Advance(tokenizer, 2);
+        if (Tokenizer_Peek(this)=='/'&&Tokenizer_PeekAt(this,1)=='*') {
+            Tokenizer_AdvanceMany(this,2);
+            while (!Tokenizer_AtEnd(this)) {
+                if (Tokenizer_Peek(this)=='*'&&Tokenizer_PeekAt(this,1)=='/') {
+                    Tokenizer_AdvanceMany(this,2);
                     break;
                 }
-                Advance(tokenizer, 1);
+                Tokenizer_Advance(this);
             }
             continue;
         }
-
         break;
     }
 }
-
-static struct Token ReadLineComment(struct Tokenizer* tokenizer) {
-    size_t start = tokenizer->position;
-    size_t line = tokenizer->line;
-    size_t column = tokenizer->column;
-    enum TokenType type = PeekCharAt(tokenizer, 2) == '/' ? TOKEN_DOC_COMMENT : TOKEN_COMMENT;
-    while (PeekChar(tokenizer) != '\0' && PeekChar(tokenizer) != '\n') {
-        Advance(tokenizer, 1);
+struct Token Tokenizer_ReadLineComment(struct Tokenizer* this) {
+    usize start=this->cursor.pos;
+    usize line=this->cursor.line;
+    usize column=this->cursor.column;
+    TokenKind kind=TokenKind_Comment;
+    if (Tokenizer_PeekAt(this,2)=='/') {
+        kind=TokenKind_DocComment;
     }
-    return CreateCommentToken(type, start, tokenizer->position - start, line, column);
+    while (!Tokenizer_AtEnd(this)&&Tokenizer_Peek(this)!='\n') {
+        Tokenizer_Advance(this);
+    }
+    return (tokenizer_TokenNew(kind,0,line,column,start,this->cursor.pos-start));
 }
-
-static struct Token ReadBlockComment(struct Tokenizer* tokenizer) {
-    size_t start = tokenizer->position;
-    size_t line = tokenizer->line;
-    size_t column = tokenizer->column;
-    Advance(tokenizer, 2);
-    while (PeekChar(tokenizer) != '\0') {
-        if (PeekChar(tokenizer) == '*' && PeekCharAt(tokenizer, 1) == '/') {
-            Advance(tokenizer, 2);
+struct Token Tokenizer_ReadBlockComment(struct Tokenizer* this) {
+    usize start=this->cursor.pos;
+    usize line=this->cursor.line;
+    usize column=this->cursor.column;
+    Tokenizer_AdvanceMany(this,2);
+    while (!Tokenizer_AtEnd(this)) {
+        if (Tokenizer_Peek(this)=='*'&&Tokenizer_PeekAt(this,1)=='/') {
+            Tokenizer_AdvanceMany(this,2);
             break;
         }
-        Advance(tokenizer, 1);
+        Tokenizer_Advance(this);
     }
-    return CreateCommentToken(TOKEN_COMMENT, start, tokenizer->position - start, line, column);
+    return (tokenizer_TokenNew(TokenKind_Comment,0,line,column,start,this->cursor.pos-start));
 }
-
-struct Token GetNextToken(struct Tokenizer* tokenizer) {
-    struct Token token = {0};
-    if (tokenizer->emitComments) {
-        SkipWhitespace(tokenizer);
-        if (PeekChar(tokenizer) == '/' && PeekCharAt(tokenizer, 1) == '/') {
-            return ReadLineComment(tokenizer);
+u64 tokenizer_KeywordSubkind(struct String source,usize start,usize length) {
+    if (tokenizer_TextAtEquals("if",source,start,length)) {
+        return (((u64)(KeywordKind_If)));
+    }
+    if (tokenizer_TextAtEquals("else",source,start,length)) {
+        return (((u64)(KeywordKind_Else)));
+    }
+    if (tokenizer_TextAtEquals("while",source,start,length)) {
+        return (((u64)(KeywordKind_While)));
+    }
+    if (tokenizer_TextAtEquals("for",source,start,length)) {
+        return (((u64)(KeywordKind_For)));
+    }
+    if (tokenizer_TextAtEquals("return",source,start,length)) {
+        return (((u64)(KeywordKind_Return)));
+    }
+    if (tokenizer_TextAtEquals("do",source,start,length)) {
+        return (((u64)(KeywordKind_Do)));
+    }
+    if (tokenizer_TextAtEquals("break",source,start,length)) {
+        return (((u64)(KeywordKind_Break)));
+    }
+    if (tokenizer_TextAtEquals("continue",source,start,length)) {
+        return (((u64)(KeywordKind_Continue)));
+    }
+    if (tokenizer_TextAtEquals("using",source,start,length)) {
+        return (((u64)(KeywordKind_Using)));
+    }
+    if (tokenizer_TextAtEquals("alias",source,start,length)) {
+        return (((u64)(KeywordKind_Alias)));
+    }
+    if (tokenizer_TextAtEquals("export",source,start,length)) {
+        return (((u64)(KeywordKind_Export)));
+    }
+    if (tokenizer_TextAtEquals("extern",source,start,length)) {
+        return (((u64)(KeywordKind_Extern)));
+    }
+    if (tokenizer_TextAtEquals("enum",source,start,length)) {
+        return (((u64)(KeywordKind_Enum)));
+    }
+    if (tokenizer_TextAtEquals("struct",source,start,length)) {
+        return (((u64)(KeywordKind_Struct)));
+    }
+    if (tokenizer_TextAtEquals("union",source,start,length)) {
+        return (((u64)(KeywordKind_Union)));
+    }
+    if (tokenizer_TextAtEquals("switch",source,start,length)) {
+        return (((u64)(KeywordKind_Switch)));
+    }
+    if (tokenizer_TextAtEquals("case",source,start,length)) {
+        return (((u64)(KeywordKind_Case)));
+    }
+    if (tokenizer_TextAtEquals("default",source,start,length)) {
+        return (((u64)(KeywordKind_Default)));
+    }
+    if (tokenizer_TextAtEquals("each",source,start,length)) {
+        return (((u64)(KeywordKind_Each)));
+    }
+    if (tokenizer_TextAtEquals("packed",source,start,length)) {
+        return (((u64)(KeywordKind_Packed)));
+    }
+    if (tokenizer_TextAtEquals("aligned",source,start,length)) {
+        return (((u64)(KeywordKind_Aligned)));
+    }
+    if (tokenizer_TextAtEquals("comptime",source,start,length)) {
+        return (((u64)(KeywordKind_Comptime)));
+    }
+    if (tokenizer_TextAtEquals("defer",source,start,length)) {
+        return (((u64)(KeywordKind_Defer)));
+    }
+    if (tokenizer_TextAtEquals("tagged",source,start,length)) {
+        return (((u64)(KeywordKind_Tagged)));
+    }
+    if (tokenizer_TextAtEquals("true",source,start,length)) {
+        return (((u64)(KeywordKind_True)));
+    }
+    if (tokenizer_TextAtEquals("false",source,start,length)) {
+        return (((u64)(KeywordKind_False)));
+    }
+    if (tokenizer_TextAtEquals("unreachable",source,start,length)) {
+        return (((u64)(KeywordKind_Unreachable)));
+    }
+    if (tokenizer_TextAtEquals("panic",source,start,length)) {
+        return (((u64)(KeywordKind_Panic)));
+    }
+    return (1000);
+}
+struct Token Tokenizer_ReadIdentifierOrKeyword(struct Tokenizer* this) {
+    usize start=this->cursor.pos;
+    usize line=this->cursor.line;
+    usize column=this->cursor.column;
+    while (std_IsAsciiWord(Tokenizer_Peek(this))) {
+        Tokenizer_Advance(this);
+    }
+    usize length=this->cursor.pos-start;
+    u64 keyword=tokenizer_KeywordSubkind(this->cursor.input,start,length);
+    if (keyword!=1000) {
+        return (tokenizer_TokenNew(TokenKind_Keyword,keyword,line,column,start,length));
+    }
+    return (tokenizer_TokenNew(TokenKind_Identifier,0,line,column,start,length));
+}
+struct Token Tokenizer_ReadNumber(struct Tokenizer* this) {
+    usize start=this->cursor.pos;
+    usize line=this->cursor.line;
+    usize column=this->cursor.column;
+    while (std_IsAsciiWord(Tokenizer_Peek(this))||Tokenizer_Peek(this)=='.'||Tokenizer_Peek(this)=='_') {
+        Tokenizer_Advance(this);
+    }
+    return (tokenizer_TokenNew(TokenKind_Number,0,line,column,start,this->cursor.pos-start));
+}
+struct Token Tokenizer_ReadDelimited(struct Tokenizer* this,TokenKind kind,byte delimiter) {
+    usize start=this->cursor.pos;
+    usize line=this->cursor.line;
+    usize column=this->cursor.column;
+    Tokenizer_Advance(this);
+    while (!Tokenizer_AtEnd(this)) {
+        if (Tokenizer_Peek(this)=='\\') {
+            Tokenizer_AdvanceMany(this,2);
+            continue;
         }
-        if (PeekChar(tokenizer) == '/' && PeekCharAt(tokenizer, 1) == '*') {
-            return ReadBlockComment(tokenizer);
+        if (Tokenizer_Peek(this)==delimiter) {
+            Tokenizer_Advance(this);
+            break;
+        }
+        Tokenizer_Advance(this);
+    }
+    return (tokenizer_TokenNew(kind,0,line,column,start,this->cursor.pos-start));
+}
+bool Tokenizer_ReadOperator(struct Tokenizer* this,struct Token* out,usize start,usize line,usize column) {
+    if (Tokenizer_StartsWith(this,"::")) {
+        Tokenizer_AdvanceMany(this,2);
+        out[0]=tokenizer_TokenNew(TokenKind_Operator,((u64)(OperatorKind_Scope)),line,column,start,2);
+        return (1);
+    }
+    if (Tokenizer_StartsWith(this,"==")) {
+        Tokenizer_AdvanceMany(this,2);
+        out[0]=tokenizer_TokenNew(TokenKind_Operator,((u64)(OperatorKind_Equal)),line,column,start,2);
+        return (1);
+    }
+    if (Tokenizer_StartsWith(this,"!=")) {
+        Tokenizer_AdvanceMany(this,2);
+        out[0]=tokenizer_TokenNew(TokenKind_Operator,((u64)(OperatorKind_NotEqual)),line,column,start,2);
+        return (1);
+    }
+    if (Tokenizer_StartsWith(this,"<=")) {
+        Tokenizer_AdvanceMany(this,2);
+        out[0]=tokenizer_TokenNew(TokenKind_Operator,((u64)(OperatorKind_LessEqual)),line,column,start,2);
+        return (1);
+    }
+    if (Tokenizer_StartsWith(this,">=")) {
+        Tokenizer_AdvanceMany(this,2);
+        out[0]=tokenizer_TokenNew(TokenKind_Operator,((u64)(OperatorKind_GreaterEqual)),line,column,start,2);
+        return (1);
+    }
+    if (Tokenizer_StartsWith(this,"&&")) {
+        Tokenizer_AdvanceMany(this,2);
+        out[0]=tokenizer_TokenNew(TokenKind_Operator,((u64)(OperatorKind_LogicalAnd)),line,column,start,2);
+        return (1);
+    }
+    if (Tokenizer_StartsWith(this,"||")) {
+        Tokenizer_AdvanceMany(this,2);
+        out[0]=tokenizer_TokenNew(TokenKind_Operator,((u64)(OperatorKind_LogicalOr)),line,column,start,2);
+        return (1);
+    }
+    if (Tokenizer_StartsWith(this,"+=")) {
+        Tokenizer_AdvanceMany(this,2);
+        out[0]=tokenizer_TokenNew(TokenKind_Operator,((u64)(OperatorKind_PlusAssign)),line,column,start,2);
+        return (1);
+    }
+    if (Tokenizer_StartsWith(this,"-=")) {
+        Tokenizer_AdvanceMany(this,2);
+        out[0]=tokenizer_TokenNew(TokenKind_Operator,((u64)(OperatorKind_MinusAssign)),line,column,start,2);
+        return (1);
+    }
+    if (Tokenizer_StartsWith(this,"->")) {
+        Tokenizer_AdvanceMany(this,2);
+        out[0]=tokenizer_TokenNew(TokenKind_Operator,((u64)(OperatorKind_Arrow)),line,column,start,2);
+        return (1);
+    }
+    byte c=Tokenizer_Peek(this);
+    if (c=='+') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Operator,((u64)(OperatorKind_Plus)),line,column,start,1);
+        return (1);
+    }
+    if (c=='-') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Operator,((u64)(OperatorKind_Minus)),line,column,start,1);
+        return (1);
+    }
+    if (c=='*') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Operator,((u64)(OperatorKind_Multiply)),line,column,start,1);
+        return (1);
+    }
+    if (c=='/') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Operator,((u64)(OperatorKind_Divide)),line,column,start,1);
+        return (1);
+    }
+    if (c=='%') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Operator,((u64)(OperatorKind_Modulo)),line,column,start,1);
+        return (1);
+    }
+    if (c=='=') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Operator,((u64)(OperatorKind_Assign)),line,column,start,1);
+        return (1);
+    }
+    if (c=='<') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Operator,((u64)(OperatorKind_Less)),line,column,start,1);
+        return (1);
+    }
+    if (c=='>') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Operator,((u64)(OperatorKind_Greater)),line,column,start,1);
+        return (1);
+    }
+    if (c=='!') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Operator,((u64)(OperatorKind_LogicalNot)),line,column,start,1);
+        return (1);
+    }
+    if (c=='&') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Operator,((u64)(OperatorKind_BitwiseAnd)),line,column,start,1);
+        return (1);
+    }
+    if (c=='|') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Operator,((u64)(OperatorKind_BitwiseOr)),line,column,start,1);
+        return (1);
+    }
+    if (c=='~') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Operator,((u64)(OperatorKind_BitwiseNot)),line,column,start,1);
+        return (1);
+    }
+    return (0);
+}
+bool Tokenizer_ReadPunctuation(struct Tokenizer* this,struct Token* out,usize start,usize line,usize column) {
+    byte c=Tokenizer_Peek(this);
+    if (c=='(') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Punctuation,((u64)(PunctuationKind_LeftParen)),line,column,start,1);
+        return (1);
+    }
+    if (c==')') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Punctuation,((u64)(PunctuationKind_RightParen)),line,column,start,1);
+        return (1);
+    }
+    if (c=='{') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Punctuation,((u64)(PunctuationKind_LeftBrace)),line,column,start,1);
+        return (1);
+    }
+    if (c=='}') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Punctuation,((u64)(PunctuationKind_RightBrace)),line,column,start,1);
+        return (1);
+    }
+    if (c=='[') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Punctuation,((u64)(PunctuationKind_LeftBracket)),line,column,start,1);
+        return (1);
+    }
+    if (c==']') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Punctuation,((u64)(PunctuationKind_RightBracket)),line,column,start,1);
+        return (1);
+    }
+    if (c==';') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Punctuation,((u64)(PunctuationKind_Semicolon)),line,column,start,1);
+        return (1);
+    }
+    if (c==',') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Punctuation,((u64)(PunctuationKind_Comma)),line,column,start,1);
+        return (1);
+    }
+    if (c==':') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Punctuation,((u64)(PunctuationKind_Colon)),line,column,start,1);
+        return (1);
+    }
+    if (c=='.') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Punctuation,((u64)(PunctuationKind_Dot)),line,column,start,1);
+        return (1);
+    }
+    if (c=='#') {
+        Tokenizer_Advance(this);
+        out[0]=tokenizer_TokenNew(TokenKind_Punctuation,((u64)(PunctuationKind_Hash)),line,column,start,1);
+        return (1);
+    }
+    return (0);
+}
+struct Token Tokenizer_Next(struct Tokenizer* this) {
+    if (this->emitComments) {
+        Tokenizer_SkipWhitespace(this);
+        if (Tokenizer_Peek(this)=='/'&&Tokenizer_PeekAt(this,1)=='/') {
+            return (Tokenizer_ReadLineComment(this));
+        }
+        if (Tokenizer_Peek(this)=='/'&&Tokenizer_PeekAt(this,1)=='*') {
+            return (Tokenizer_ReadBlockComment(this));
         }
     } else {
-        SkipWhitespaceAndComments(tokenizer);
+        Tokenizer_SkipWhitespaceAndComments(this);
     }
-
-    char c = PeekChar(tokenizer);
-    if (c == '\0') {
-        token.type = TOKEN_EOF;
-        token.location.line = tokenizer->line;
-        token.location.column = tokenizer->column;
-        token.location.offset = tokenizer->position;
-        return token;
+    if (Tokenizer_AtEnd(this)) {
+        return (tokenizer_TokenNew(TokenKind_Eof,0,this->cursor.line,this->cursor.column,this->cursor.pos,0));
     }
-
-    size_t start = tokenizer->position;
-    size_t line = tokenizer->line;
-    size_t column = tokenizer->column;
-
-    if (isalpha((unsigned char)c) || c == '_') {
-        while (isalnum((unsigned char)PeekChar(tokenizer)) || PeekChar(tokenizer) == '_') {
-            Advance(tokenizer, 1);
-        }
-        size_t length = tokenizer->position - start;
-        int kwIndex = IsKeywordAt(tokenizer, start, length);
-        if (kwIndex >= 0) {
-            return CreateKeywordToken((enum KeywordType)kwIndex, start, length, line, column);
-        }
-        return CreateTextToken(TOKEN_IDENTIFIER, start, length, line, column);
+    usize start=this->cursor.pos;
+    usize line=this->cursor.line;
+    usize column=this->cursor.column;
+    byte c=Tokenizer_Peek(this);
+    if (std_IsAsciiAlpha(c)) {
+        return (Tokenizer_ReadIdentifierOrKeyword(this));
     }
-
-    if (isdigit((unsigned char)c)) {
-        while (isalnum((unsigned char)PeekChar(tokenizer)) || PeekChar(tokenizer) == '.' || PeekChar(tokenizer) == '_') {
-            Advance(tokenizer, 1);
-        }
-        return CreateTextToken(TOKEN_NUMBER, start, tokenizer->position - start, line, column);
+    if (std_IsAsciiDigit(c)) {
+        return (Tokenizer_ReadNumber(this));
     }
-
-    if (c == '"') {
-        Advance(tokenizer, 1);
-        while (PeekChar(tokenizer) != '\0') {
-            if (PeekChar(tokenizer) == '\\') {
-                Advance(tokenizer, 2);
-                continue;
-            }
-            if (PeekChar(tokenizer) == '"') {
-                Advance(tokenizer, 1);
-                break;
-            }
-            Advance(tokenizer, 1);
-        }
-        return CreateTextToken(TOKEN_STRING, start, tokenizer->position - start, line, column);
+    if (c=='"') {
+        return (Tokenizer_ReadDelimited(this,TokenKind_String,'"'));
     }
-
-    if (c == '\'') {
-        Advance(tokenizer, 1);
-        while (PeekChar(tokenizer) != '\0') {
-            if (PeekChar(tokenizer) == '\\') {
-                Advance(tokenizer, 2);
-                continue;
-            }
-            if (PeekChar(tokenizer) == '\'') {
-                Advance(tokenizer, 1);
-                break;
-            }
-            Advance(tokenizer, 1);
-        }
-        return CreateTextToken(TOKEN_CHAR, start, tokenizer->position - start, line, column);
+    if (c=='\'') {
+        return (Tokenizer_ReadDelimited(this,TokenKind_Char,'\''));
     }
-
-    int opIndex = IsOperator(tokenizer);
-    if (opIndex >= 0) {
-        size_t length = strlen(OperatorNames[opIndex]);
-        Advance(tokenizer, length);
-        return CreateOperatorToken((enum OperatorType)opIndex, start, length, line, column);
+    struct Token token={0};
+    if (Tokenizer_ReadOperator(this,&token,start,line,column)) {
+        return (token);
     }
-
-    int puncIndex = IsPunctuation(tokenizer);
-    if (puncIndex >= 0) {
-        size_t length = strlen(PunctuationNames[puncIndex]);
-        Advance(tokenizer, length);
-        return CreatePunctuationToken((enum PunctuationType)puncIndex, start, length, line, column);
+    if (Tokenizer_ReadPunctuation(this,&token,start,line,column)) {
+        return (token);
     }
-
-    KekAddDiagnosticFormat(tokenizer->diagnostics, KEK_DIAGNOSTIC_WARNING, KEK_PHASE_LEX, tokenizer->fileIndex,
-        (struct SourceLocation){line, column, start, 1}, "unrecognized character '%c'", c);
-    Advance(tokenizer, 1);
-    return CreateTextToken(TOKEN_IDENTIFIER, start, 1, line, column);
+    Tokenizer_Advance(this);
+    return (tokenizer_TokenNew(TokenKind_Identifier,0,line,column,start,1));
 }
-
-const char* TokenLexeme(struct Token* token, struct SourceFile* file) {
-    switch (token->type) {
-        case TOKEN_OPERATOR:
-            return OperatorNames[token->value.operator];
-        case TOKEN_KEYWORD:
-            return KeywordNames[token->value.keyword];
-        case TOKEN_PUNCTUATION:
-            return PunctuationNames[token->value.punctuation];
-        default:
-            (void)file;
-            return "";
+Status tokenizer_TokenArrayReserve(struct Array__Token* tokens,usize additional) {
+    usize needed=tokens->len+additional;
+    if (needed<=tokens->cap) {
+        return (Status_Ok);
     }
-}
-
-void PrintToken(struct Token* token, struct SourceFile* file) {
-    printf("Token: %s at line %zu, column %zu\n", TokenTypeNames[token->type], token->location.line, token->location.column);
-    printf("- Value: ");
-    switch (token->type) {
-        case TOKEN_IDENTIFIER:
-        case TOKEN_NUMBER:
-        case TOKEN_STRING:
-        case TOKEN_CHAR:
-        case TOKEN_COMMENT:
-        case TOKEN_DOC_COMMENT:
-            if (token->location.offset + token->location.length <= file->length) {
-                printf("%.*s\n", (int)token->location.length, file->content + token->location.offset);
-            } else {
-                printf("<invalid range>\n");
-            }
-            break;
-        case TOKEN_OPERATOR:
-        case TOKEN_KEYWORD:
-        case TOKEN_PUNCTUATION:
-            printf("%s\n", TokenLexeme(token, file));
-            break;
-        default:
-            printf("None\n");
-            break;
+    usize newCap=tokens->cap;
+    if (newCap==0) {
+        newCap=64;
     }
-}
-
-static int PushToken(struct TokenArray* array, struct Tokenizer* tokenizer, struct Token token) {
-    if (array->count >= array->capacity) {
-        KekAddDiagnostic(tokenizer->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_LEX,
-            tokenizer->fileIndex, token.location, "token storage capacity exceeded");
-        return -1;
+    while (newCap<needed) {
+        newCap=newCap*2;
     }
-    array->items[array->count++] = token;
-    return 0;
+    struct Token* newData=std_Resize__Token(tokens->allocator,tokens->data,tokens->cap,newCap);
+    if (newData==0) {
+        return (Status_NoMemory);
+    }
+    tokens->data=newData;
+    tokens->cap=newCap;
+    return (Status_Ok);
 }
-
-struct TokenArray TokenizeFile(struct Tokenizer* tokenizer, struct Token* storage, size_t capacity) {
-    struct TokenArray array = {0};
-    array.items = storage;
-    array.capacity = capacity;
-
-    for (;;) {
-        struct Token token = GetNextToken(tokenizer);
-        if (PushToken(&array, tokenizer, token) != 0) {
-            break;
+Status tokenizer_TokenArrayPush(struct Array__Token* tokens,struct Token token) {
+    Status status=tokenizer_TokenArrayReserve(tokens,1);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    tokens->data[tokens->len]=token;
+    tokens->len+=1;
+    return (Status_Ok);
+}
+Status tokenizer_TokenArrayDestroy(struct Array__Token* tokens) {
+    if (tokens->data!=0) {
+        std_Free__Token(tokens->allocator,tokens->data,tokens->cap);
+    }
+    tokens->data=0;
+    tokens->len=0;
+    tokens->cap=0;
+    return (Status_Ok);
+}
+Status tokenizer_TokenizeToArray(struct String source,bool emitComments,struct Allocator allocator,struct Array__Token* out) {
+    out->data=0;
+    out->len=0;
+    out->cap=0;
+    out->allocator=allocator;
+    struct Tokenizer tokenizer=tokenizer_TokenizerNew(source,emitComments);
+    while (1) {
+        struct Token token=Tokenizer_Next(&tokenizer);
+        Status status=tokenizer_TokenArrayPush(out,token);
+        if (status!=Status_Ok) {
+            return (status);
         }
-        if (token.type == TOKEN_EOF) {
+        if (token.kind==TokenKind_Eof) {
             break;
         }
     }
-    return array;
+    return (Status_Ok);
 }
-
-void FreeTokenArray(struct TokenArray* array) {
-    array->items = NULL;
-    array->count = 0;
-    array->capacity = 0;
+Status tokenizer_WriteTokenField(struct StringBuilder* out,u64 value,bool separator) {
+    Status status=std_FormatU64ToBuilder(out,value,10);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    if (separator) {
+        return (StringBuilder_WriteByte(out,'|'));
+    }
+    return (Status_Ok);
 }
-#undef PushToken
-#undef ReadBlockComment
-#undef ReadLineComment
-#undef SkipWhitespaceAndComments
-#undef SkipWhitespace
-#undef IsKeywordAt
-#undef IsOperator
-#undef IsPunctuation
-#undef CreatePunctuationToken
-#undef CreateKeywordToken
-#undef CreateOperatorToken
-#undef CreateCommentToken
-#undef CreateTextToken
-#undef Advance
-#undef PeekCharAt
-#undef PeekChar
-/* END tokenizer.c */
-
-/* BEGIN ast_json.c */
-#define WriteTokenTextJson ast_json_WriteTokenTextJson
-
-void WriteJsonEscaped(FILE* out, const char* text, size_t length) {
-    fputc('"', out);
-    for (size_t i = 0; i < length; i++) {
-        unsigned char c = (unsigned char)text[i];
-        switch (c) {
-            case '"': fputs("\\\"", out); break;
-            case '\\': fputs("\\\\", out); break;
-            case '\n': fputs("\\n", out); break;
-            case '\r': fputs("\\r", out); break;
-            case '\t': fputs("\\t", out); break;
-            default:
-                if (c < 32) {
-                    fprintf(out, "\\u%04x", c);
-                } else {
-                    fputc(c, out);
-                }
-                break;
+Status tokenizer_WriteTokenDumpLine(struct Token token,struct StringBuilder* out) {
+    Status status=tokenizer_WriteTokenField(out,((u64)(token.kind)),1);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    status=tokenizer_WriteTokenField(out,token.subkind,1);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    status=tokenizer_WriteTokenField(out,((u64)(token.line)),1);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    status=tokenizer_WriteTokenField(out,((u64)(token.column)),1);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    status=tokenizer_WriteTokenField(out,((u64)(token.offset)),1);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    status=tokenizer_WriteTokenField(out,((u64)(token.length)),0);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    return (StringBuilder_WriteByte(out,'\n'));
+}
+Status tokenizer_WriteTokenDump(struct String source,bool emitComments,struct StringBuilder* out) {
+    struct Array__Token tokens={0};
+    Status status=tokenizer_TokenizeToArray(source,emitComments,out->allocator,&tokens);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    for (usize i=0;i<tokens.len;i++) {
+        status=tokenizer_WriteTokenDumpLine(tokens.data[i],out);
+        if (status!=Status_Ok) {
+            tokenizer_TokenArrayDestroy(&tokens);
+            return (status);
         }
     }
-    fputc('"', out);
+    return (tokenizer_TokenArrayDestroy(&tokens));
 }
-
-static void WriteTokenTextJson(FILE* out, struct Token* token, struct SourceFile* file) {
-    if (token->type == TOKEN_IDENTIFIER || token->type == TOKEN_NUMBER || token->type == TOKEN_STRING || token->type == TOKEN_CHAR) {
-        WriteJsonEscaped(out, file->content + token->location.offset, token->location.length);
-    } else if (token->type == TOKEN_EOF) {
-        WriteJsonEscaped(out, "", 0);
+struct SelfSourceLocation ast_TokenLocation(struct Token token) {
+    return (diagnostics_SelfSourceLocationNew(token.line,token.column,token.offset,token.length));
+}
+Status ast_SelfAstTreeReserve(struct SelfAstTree* tree,usize additional) {
+    usize needed=tree->len+additional;
+    if (needed<=tree->cap) {
+        return (Status_Ok);
+    }
+    usize newCap=tree->cap;
+    if (newCap==0) {
+        newCap=128;
+    }
+    while (newCap<needed) {
+        newCap=newCap*2;
+    }
+    struct SelfAstNode* newData=std_Resize__SelfAstNode(tree->allocator,tree->nodes,tree->cap,newCap);
+    if (newData==0) {
+        return (Status_NoMemory);
+    }
+    tree->nodes=newData;
+    tree->cap=newCap;
+    return (Status_Ok);
+}
+Status ast_SelfAstTreeInit(struct SelfAstTree* tree,struct Allocator allocator) {
+    tree->nodes=0;
+    tree->len=0;
+    tree->cap=0;
+    tree->root=0;
+    tree->allocator=allocator;
+    Status status=ast_SelfAstTreeReserve(tree,1);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    struct SelfAstNode sentinel={0};
+    tree->nodes[0]=sentinel;
+    tree->len=1;
+    return (Status_Ok);
+}
+Status ast_SelfAstTreeDestroy(struct SelfAstTree* tree) {
+    if (tree->nodes!=0) {
+        std_Free__SelfAstNode(tree->allocator,tree->nodes,tree->cap);
+    }
+    tree->nodes=0;
+    tree->len=0;
+    tree->cap=0;
+    tree->root=0;
+    return (Status_Ok);
+}
+bool ast_IsPunctuationToken(struct Token* token,PunctuationKind punctuation) {
+    return (token->kind==TokenKind_Punctuation&&token->subkind==((u64)(punctuation)));
+}
+bool ast_IsOperatorToken(struct Token* token,OperatorKind operatorKind) {
+    return (token->kind==TokenKind_Operator&&token->subkind==((u64)(operatorKind)));
+}
+bool ast_IsTriviaToken(struct Token* token) {
+    return (token->kind==TokenKind_Comment||token->kind==TokenKind_DocComment);
+}
+bool ast_IsClosingPunctuation(struct Token* token) {
+    return (ast_IsPunctuationToken(token,PunctuationKind_RightParen)||ast_IsPunctuationToken(token,PunctuationKind_RightBrace)||ast_IsPunctuationToken(token,PunctuationKind_RightBracket));
+}
+bool ast_IsAstTerminator(struct Token* token,u64 closePunctuation) {
+    if (token->kind==TokenKind_Eof) {
+        return (1);
+    }
+    if (closePunctuation<11&&token->kind==TokenKind_Punctuation&&token->subkind==closePunctuation) {
+        return (1);
+    }
+    if (ast_IsClosingPunctuation(token)) {
+        return (1);
+    }
+    return (0);
+}
+bool ast_IsGenericTerminator(struct Token* token) {
+    return (token->kind==TokenKind_Eof||ast_IsOperatorToken(token,OperatorKind_Greater));
+}
+bool ast_SelfTokenTextEquals(struct SelfParser* parser,struct Token* token,str text) {
+    usize length=0;
+    while (text[length]!=0) {
+        length+=1;
+    }
+    if (!(token->kind==TokenKind_Identifier||token->kind==TokenKind_Number||token->kind==TokenKind_String)) {
+        return (0);
+    }
+    if (token->length!=length) {
+        return (0);
+    }
+    if (token->offset+length>parser->source.len) {
+        return (0);
+    }
+    for (usize i=0;i<length;i++) {
+        if (parser->source.data[token->offset+i]!=text[i]) {
+            return (0);
+        }
+    }
+    return (1);
+}
+usize ast_SelfCreateAstNode(struct SelfParser* parser,SelfAstKind kind,struct SelfSourceLocation location) {
+    Status status=ast_SelfAstTreeReserve(&parser->tree,1);
+    if (status!=Status_Ok) {
+        diagnostics_SelfDiagnosticAddCString(parser->diagnostics,SelfDiagnosticSeverity_Error,SelfDiagnosticPhase_Parse,parser->fileIndex,location,"AST node storage capacity exceeded");
+        parser->errorCount+=1;
+        if (parser->tree.len>0) {
+            return (parser->tree.len-1);
+        }
+        return (0);
+    }
+    usize index=parser->tree.len;
+    struct SelfAstNode node={0};
+    node.kind=kind;
+    node.location=location;
+    parser->tree.nodes[index]=node;
+    parser->tree.len+=1;
+    return (index);
+}
+void ast_SelfAddAstChild(struct SelfAstTree* tree,usize parentIndex,usize childIndex) {
+    if (parentIndex==0||childIndex==0) {
+        return;
+    }
+    tree->nodes[childIndex].nextSibling=0;
+    if (tree->nodes[parentIndex].lastChild!=0) {
+        usize last=tree->nodes[parentIndex].lastChild;
+        tree->nodes[last].nextSibling=childIndex;
     } else {
-        const char* lexeme = TokenLexeme(token, file);
-        WriteJsonEscaped(out, lexeme, strlen(lexeme));
+        tree->nodes[parentIndex].firstChild=childIndex;
+    }
+    tree->nodes[parentIndex].lastChild=childIndex;
+    tree->nodes[parentIndex].childCount+=1;
+}
+void ast_SelfFinishLocationFromChildren(struct SelfAstTree* tree,usize nodeIndex) {
+    if (nodeIndex==0||tree->nodes[nodeIndex].childCount==0) {
+        return;
+    }
+    usize firstIndex=tree->nodes[nodeIndex].firstChild;
+    usize lastIndex=tree->nodes[nodeIndex].lastChild;
+    struct SelfSourceLocation first=tree->nodes[firstIndex].location;
+    struct SelfSourceLocation last=tree->nodes[lastIndex].location;
+    tree->nodes[nodeIndex].location=first;
+    if (last.offset+last.length>=first.offset) {
+        tree->nodes[nodeIndex].location.length=(last.offset+last.length)-first.offset;
     }
 }
-
-void WriteAstJson(FILE* out, struct AstNode* node, struct SourceFile* file, int indent) {
-    for (int i = 0; i < indent; i++) fputs("  ", out);
-    fputs("{\n", out);
-
-    for (int i = 0; i < indent + 1; i++) fputs("  ", out);
-    fputs("\"type\": ", out);
-    WriteJsonEscaped(out, AstNodeTypeNames[node->type], strlen(AstNodeTypeNames[node->type]));
-    fputs(",\n", out);
-
-    for (int i = 0; i < indent + 1; i++) fputs("  ", out);
-    fprintf(out, "\"line\": %zu, \"column\": %zu, \"offset\": %zu, \"length\": %zu",
-        node->location.line, node->location.column, node->location.offset, node->location.length);
-
-    if (node->type == AST_TOKEN) {
-        fputs(",\n", out);
-        for (int i = 0; i < indent + 1; i++) fputs("  ", out);
-        fputs("\"tokenType\": ", out);
-        WriteJsonEscaped(out, TokenTypeNames[node->token.type], strlen(TokenTypeNames[node->token.type]));
-        fputs(",\n", out);
-        for (int i = 0; i < indent + 1; i++) fputs("  ", out);
-        fputs("\"text\": ", out);
-        WriteTokenTextJson(out, &node->token, file);
+usize ast_SelfParseTokenNode(struct SelfParser* parser) {
+    struct Token token=parser->tokens[parser->position];
+    parser->position+=1;
+    usize nodeIndex=ast_SelfCreateAstNode(parser,SelfAstKind_Token,ast_TokenLocation(token));
+    parser->tree.nodes[nodeIndex].token=token;
+    return (nodeIndex);
+}
+void ast_SelfReportParseError(struct SelfParser* parser,struct Token* token,str message) {
+    diagnostics_SelfDiagnosticAddCString(parser->diagnostics,SelfDiagnosticSeverity_Error,SelfDiagnosticPhase_Parse,parser->fileIndex,ast_TokenLocation(token[0]),message);
+    parser->errorCount+=1;
+}
+str ast_SelfPunctuationName(u64 punctuation) {
+    if (punctuation==((u64)(PunctuationKind_RightParen))) {
+        return (")");
     }
-
-    fputs(",\n", out);
-    for (int i = 0; i < indent + 1; i++) fputs("  ", out);
-    fputs("\"children\": [", out);
-    if (node->childCount > 0) {
-        fputc('\n', out);
-        size_t index = 0;
-        for (struct AstNode* child = node->firstChild; child; child = child->nextSibling) {
-            WriteAstJson(out, child, file, indent + 2);
-            if (index + 1 < node->childCount) {
-                fputc(',', out);
+    if (punctuation==((u64)(PunctuationKind_RightBrace))) {
+        return ("}");
+    }
+    if (punctuation==((u64)(PunctuationKind_RightBracket))) {
+        return ("]");
+    }
+    return ("<end of file>");
+}
+void ast_SelfReportExpected(struct SelfParser* parser,struct Token* token,u64 punctuation) {
+    struct StringBuilder builder=std_StringBuilderNew(parser->tree.allocator);
+    StringBuilder_WriteCString(&builder,"expected '");
+    StringBuilder_WriteCString(&builder,ast_SelfPunctuationName(punctuation));
+    StringBuilder_WriteByte(&builder,'\'');
+    struct String message=StringBuilder_View(&builder);
+    diagnostics_SelfDiagnosticAdd(parser->diagnostics,SelfDiagnosticSeverity_Error,SelfDiagnosticPhase_Parse,parser->fileIndex,ast_TokenLocation(token[0]),message);
+    StringBuilder_Destroy(&builder);
+    parser->errorCount+=1;
+}
+bool ast_SelfShouldParseGenericList(struct SelfParser* parser,usize previousChildIndex) {
+    if (previousChildIndex==0||parser->tree.nodes[previousChildIndex].kind!=SelfAstKind_Token) {
+        return (0);
+    }
+    struct Token* previousToken=&parser->tree.nodes[previousChildIndex].token;
+    if (previousToken->kind!=TokenKind_Identifier&&previousToken->kind!=TokenKind_Keyword) {
+        return (0);
+    }
+    if (ast_SelfTokenTextEquals(parser,previousToken,"cast")) {
+        return (0);
+    }
+    if (parser->position>=parser->count||!ast_IsOperatorToken(&parser->tokens[parser->position],OperatorKind_Less)) {
+        return (0);
+    }
+    int depth=0;
+    for (usize i=parser->position;i<parser->count;i++) {
+        struct Token* token=&parser->tokens[i];
+        if (ast_IsOperatorToken(token,OperatorKind_Less)) {
+            depth+=1;
+            continue;
+        }
+        if (ast_IsOperatorToken(token,OperatorKind_Greater)) {
+            depth-=1;
+            if (depth==0) {
+                return (1);
             }
-            fputc('\n', out);
-            index++;
-        }
-        for (int i = 0; i < indent + 1; i++) fputs("  ", out);
-    }
-    fputs("]\n", out);
-
-    for (int i = 0; i < indent; i++) fputs("  ", out);
-    fputc('}', out);
-}
-
-int WriteAstJsonFile(const char* path, struct AstNode* ast, struct SourceFile* file) {
-    FILE* out = fopen(path, "w");
-    if (!out) {
-        return -1;
-    }
-    WriteAstJson(out, ast, file, 0);
-    fputc('\n', out);
-    fclose(out);
-    return 0;
-}
-#undef WriteTokenTextJson
-/* END ast_json.c */
-
-/* BEGIN source.c */
-#define AddSourceDiagnostic source_AddSourceDiagnostic
-
-static void AddSourceDiagnostic(struct KekDiagnosticBag* diagnostics, const char* message) {
-    KekAddDiagnostic(diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SOURCE, -1, (struct SourceLocation){0}, message);
-}
-
-int ReadFileWithDiagnostics(const char* path, struct FileTable* table, struct KekDiagnosticBag* diagnostics) {
-    if (table->count >= MAX_FILES) {
-        AddSourceDiagnostic(diagnostics, "file table is full");
-        return -1;
-    }
-
-    if (strlen(path) >= MAX_PATH_LENGTH) {
-        KekAddDiagnosticFormat(diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SOURCE, -1, (struct SourceLocation){0}, "path is too long: %s", path);
-        return -1;
-    }
-
-    FILE* file = fopen(path, "r");
-    if (!file) {
-        KekAddDiagnosticFormat(diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SOURCE, -1, (struct SourceLocation){0}, "could not open file %s", path);
-        return -1;
-    }
-
-    if (fseek(file, 0, SEEK_END) != 0) {
-        KekAddDiagnosticFormat(diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SOURCE, -1, (struct SourceLocation){0}, "could not seek file %s", path);
-        fclose(file);
-        return -1;
-    }
-    long length = ftell(file);
-    if (length < 0) {
-        KekAddDiagnosticFormat(diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SOURCE, -1, (struct SourceLocation){0}, "could not measure file %s", path);
-        fclose(file);
-        return -1;
-    }
-    if (fseek(file, 0, SEEK_SET) != 0) {
-        KekAddDiagnosticFormat(diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SOURCE, -1, (struct SourceLocation){0}, "could not rewind file %s", path);
-        fclose(file);
-        return -1;
-    }
-
-    char* content = malloc((size_t)length + 1);
-    if (!content) {
-        AddSourceDiagnostic(diagnostics, "could not allocate memory for file content");
-        fclose(file);
-        return -1;
-    }
-
-    size_t bytesRead = fread(content, 1, (size_t)length, file);
-    if (bytesRead != (size_t)length) {
-        KekAddDiagnosticFormat(diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SOURCE, -1, (struct SourceLocation){0}, "could not read file %s", path);
-        free(content);
-        fclose(file);
-        return -1;
-    }
-    content[length] = '\0';
-    fclose(file);
-
-    struct SourceFile* sourceFile = &table->files[table->count++];
-    strcpy(sourceFile->path, path);
-    sourceFile->content = content;
-    sourceFile->length = (size_t)length;
-    sourceFile->fileIndex = (int)table->count - 1;
-
-    return (int)table->count - 1;
-}
-
-int ReadFile(const char* path, struct FileTable* table) {
-    struct KekDiagnostic diagnostics[8];
-    struct KekDiagnosticBag bag;
-    InitKekDiagnosticBag(&bag, diagnostics, sizeof(diagnostics) / sizeof(diagnostics[0]));
-    int result = ReadFileWithDiagnostics(path, table, &bag);
-    PrintKekDiagnostics(stderr, &bag, table);
-    return result;
-}
-
-void FreeFileTable(struct FileTable* table) {
-    for (size_t i = 0; i < table->count; i++) {
-        free(table->files[i].content);
-        table->files[i].content = NULL;
-        table->files[i].length = 0;
-    }
-    table->count = 0;
-}
-
-const char* SourceLocationText(struct SourceFile* file, struct SourceLocation location, size_t* length) {
-    if (length) {
-        *length = 0;
-    }
-    if (!file || location.offset > file->length || location.length > file->length - location.offset) {
-        return "";
-    }
-    if (length) {
-        *length = location.length;
-    }
-    return file->content + location.offset;
-}
-
-const char* TokenText(struct Token* token, struct SourceFile* file, size_t* length) {
-    if (!token) {
-        if (length) {
-            *length = 0;
-        }
-        return "";
-    }
-    return SourceLocationText(file, token->location, length);
-}
-
-const char* AstNodeText(struct AstNode* node, struct SourceFile* file, size_t* length) {
-    if (!node) {
-        if (length) {
-            *length = 0;
-        }
-        return "";
-    }
-    return SourceLocationText(file, node->location, length);
-}
-#undef AddSourceDiagnostic
-/* END source.c */
-
-/* BEGIN diagnostics.c */
-#define DiagnosticSeverityName diagnostics_DiagnosticSeverityName
-#define DiagnosticPhaseName diagnostics_DiagnosticPhaseName
-#define PrintSourceLine diagnostics_PrintSourceLine
-
-
-static const char* DiagnosticSeverityName(enum KekDiagnosticSeverity severity) {
-    switch (severity) {
-        case KEK_DIAGNOSTIC_NOTE:
-            return "note";
-        case KEK_DIAGNOSTIC_WARNING:
-            return "warning";
-        case KEK_DIAGNOSTIC_ERROR:
-            return "error";
-    }
-    return "diagnostic";
-}
-
-static const char* DiagnosticPhaseName(enum KekDiagnosticPhase phase) {
-    switch (phase) {
-        case KEK_PHASE_SOURCE:
-            return "source";
-        case KEK_PHASE_LEX:
-            return "lex";
-        case KEK_PHASE_PARSE:
-            return "parse";
-        case KEK_PHASE_TYPED_PARSE:
-            return "typed-parse";
-        case KEK_PHASE_SEMANTIC:
-            return "semantic";
-        case KEK_PHASE_CODEGEN:
-            return "codegen";
-    }
-    return "unknown";
-}
-
-void InitKekDiagnosticBag(struct KekDiagnosticBag* bag, struct KekDiagnostic* storage, size_t capacity) {
-    if (!bag) {
-        return;
-    }
-    bag->items = storage;
-    bag->count = 0;
-    bag->capacity = capacity;
-    bag->errorCount = 0;
-}
-
-void KekAddDiagnostic(struct KekDiagnosticBag* bag, enum KekDiagnosticSeverity severity, enum KekDiagnosticPhase phase, int fileIndex, struct SourceLocation location, const char* message) {
-    if (!bag) {
-        return;
-    }
-    if (severity == KEK_DIAGNOSTIC_ERROR) {
-        bag->errorCount++;
-    }
-    if (bag->count >= bag->capacity || !bag->items) {
-        return;
-    }
-
-    struct KekDiagnostic* diagnostic = &bag->items[bag->count++];
-    memset(diagnostic, 0, sizeof(*diagnostic));
-    diagnostic->severity = severity;
-    diagnostic->phase = phase;
-    diagnostic->fileIndex = fileIndex;
-    diagnostic->location = location;
-    snprintf(diagnostic->message, sizeof(diagnostic->message), "%s", message ? message : "");
-}
-
-void KekAddDiagnosticFormat(struct KekDiagnosticBag* bag, enum KekDiagnosticSeverity severity, enum KekDiagnosticPhase phase, int fileIndex, struct SourceLocation location, const char* format, ...) {
-    if (!bag) {
-        return;
-    }
-
-    char message[256];
-    va_list args;
-    va_start(args, format);
-    vsnprintf(message, sizeof(message), format ? format : "", args);
-    va_end(args);
-
-    KekAddDiagnostic(bag, severity, phase, fileIndex, location, message);
-}
-
-static void PrintSourceLine(FILE* out, struct SourceFile* file, struct SourceLocation location) {
-    if (!file || !file->content || location.offset > file->length) {
-        return;
-    }
-
-    // Find the start of the line
-    size_t lineStart = location.offset;
-    while (lineStart > 0 && file->content[lineStart - 1] != '\n') {
-        lineStart--;
-    }
-
-    // Find the end of the line
-    size_t lineEnd = location.offset;
-    while (lineEnd < file->length && file->content[lineEnd] != '\n') {
-        lineEnd++;
-    }
-
-    // Print the source line
-    size_t lineLength = lineEnd - lineStart;
-    if (lineLength > 0) {
-        fprintf(out, " %5zu | %.*s\n", location.line, (int)lineLength, file->content + lineStart);
-
-        // Print the column marker
-        fprintf(out, "       | ");
-        size_t markerCol = location.offset - lineStart;
-        for (size_t j = 0; j < markerCol; j++) {
-            char c = file->content[lineStart + j];
-            fputc(c == '\t' ? '\t' : ' ', out);
-        }
-        fputc('^', out);
-        // Extend marker for multi-character tokens
-        size_t tokenLen = location.length > 0 ? location.length : 1;
-        for (size_t j = 1; j < tokenLen && (lineStart + markerCol + j) < lineEnd; j++) {
-            fputc('~', out);
-        }
-        fputc('\n', out);
-    }
-}
-
-void PrintKekDiagnostics(FILE* out, struct KekDiagnosticBag* bag, struct FileTable* table) {
-    if (!out || !bag) {
-        return;
-    }
-
-    for (size_t i = 0; i < bag->count; i++) {
-        struct KekDiagnostic* diagnostic = &bag->items[i];
-        const char* path = "<unknown>";
-        struct SourceFile* file = NULL;
-        if (table
-            && diagnostic->fileIndex >= 0
-            && (size_t)diagnostic->fileIndex < table->count) {
-            file = &table->files[diagnostic->fileIndex];
-            path = file->path;
-        }
-        fprintf(out, "%s:%zu:%zu: %s[%s]: %s\n",
-            path,
-            diagnostic->location.line,
-            diagnostic->location.column,
-            DiagnosticSeverityName(diagnostic->severity),
-            DiagnosticPhaseName(diagnostic->phase),
-            diagnostic->message);
-
-        // Print the source line with column marker
-        if (file && diagnostic->location.line > 0) {
-            PrintSourceLine(out, file, diagnostic->location);
-        }
-    }
-}
-
-#undef PrintSourceLine
-#undef DiagnosticPhaseName
-#undef DiagnosticSeverityName
-/* END diagnostics.c */
-
-/* BEGIN compilation.c */
-#define EndsWith compilation_EndsWith
-#define FileAlreadyLoaded compilation_FileAlreadyLoaded
-#define StdlibImportRank compilation_StdlibImportRank
-#define CompareImportNames compilation_CompareImportNames
-#define LoadImportDirectory compilation_LoadImportDirectory
-#define LoadImports compilation_LoadImports
-#define ParseUnit compilation_ParseUnit
-#define IsOnlyWhitespace compilation_IsOnlyWhitespace
-
-
-static int EndsWith(const char* text, const char* suffix) {
-    size_t textLength = strlen(text);
-    size_t suffixLength = strlen(suffix);
-    return textLength >= suffixLength && strcmp(text + textLength - suffixLength, suffix) == 0;
-}
-
-static int FileAlreadyLoaded(struct FileTable* table, const char* path) {
-    for (size_t i = 0; i < table->count; i++) {
-        if (strcmp(table->files[i].path, path) == 0) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-static int StdlibImportRank(const char* name) {
-    static const char* ordered[] = {
-        "core.kek",
-        "mem.kek",
-        "file.kek",
-        "io.kek",
-        "string.kek",
-        "scan.kek",
-        "array.kek",
-        "list.kek",
-        "hash.kek",
-        "collections.kek",
-        "format.kek",
-    };
-    for (size_t i = 0; i < sizeof(ordered) / sizeof(ordered[0]); i++) {
-        if (strcmp(name, ordered[i]) == 0) {
-            return (int)i;
-        }
-    }
-    return 1000;
-}
-
-static int CompareImportNames(const void* left, const void* right) {
-    const char* const* leftString = left;
-    const char* const* rightString = right;
-    int leftRank = StdlibImportRank(*leftString);
-    int rightRank = StdlibImportRank(*rightString);
-    if (leftRank != rightRank) {
-        return leftRank - rightRank;
-    }
-    return strcmp(*leftString, *rightString);
-}
-
-void FreeKekCompilationUnit(struct KekCompilationUnit* unit) {
-    free(unit->tokens);
-    free(unit->astNodes);
-    free(unit->decls);
-    free(unit->types);
-    free(unit->exprs);
-    free(unit->stmts);
-    free(unit->params);
-    free(unit->fields);
-    free(unit->variants);
-    unit->tokens = NULL;
-    unit->astNodes = NULL;
-    unit->decls = NULL;
-    unit->types = NULL;
-    unit->exprs = NULL;
-    unit->stmts = NULL;
-    unit->params = NULL;
-    unit->fields = NULL;
-    unit->variants = NULL;
-    unit->ast = NULL;
-    memset(&unit->module, 0, sizeof(unit->module));
-}
-
-void InitKekCompilation(struct KekCompilation* compilation, struct KekDiagnostic* diagnostics, size_t diagnosticCapacity) {
-    if (!compilation) {
-        return;
-    }
-    memset(compilation, 0, sizeof(*compilation));
-    compilation->entryFileIndex = -1;
-    InitKekDiagnosticBag(&compilation->diagnostics, diagnostics, diagnosticCapacity);
-}
-
-void FreeKekCompilation(struct KekCompilation* compilation) {
-    if (!compilation) {
-        return;
-    }
-    for (size_t i = 0; i < compilation->unitCount; i++) {
-        FreeKekCompilationUnit(&compilation->units[i]);
-    }
-    free(compilation->symbols);
-    free(compilation->scopes);
-    compilation->symbols = NULL;
-    compilation->scopes = NULL;
-    FreeFileTable(&compilation->fileTable);
-    compilation->unitCount = 0;
-    compilation->entryFileIndex = -1;
-    memset(&compilation->program, 0, sizeof(compilation->program));
-}
-
-static int LoadImportDirectory(struct KekCompilation* compilation, const char* path) {
-    DIR* dir = opendir(path);
-    if (!dir) {
-        KekAddDiagnosticFormat(&compilation->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SOURCE,
-            -1, (struct SourceLocation){0}, "could not open import directory %s", path);
-        return -1;
-    }
-
-    int result = 0;
-    char names[256][MAX_PATH_LENGTH];
-    const char* sortedNames[256];
-    size_t nameCount = 0;
-    struct dirent* entry = NULL;
-    while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_name[0] == '.' || !EndsWith(entry->d_name, ".kek")) {
             continue;
         }
-
-        if (nameCount >= sizeof(names) / sizeof(names[0])) {
-            KekAddDiagnosticFormat(&compilation->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SOURCE,
-                -1, (struct SourceLocation){0}, "too many import files in %s", path);
-            result = -1;
-            break;
+        if (depth==1&&token->kind==TokenKind_Punctuation&&token->subkind==((u64)(PunctuationKind_Dot))) {
+            return (0);
         }
-
-        int nameWritten = snprintf(names[nameCount], sizeof(names[nameCount]), "%s", entry->d_name);
-        if (nameWritten < 0 || (size_t)nameWritten >= sizeof(names[nameCount])) {
-            KekAddDiagnosticFormat(&compilation->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SOURCE,
-                -1, (struct SourceLocation){0}, "import file name is too long: %s", entry->d_name);
-            result = -1;
-            break;
-        }
-        sortedNames[nameCount] = names[nameCount];
-        nameCount++;
-    }
-    closedir(dir);
-    if (result != 0) {
-        return result;
-    }
-
-    qsort(sortedNames, nameCount, sizeof(sortedNames[0]), CompareImportNames);
-
-    for (size_t i = 0; i < nameCount; i++) {
-        const char* name = sortedNames[i];
-
-        char filePath[MAX_PATH_LENGTH];
-        int written = snprintf(filePath, sizeof(filePath), "%s/%s", path, name);
-        if (written < 0 || (size_t)written >= sizeof(filePath)) {
-            KekAddDiagnosticFormat(&compilation->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SOURCE,
-                -1, (struct SourceLocation){0}, "import path is too long: %s/%s", path, name);
-            result = -1;
-            break;
-        }
-
-        if (!FileAlreadyLoaded(&compilation->fileTable, filePath)
-            && ReadFileWithDiagnostics(filePath, &compilation->fileTable, &compilation->diagnostics) < 0) {
-            result = -1;
-            break;
+        if (token->kind==TokenKind_Eof||ast_IsPunctuationToken(token,PunctuationKind_Semicolon)||ast_IsPunctuationToken(token,PunctuationKind_RightParen)||ast_IsPunctuationToken(token,PunctuationKind_LeftBrace)||ast_IsPunctuationToken(token,PunctuationKind_RightBrace)) {
+            return (0);
         }
     }
-    return result;
+    return (0);
 }
-
-static int LoadImports(struct KekCompilation* compilation, struct SourceFile* file) {
-    const char* importPrefix = "#import(";
-    size_t importPrefixLength = strlen(importPrefix);
-    const char* cursor = file->content;
-
-    while ((cursor = strstr(cursor, importPrefix)) != NULL) {
-        const char* start = cursor + importPrefixLength;
-        const char* end = strchr(start, ')');
-        struct SourceLocation location = {
-            1,
-            1,
-            (size_t)(cursor - file->content),
-            importPrefixLength
-        };
-        if (!end) {
-            KekAddDiagnostic(&compilation->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SOURCE,
-                file->fileIndex, location, "unterminated import");
-            return -1;
-        }
-
-        size_t length = (size_t)(end - start);
-        if (length == 0 || length >= MAX_PATH_LENGTH) {
-            KekAddDiagnostic(&compilation->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SOURCE,
-                file->fileIndex, location, "invalid import path");
-            return -1;
-        }
-
-        char importPath[MAX_PATH_LENGTH];
-        memcpy(importPath, start, length);
-        importPath[length] = '\0';
-        if (LoadImportDirectory(compilation, importPath) != 0) {
-            return -1;
-        }
-
-        cursor = end + 1;
-    }
-
-    return 0;
-}
-
-int LoadKekCompilation(struct KekCompilation* compilation, const char* entryPath) {
-    if (!compilation) {
-        return -1;
-    }
-    int fileIndex = ReadFileWithDiagnostics(entryPath, &compilation->fileTable, &compilation->diagnostics);
-    if (fileIndex < 0) {
-        return -1;
-    }
-    compilation->entryFileIndex = fileIndex;
-    return LoadImports(compilation, &compilation->fileTable.files[fileIndex]);
-}
-
-static int ParseUnit(struct KekCompilation* compilation, struct KekCompilationUnit* unit) {
-    struct SourceFile* sourceFile = &compilation->fileTable.files[unit->fileIndex];
-    size_t tokenCapacity = sourceFile->length + 1;
-    unit->tokens = malloc(sizeof(*unit->tokens) * tokenCapacity);
-    if (!unit->tokens) {
-        KekAddDiagnostic(&compilation->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_LEX,
-            sourceFile->fileIndex, (struct SourceLocation){0}, "could not allocate token storage");
-        goto fail;
-    }
-
-    struct KekLexOptions lexOptions = {0};
-    lexOptions.diagnostics = &compilation->diagnostics;
-    struct Tokenizer tokenizer = CreateTokenizerWithOptions(unit->fileIndex, &compilation->fileTable, lexOptions);
-    struct TokenArray tokens = TokenizeFile(&tokenizer, unit->tokens, tokenCapacity);
-
-    size_t astNodeCapacity = tokens.count * 4 + 1;
-    unit->astNodes = malloc(sizeof(*unit->astNodes) * astNodeCapacity);
-    if (!unit->astNodes) {
-        KekAddDiagnostic(&compilation->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_PARSE,
-            sourceFile->fileIndex, (struct SourceLocation){0}, "could not allocate AST storage");
-        goto fail;
-    }
-
-    struct Parser parser = {0};
-    parser.tokens = tokens.items;
-    parser.count = tokens.count;
-    parser.file = sourceFile;
-    parser.astNodes = unit->astNodes;
-    parser.astNodeCapacity = astNodeCapacity;
-    parser.diagnostics = &compilation->diagnostics;
-    unit->ast = ParseAst(&parser);
-
-    if (parser.errorCount > 0) {
-        goto fail;
-    }
-
-    size_t declCapacity = unit->ast->childCount + 1;
-    unit->decls = malloc(sizeof(*unit->decls) * declCapacity);
-    if (!unit->decls) {
-        KekAddDiagnostic(&compilation->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_TYPED_PARSE,
-            sourceFile->fileIndex, (struct SourceLocation){0}, "could not allocate typed declaration storage");
-        goto fail;
-    }
-
-    size_t typeCapacity = tokens.count + 1;
-    size_t exprCapacity = tokens.count * 2 + 1;
-    size_t stmtCapacity = tokens.count + 1;
-    size_t paramCapacity = tokens.count + 1;
-    size_t fieldCapacity = tokens.count + 1;
-    size_t variantCapacity = tokens.count + 1;
-    unit->types = malloc(sizeof(*unit->types) * typeCapacity);
-    unit->exprs = malloc(sizeof(*unit->exprs) * exprCapacity);
-    unit->stmts = malloc(sizeof(*unit->stmts) * stmtCapacity);
-    unit->params = malloc(sizeof(*unit->params) * paramCapacity);
-    unit->fields = malloc(sizeof(*unit->fields) * fieldCapacity);
-    unit->variants = malloc(sizeof(*unit->variants) * variantCapacity);
-    if (!unit->types || !unit->exprs || !unit->stmts || !unit->params || !unit->fields || !unit->variants) {
-        KekAddDiagnostic(&compilation->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_TYPED_PARSE,
-            sourceFile->fileIndex, (struct SourceLocation){0}, "could not allocate typed AST storage");
-        goto fail;
-    }
-
-    struct KekFrontend frontend = {
-        .decls = {unit->decls, 0, declCapacity, sizeof(*unit->decls)},
-        .types = {unit->types, 0, typeCapacity, sizeof(*unit->types)},
-        .exprs = {unit->exprs, 0, exprCapacity, sizeof(*unit->exprs)},
-        .stmts = {unit->stmts, 0, stmtCapacity, sizeof(*unit->stmts)},
-        .params = {unit->params, 0, paramCapacity, sizeof(*unit->params)},
-        .fields = {unit->fields, 0, fieldCapacity, sizeof(*unit->fields)},
-        .variants = {unit->variants, 0, variantCapacity, sizeof(*unit->variants)},
-        .diagnostics = &compilation->diagnostics,
-    };
-    unit->module = ParseKekModule(&frontend, unit->ast, sourceFile);
-    if (unit->module.errorCount > 0) {
-        goto fail;
-    }
-
-    struct Token* docTokens = malloc(sizeof(*docTokens) * tokenCapacity);
-    if (docTokens) {
-        struct KekLexOptions docOptions = {0};
-        docOptions.emitComments = 1;
-        docOptions.diagnostics = &compilation->diagnostics;
-        struct Tokenizer docTokenizer = CreateTokenizerWithOptions(unit->fileIndex, &compilation->fileTable, docOptions);
-        struct TokenArray docTokenArray = TokenizeFile(&docTokenizer, docTokens, tokenCapacity);
-        AttachKekDocComments(&unit->module, &docTokenArray, sourceFile);
-        free(docTokens);
-    }
-
-    return 0;
-
-fail:
-    FreeKekCompilationUnit(unit);
-    return -1;
-}
-
-int BuildKekCompilation(struct KekCompilation* compilation) {
-    if (!compilation || compilation->entryFileIndex < 0) {
-        return -1;
-    }
-
-    int result = 0;
-    for (size_t i = 0; i < compilation->fileTable.count; i++) {
-        if ((int)i == compilation->entryFileIndex) {
+void ast_SelfParseChildrenInto(struct SelfParser* parser,usize parentIndex,u64 closePunctuation) {
+    while (parser->position<parser->count&&!ast_IsAstTerminator(&parser->tokens[parser->position],closePunctuation)) {
+        if (ast_IsTriviaToken(&parser->tokens[parser->position])) {
+            parser->position+=1;
             continue;
         }
-        struct KekCompilationUnit* unit = &compilation->units[compilation->unitCount];
-        unit->fileIndex = (int)i;
-        if (ParseUnit(compilation, unit) != 0) {
-            result = -1;
-            break;
-        }
-        compilation->modules[compilation->unitCount] = unit->module;
-        compilation->unitCount++;
-    }
-
-    if (result == 0) {
-        struct KekCompilationUnit* unit = &compilation->units[compilation->unitCount];
-        unit->fileIndex = compilation->entryFileIndex;
-        if (ParseUnit(compilation, unit) != 0) {
-            result = -1;
+        usize previousPosition=parser->position;
+        usize statement=ast_SelfParseStatement(parser,closePunctuation);
+        if (parser->tree.nodes[statement].childCount>0) {
+            ast_SelfAddAstChild(&parser->tree,parentIndex,statement);
         } else {
-            compilation->modules[compilation->unitCount] = unit->module;
-            compilation->unitCount++;
-        }
-    }
-
-    if (result != 0) {
-        return -1;
-    }
-
-    size_t symbolCapacity = 1;
-    size_t scopeCapacity = 1 + compilation->unitCount;
-    for (size_t i = 0; i < compilation->unitCount; i++) {
-        symbolCapacity += compilation->modules[i].declCount * 2
-            + compilation->modules[i].paramCount
-            + compilation->modules[i].typedStmtCount
-            + 64;
-        scopeCapacity += compilation->modules[i].declKindCounts[KEK_DECL_FUNCTION]
-            + compilation->modules[i].stmtKindCounts[KEK_STMT_BLOCK]
-            + compilation->modules[i].stmtKindCounts[KEK_STMT_FOR]
-            + compilation->modules[i].stmtKindCounts[KEK_STMT_EACH];
-    }
-
-    compilation->symbols = malloc(sizeof(*compilation->symbols) * symbolCapacity);
-    compilation->scopes = malloc(sizeof(*compilation->scopes) * scopeCapacity);
-    if (!compilation->symbols || !compilation->scopes) {
-        KekAddDiagnostic(&compilation->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_SEMANTIC,
-            -1, (struct SourceLocation){0}, "could not allocate symbol storage");
-        return -1;
-    }
-
-    compilation->program.symbols = compilation->symbols;
-    compilation->program.symbolCapacity = symbolCapacity;
-    compilation->program.scopes = compilation->scopes;
-    compilation->program.scopeCapacity = scopeCapacity;
-    compilation->program.diagnostics = &compilation->diagnostics;
-    return BuildKekProgramSymbols(&compilation->program, compilation->modules, compilation->unitCount);
-}
-
-int WriteKekCompilationOutputs(struct KekCompilation* compilation, const char* cPath, const char* astJsonPath, const char* summaryPath) {
-    if (!compilation || compilation->unitCount == 0) {
-        return -1;
-    }
-
-    int result = WriteTypedCFileForModules(cPath, compilation->modules, compilation->unitCount);
-    if (result != 0) {
-        KekAddDiagnosticFormat(&compilation->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_CODEGEN,
-            -1, (struct SourceLocation){0}, "could not write C file %s", cPath);
-        return result;
-    }
-
-    struct KekCompilationUnit* entryUnit = &compilation->units[compilation->unitCount - 1];
-    result = WriteAstJsonFile(astJsonPath, entryUnit->ast, &compilation->fileTable.files[entryUnit->fileIndex]);
-    if (result != 0) {
-        KekAddDiagnosticFormat(&compilation->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_CODEGEN,
-            entryUnit->fileIndex, (struct SourceLocation){0}, "could not write AST JSON file %s", astJsonPath);
-        return result;
-    }
-
-    result = WriteKekModuleSummaryFile(summaryPath, compilation->modules, compilation->unitCount, &compilation->program);
-    if (result != 0) {
-        KekAddDiagnosticFormat(&compilation->diagnostics, KEK_DIAGNOSTIC_ERROR, KEK_PHASE_CODEGEN,
-            -1, (struct SourceLocation){0}, "could not write module summary file %s", summaryPath);
-    }
-    return result;
-}
-
-int CompileKekSmoke(const char* entryPath, const char* cPath, const char* astJsonPath, const char* summaryPath, struct KekCompilation* compilation) {
-    if (LoadKekCompilation(compilation, entryPath) != 0) {
-        return 1;
-    }
-    if (BuildKekCompilation(compilation) != 0) {
-        return 1;
-    }
-    return WriteKekCompilationOutputs(compilation, cPath, astJsonPath, summaryPath) == 0 ? 0 : 1;
-}
-
-static int IsOnlyWhitespace(struct SourceFile* file, size_t start, size_t end) {
-    if (!file || end > file->length || start > end) {
-        return 0;
-    }
-    for (size_t i = start; i < end; i++) {
-        if (!isspace((unsigned char)file->content[i])) {
-            return 0;
-        }
-    }
-    return 1;
-}
-
-void AttachKekDocComments(struct KekModule* module, struct TokenArray* tokens, struct SourceFile* file) {
-    if (!module || !tokens || !file) {
-        return;
-    }
-
-    for (struct KekDecl* decl = module->firstDecl; decl; decl = decl->next) {
-        struct Token* lastDoc = NULL;
-        size_t lastDocIndex = 0;
-        for (size_t i = 0; i < tokens->count; i++) {
-            struct Token* token = &tokens->items[i];
-            if (token->location.offset >= decl->location.offset) {
+            if (parser->position==previousPosition) {
                 break;
             }
-            if (token->type == TOKEN_DOC_COMMENT) {
-                lastDoc = token;
-                lastDocIndex = i;
+        }
+    }
+}
+usize ast_SelfParseDelimited(struct SelfParser* parser,SelfAstKind kind,u64 closePunctuation) {
+    struct Token open=parser->tokens[parser->position];
+    parser->position+=1;
+    usize node=ast_SelfCreateAstNode(parser,kind,ast_TokenLocation(open));
+    ast_SelfParseChildrenInto(parser,node,closePunctuation);
+    if (parser->position<parser->count&&parser->tokens[parser->position].kind==TokenKind_Punctuation&&parser->tokens[parser->position].subkind==closePunctuation) {
+        struct Token close=parser->tokens[parser->position];
+        parser->position+=1;
+        parser->tree.nodes[node].location=ast_TokenLocation(open);
+        parser->tree.nodes[node].location.length=(close.offset+close.length)-open.offset;
+    } else {
+        if (parser->position<parser->count) {
+            ast_SelfReportExpected(parser,&parser->tokens[parser->position],closePunctuation);
+            if (ast_IsClosingPunctuation(&parser->tokens[parser->position])) {
+                parser->position+=1;
             }
-        }
-
-        if (!lastDoc) {
-            continue;
-        }
-        size_t lastEnd = lastDoc->location.offset + lastDoc->location.length;
-        if (!IsOnlyWhitespace(file, lastEnd, decl->location.offset)) {
-            continue;
-        }
-
-        size_t firstDocIndex = lastDocIndex;
-        while (firstDocIndex > 0) {
-            struct Token* previous = &tokens->items[firstDocIndex - 1];
-            struct Token* current = &tokens->items[firstDocIndex];
-            if (previous->type != TOKEN_DOC_COMMENT) {
-                break;
-            }
-            size_t previousEnd = previous->location.offset + previous->location.length;
-            if (!IsOnlyWhitespace(file, previousEnd, current->location.offset)) {
-                break;
-            }
-            firstDocIndex--;
-        }
-
-        struct Token* firstDoc = &tokens->items[firstDocIndex];
-        decl->hasDocComment = 1;
-        decl->docCommentLocation = firstDoc->location;
-        decl->docCommentLocation.length = lastEnd - firstDoc->location.offset;
-    }
-}
-#undef IsOnlyWhitespace
-#undef ParseUnit
-#undef LoadImports
-#undef LoadImportDirectory
-#undef CompareImportNames
-#undef StdlibImportRank
-#undef FileAlreadyLoaded
-#undef EndsWith
-/* END compilation.c */
-
-/* BEGIN codegen_c.c */
-#define IsPunctuationToken codegen_c_IsPunctuationToken
-#define IsOperatorToken codegen_c_IsOperatorToken
-#define IsKeywordToken codegen_c_IsKeywordToken
-#define IsTokenNode codegen_c_IsTokenNode
-#define NextSibling codegen_c_NextSibling
-#define DecodeCharLiteral codegen_c_DecodeCharLiteral
-#define CTokenText codegen_c_CTokenText
-#define TokenTextEquals codegen_c_TokenTextEquals
-#define CopyTokenText codegen_c_CopyTokenText
-#define OperatorMangleName codegen_c_OperatorMangleName
-#define IsOperatorDeclName codegen_c_IsOperatorDeclName
-#define TypedDeclBaseName codegen_c_TypedDeclBaseName
-#define FindFunctionInfo codegen_c_FindFunctionInfo
-#define AddFunctionInfo codegen_c_AddFunctionInfo
-#define IsKnownStruct codegen_c_IsKnownStruct
-#define FindStructInfo codegen_c_FindStructInfo
-#define AddStructInfo codegen_c_AddStructInfo
-#define IsCIdentifierStart codegen_c_IsCIdentifierStart
-#define IsCIdentifierPart codegen_c_IsCIdentifierPart
-#define RegisterExternCStructs codegen_c_RegisterExternCStructs
-#define AddLocalTypeEx codegen_c_AddLocalTypeEx
-#define FindLocalType codegen_c_FindLocalType
-#define FindLocalIsPointer codegen_c_FindLocalIsPointer
-#define WriteIndent codegen_c_WriteIndent
-#define WritePrelude codegen_c_WritePrelude
-#define PackagePrefixFromPath codegen_c_PackagePrefixFromPath
-#define TypedNodeText codegen_c_TypedNodeText
-#define CopyTypedNodeText codegen_c_CopyTypedNodeText
-#define IsGenericNode codegen_c_IsGenericNode
-#define TypedTokenTextEquals codegen_c_TypedTokenTextEquals
-#define GenericArgNode codegen_c_GenericArgNode
-#define GenericParamName codegen_c_GenericParamName
-#define FindGenericSubstitution codegen_c_FindGenericSubstitution
-#define AppendSanitized codegen_c_AppendSanitized
-#define GenericArgTextFromFile codegen_c_GenericArgTextFromFile
-#define GenericArgText codegen_c_GenericArgText
-#define GenericArgMangleText codegen_c_GenericArgMangleText
-#define MangleGenericNameWithFiles codegen_c_MangleGenericNameWithFiles
-#define AppendGenericArgsToNameWithWriter codegen_c_AppendGenericArgsToNameWithWriter
-#define MangleGenericName codegen_c_MangleGenericName
-#define WriteSourceSlice codegen_c_WriteSourceSlice
-#define CopyExprSource codegen_c_CopyExprSource
-#define GenericParamIndex codegen_c_GenericParamIndex
-#define TypeDefaultsToAggregate codegen_c_TypeDefaultsToAggregate
-#define CopyTypedFieldDefaultWithContext codegen_c_CopyTypedFieldDefaultWithContext
-#define CopyTypedFieldDefault codegen_c_CopyTypedFieldDefault
-#define WriteTypedExpr codegen_c_WriteTypedExpr
-#define FindGenericDecl codegen_c_FindGenericDecl
-#define TypedDeclIsMethod codegen_c_TypedDeclIsMethod
-#define TypedDeclReceiverName codegen_c_TypedDeclReceiverName
-#define FindGenericInstance codegen_c_FindGenericInstance
-#define FindGenericInstanceByName codegen_c_FindGenericInstanceByName
-#define AddGenericStructInstance codegen_c_AddGenericStructInstance
-#define AddGenericFunctionInstance codegen_c_AddGenericFunctionInstance
-#define GenericStructInstanceName codegen_c_GenericStructInstanceName
-#define AddGenericMethodInstancesForStructs codegen_c_AddGenericMethodInstancesForStructs
-#define WriteTypedNonArrayTypeWithGenericContext codegen_c_WriteTypedNonArrayTypeWithGenericContext
-#define WriteTypedBaseTypeWithGenericContext codegen_c_WriteTypedBaseTypeWithGenericContext
-#define WriteTypedBaseType codegen_c_WriteTypedBaseType
-#define WriteTypedArraySuffix codegen_c_WriteTypedArraySuffix
-#define WriteTypedTypeAndNameWithGenericContext codegen_c_WriteTypedTypeAndNameWithGenericContext
-#define WriteTypedTypeAndName codegen_c_WriteTypedTypeAndName
-#define WriteTypedExprList codegen_c_WriteTypedExprList
-#define ExprCalleeNameEquals codegen_c_ExprCalleeNameEquals
-#define TypedCalleeName codegen_c_TypedCalleeName
-#define TypedNamedArgument codegen_c_TypedNamedArgument
-#define FindParameterIndex codegen_c_FindParameterIndex
-#define ExprIsThisName codegen_c_ExprIsThisName
-#define WriteTypedKnownCallArgs codegen_c_WriteTypedKnownCallArgs
-#define WriteTypedCall codegen_c_WriteTypedCall
-#define WriteTypedStructLiteral codegen_c_WriteTypedStructLiteral
-#define TypedExprLocalType codegen_c_TypedExprLocalType
-#define ExprOperatorMangle codegen_c_ExprOperatorMangle
-#define TryWriteTypedUnaryOperatorCall codegen_c_TryWriteTypedUnaryOperatorCall
-#define TryWriteTypedBinaryOperatorCall codegen_c_TryWriteTypedBinaryOperatorCall
-#define WriteTypedStatement codegen_c_WriteTypedStatement
-#define WriteTypedBlock codegen_c_WriteTypedBlock
-#define FirstTypedBlockChild codegen_c_FirstTypedBlockChild
-#define WriteDeferredStatement codegen_c_WriteDeferredStatement
-#define WriteDeferredRange codegen_c_WriteDeferredRange
-#define WriteAllActiveDefers codegen_c_WriteAllActiveDefers
-#define WriteTypedDeclStatement codegen_c_WriteTypedDeclStatement
-#define RegisterTypedStruct codegen_c_RegisterTypedStruct
-#define RegisterTypedFunction codegen_c_RegisterTypedFunction
-#define RegisterTypedFunctionWithName codegen_c_RegisterTypedFunctionWithName
-#define TypedFunctionName codegen_c_TypedFunctionName
-#define RegisterTypedDeclForCodegen codegen_c_RegisterTypedDeclForCodegen
-#define AttributeListContains codegen_c_AttributeListContains
-#define GetAlignedValue codegen_c_GetAlignedValue
-#define TypedDeclHasAttribute codegen_c_TypedDeclHasAttribute
-#define TypedDeclGetAlignedValue codegen_c_TypedDeclGetAlignedValue
-#define WriteTypedParams codegen_c_WriteTypedParams
-#define WriteTypedFunctionSignature codegen_c_WriteTypedFunctionSignature
-#define WriteTypedGenericStructInstance codegen_c_WriteTypedGenericStructInstance
-#define WriteTypedGenericFunctionSignature codegen_c_WriteTypedGenericFunctionSignature
-#define WriteTypedGenericFunctionInstance codegen_c_WriteTypedGenericFunctionInstance
-#define WriteTypedDecl codegen_c_WriteTypedDecl
-#define CollectGenericTypeUse codegen_c_CollectGenericTypeUse
-#define CollectGenericExprUses codegen_c_CollectGenericExprUses
-#define CollectGenericStmtUses codegen_c_CollectGenericStmtUses
-#define CollectGenericDeclUses codegen_c_CollectGenericDeclUses
-#define IsTypedTypeDecl codegen_c_IsTypedTypeDecl
-
-struct CFunctionInfo {
-    char name[64];
-    char paramNames[16][64];
-    char defaults[16][64];
-    size_t paramCount;
-};
-
-struct CStructInfo {
-    char name[64];
-    char fieldNames[64][64];
-    char defaults[64][64];
-    int fieldIsAggregate[64];
-    size_t fieldCount;
-};
-
-struct CGenericInstance {
-    struct KekDecl* decl;
-    struct AstNode* args;
-    struct SourceFile* declFile;
-    struct SourceFile* argsFile;
-    char name[128];
-};
-
-struct CWriter {
-    FILE* out;
-    struct SourceFile* file;
-    int indent;
-    struct CFunctionInfo functions[256];
-    size_t functionCount;
-    struct CStructInfo structs[128];
-    size_t structCount;
-    struct CGenericInstance genericStructs[128];
-    size_t genericStructCount;
-    struct CGenericInstance genericFunctions[128];
-    size_t genericFunctionCount;
-    char localNames[128][64];
-    char localTypes[128][64];
-    int localIsPointer[128];
-    size_t localCount;
-    int thisIsPointer;
-    struct AstNode* genericParams;
-    struct AstNode* genericArgs;
-    struct SourceFile* genericArgFile;
-    char namespacePrefix[64];
-    struct KekStmt* deferred[128];
-    size_t deferCount;
-    int eachIndexCounter;
-};
-
-static int IsPunctuationToken(struct Token* token, enum PunctuationType punctuation) {
-    return token->type == TOKEN_PUNCTUATION && token->value.punctuation == punctuation;
-}
-
-static int IsOperatorToken(struct Token* token, enum OperatorType operator) {
-    return token->type == TOKEN_OPERATOR && token->value.operator == operator;
-}
-
-static int IsKeywordToken(struct Token* token, enum KeywordType keyword) {
-    return token->type == TOKEN_KEYWORD && token->value.keyword == keyword;
-}
-
-static int IsTokenNode(struct AstNode* node) {
-    return node && node->type == AST_TOKEN;
-}
-
-static struct AstNode* NextSibling(struct AstNode* node) {
-    return node ? node->nextSibling : NULL;
-}
-
-static unsigned int DecodeCharLiteral(struct Token* token, struct SourceFile* file) {
-    if (!token || !file || token->location.length < 2) {
-        return 0;
-    }
-
-    size_t start = token->location.offset;
-    size_t end = start + token->location.length;
-    if (end > file->length || file->content[start] != '\'') {
-        return 0;
-    }
-
-    size_t cursor = start + 1;
-    if (cursor >= end) {
-        return 0;
-    }
-
-    unsigned char value = (unsigned char)file->content[cursor];
-    if (value == '\\' && cursor + 1 < end) {
-        cursor++;
-        switch (file->content[cursor]) {
-            case '0':
-                value = '\0';
-                break;
-            case 'n':
-                value = '\n';
-                break;
-            case 'r':
-                value = '\r';
-                break;
-            case 't':
-                value = '\t';
-                break;
-            case '\'':
-                value = '\'';
-                break;
-            case '"':
-                value = '"';
-                break;
-            case '\\':
-                value = '\\';
-                break;
-            default:
-                value = (unsigned char)file->content[cursor];
-                break;
-        }
-    }
-    return (unsigned int)value;
-}
-
-static const char* CTokenText(struct Token* token, struct SourceFile* file, char* buffer, size_t bufferSize) {
-    if (token->type == TOKEN_CHAR) {
-        snprintf(buffer, bufferSize, "%u", DecodeCharLiteral(token, file));
-        return buffer;
-    }
-
-    if (token->type == TOKEN_IDENTIFIER || token->type == TOKEN_NUMBER || token->type == TOKEN_STRING) {
-        size_t length = token->location.length;
-        if (length >= bufferSize) {
-            length = bufferSize - 1;
-        }
-        memcpy(buffer, file->content + token->location.offset, length);
-        buffer[length] = '\0';
-
-        // Handle number literal normalization for C compatibility
-        if (token->type == TOKEN_NUMBER && length > 0) {
-            // Strip underscores from numeric literals
-            char* src = buffer;
-            char* dst = buffer;
-            while (*src) {
-                if (*src != '_') {
-                    *dst++ = *src;
-                }
-                src++;
-            }
-            *dst = '\0';
-
-            // Convert binary literals (0b...) to hex for C11 compatibility
-            if (buffer[0] == '0' && (buffer[1] == 'b' || buffer[1] == 'B')) {
-                unsigned long long value = 0;
-                char* p = buffer + 2;
-                while (*p == '0' || *p == '1') {
-                    value = (value << 1) | (*p - '0');
-                    p++;
-                }
-                snprintf(buffer, bufferSize, "0x%llX", value);
-            }
-        }
-
-        return buffer;
-    }
-
-    if (token->type == TOKEN_KEYWORD && token->value.keyword == KEYWORD_TRUE) {
-        return "1";
-    }
-
-    if (token->type == TOKEN_KEYWORD && token->value.keyword == KEYWORD_FALSE) {
-        return "0";
-    }
-
-    return TokenLexeme(token, file);
-}
-
-static int TokenTextEquals(struct Token* token, struct SourceFile* file, const char* text) {
-    size_t length = strlen(text);
-    const char* lexeme = TokenLexeme(token, file);
-    return lexeme && strlen(lexeme) == length && strcmp(lexeme, text) == 0;
-}
-
-static void CopyTokenText(struct Token* token, struct SourceFile* file, char* buffer, size_t bufferSize) {
-    const char* text = CTokenText(token, file, buffer, bufferSize);
-    if (text != buffer) {
-        snprintf(buffer, bufferSize, "%s", text);
-    }
-}
-
-static const char* OperatorMangleName(enum OperatorType operator) {
-    switch (operator) {
-        case OPERATOR_EQUAL:
-            return "operator_equal";
-        case OPERATOR_NOT_EQUAL:
-            return "operator_not_equal";
-        case OPERATOR_LESS_EQUAL:
-            return "operator_less_equal";
-        case OPERATOR_GREATER_EQUAL:
-            return "operator_greater_equal";
-        case OPERATOR_LOGICAL_AND:
-            return "operator_logical_and";
-        case OPERATOR_LOGICAL_OR:
-            return "operator_logical_or";
-        case OPERATOR_PLUS_ASSIGN:
-            return "operator_plus_assign";
-        case OPERATOR_MINUS_ASSIGN:
-            return "operator_minus_assign";
-        case OPERATOR_ARROW:
-            return "operator_arrow";
-        case OPERATOR_PLUS:
-            return "operator_plus";
-        case OPERATOR_MINUS:
-            return "operator_minus";
-        case OPERATOR_MULTIPLY:
-            return "operator_multiply";
-        case OPERATOR_DIVIDE:
-            return "operator_divide";
-        case OPERATOR_MODULO:
-            return "operator_modulo";
-        case OPERATOR_LESS:
-            return "operator_less";
-        case OPERATOR_GREATER:
-            return "operator_greater";
-        case OPERATOR_LOGICAL_NOT:
-            return "operator_logical_not";
-        case OPERATOR_BITWISE_AND:
-            return "operator_bitwise_and";
-        case OPERATOR_BITWISE_OR:
-            return "operator_bitwise_or";
-        case OPERATOR_BITWISE_NOT:
-            return "operator_bitwise_not";
-        case OPERATOR_SCOPE:
-        case OPERATOR_ASSIGN:
-        case OPERATOR_COUNT:
-            return NULL;
-    }
-    return NULL;
-}
-
-static int IsOperatorDeclName(struct AstNode* node) {
-    return IsTokenNode(node)
-        && node->token.type == TOKEN_OPERATOR
-        && node->token.value.operator != OPERATOR_SCOPE
-        && node->token.value.operator != OPERATOR_ASSIGN;
-}
-
-static void TypedDeclBaseName(struct CWriter* writer, struct KekDecl* decl, char* buffer, size_t bufferSize) {
-    if (!decl || !decl->name || bufferSize == 0) {
-        if (bufferSize > 0) {
-            buffer[0] = '\0';
-        }
-        return;
-    }
-    if (IsOperatorDeclName(decl->name)) {
-        const char* name = OperatorMangleName(decl->name->token.value.operator);
-        size_t count = 0;
-        for (struct KekParam* param = decl->firstParam; param; param = param->next) {
-            count++;
-        }
-        snprintf(buffer, bufferSize, "%s_%zu", name ? name : "operator_unknown", count);
-        return;
-    }
-    CopyTokenText(&decl->name->token, writer->file, buffer, bufferSize);
-}
-
-static struct CFunctionInfo* FindFunctionInfo(struct CWriter* writer, const char* name) {
-    for (size_t i = 0; i < writer->functionCount; i++) {
-        if (strcmp(writer->functions[i].name, name) == 0) {
-            return &writer->functions[i];
-        }
-    }
-    return NULL;
-}
-
-static struct CFunctionInfo* AddFunctionInfo(struct CWriter* writer, const char* name) {
-    struct CFunctionInfo* function = FindFunctionInfo(writer, name);
-    if (function) {
-        function->paramCount = 0;
-        memset(function->paramNames, 0, sizeof(function->paramNames));
-        memset(function->defaults, 0, sizeof(function->defaults));
-        return function;
-    }
-
-    if (writer->functionCount >= sizeof(writer->functions) / sizeof(writer->functions[0])) {
-        return NULL;
-    }
-
-    function = &writer->functions[writer->functionCount++];
-    memset(function, 0, sizeof(*function));
-    snprintf(function->name, sizeof(function->name), "%s", name);
-    return function;
-}
-
-static int IsKnownStruct(struct CWriter* writer, const char* name) {
-    for (size_t i = 0; i < writer->structCount; i++) {
-        if (strcmp(writer->structs[i].name, name) == 0) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-static struct CStructInfo* FindStructInfo(struct CWriter* writer, const char* name) {
-    for (size_t i = 0; i < writer->structCount; i++) {
-        if (strcmp(writer->structs[i].name, name) == 0) {
-            return &writer->structs[i];
-        }
-    }
-    return NULL;
-}
-
-static struct CStructInfo* AddStructInfo(struct CWriter* writer, const char* name) {
-    struct CStructInfo* info = FindStructInfo(writer, name);
-    if (info) {
-        info->fieldCount = 0;
-        memset(info->fieldNames, 0, sizeof(info->fieldNames));
-        memset(info->defaults, 0, sizeof(info->defaults));
-        return info;
-    }
-
-    if (writer->structCount >= sizeof(writer->structs) / sizeof(writer->structs[0])) {
-        return NULL;
-    }
-
-    info = &writer->structs[writer->structCount++];
-    memset(info, 0, sizeof(*info));
-    snprintf(info->name, sizeof(info->name), "%s", name);
-    return info;
-}
-
-static int IsCIdentifierStart(char c) {
-    return isalpha((unsigned char)c) || c == '_';
-}
-
-static int IsCIdentifierPart(char c) {
-    return isalnum((unsigned char)c) || c == '_';
-}
-
-static void RegisterExternCStructs(struct CWriter* writer, struct KekDecl* decl) {
-    if (!writer || !decl || !decl->body || !writer->file || decl->body->location.length < 2) {
-        return;
-    }
-
-    size_t start = decl->body->location.offset + 1;
-    size_t end = decl->body->location.offset + decl->body->location.length - 1;
-    const char* content = writer->file->content;
-    const char keyword[] = "struct";
-    const size_t keywordLength = sizeof(keyword) - 1;
-
-    for (size_t i = start; i + keywordLength < end; i++) {
-        if (strncmp(content + i, keyword, keywordLength) != 0) {
-            continue;
-        }
-        if (i > start && IsCIdentifierPart(content[i - 1])) {
-            continue;
-        }
-        if (i + keywordLength < end && IsCIdentifierPart(content[i + keywordLength])) {
-            continue;
-        }
-
-        size_t nameStart = i + keywordLength;
-        while (nameStart < end && isspace((unsigned char)content[nameStart])) {
-            nameStart++;
-        }
-        if (nameStart >= end || !IsCIdentifierStart(content[nameStart])) {
-            continue;
-        }
-
-        size_t nameEnd = nameStart + 1;
-        while (nameEnd < end && IsCIdentifierPart(content[nameEnd])) {
-            nameEnd++;
-        }
-
-        char name[64];
-        size_t length = nameEnd - nameStart;
-        if (length >= sizeof(name)) {
-            length = sizeof(name) - 1;
-        }
-        memcpy(name, content + nameStart, length);
-        name[length] = '\0';
-        (void)AddStructInfo(writer, name);
-        i = nameEnd;
-    }
-}
-
-static void AddLocalTypeEx(struct CWriter* writer, const char* name, const char* type, int isPointer) {
-    for (size_t i = 0; i < writer->localCount; i++) {
-        if (strcmp(writer->localNames[i], name) == 0) {
-            snprintf(writer->localTypes[i], sizeof(writer->localTypes[i]), "%s", type);
-            writer->localIsPointer[i] = isPointer;
-            return;
-        }
-    }
-
-    if (writer->localCount >= sizeof(writer->localNames) / sizeof(writer->localNames[0])) {
-        return;
-    }
-
-    snprintf(writer->localNames[writer->localCount], sizeof(writer->localNames[0]), "%s", name);
-    snprintf(writer->localTypes[writer->localCount], sizeof(writer->localTypes[0]), "%s", type);
-    writer->localIsPointer[writer->localCount] = isPointer;
-    writer->localCount++;
-}
-
-static const char* FindLocalType(struct CWriter* writer, const char* name) {
-    for (size_t i = writer->localCount; i > 0; i--) {
-        if (strcmp(writer->localNames[i - 1], name) == 0) {
-            return writer->localTypes[i - 1];
-        }
-    }
-    return NULL;
-}
-
-static int FindLocalIsPointer(struct CWriter* writer, const char* name) {
-    for (size_t i = writer->localCount; i > 0; i--) {
-        if (strcmp(writer->localNames[i - 1], name) == 0) {
-            return writer->localIsPointer[i - 1];
-        }
-    }
-    return 0;
-}
-
-static void WriteIndent(FILE* out, int indent) {
-    for (int i = 0; i < indent; i++) {
-        fputs("    ", out);
-    }
-}
-
-static void WritePrelude(FILE* out) {
-    fputs("#include <assert.h>\n", out);
-    fputs("#include <stdint.h>\n", out);
-    fputs("#include <stddef.h>\n\n", out);
-    fputs("#include <stdbool.h>\n\n", out);
-    fputs("typedef uint8_t u8;\n", out);
-    fputs("typedef uint16_t u16;\n", out);
-    fputs("typedef uint32_t u32;\n", out);
-    fputs("typedef uint64_t u64;\n", out);
-    fputs("typedef int8_t i8;\n", out);
-    fputs("typedef int16_t i16;\n", out);
-    fputs("typedef int32_t i32;\n", out);
-    fputs("typedef int64_t i64;\n", out);
-    fputs("typedef float f32;\n", out);
-    fputs("typedef double f64;\n", out);
-    fputs("typedef void* ptr;\n", out);
-    fputs("typedef const char* str;\n\n", out);
-}
-
-static void PackagePrefixFromPath(const char* path, char* buffer, size_t bufferSize) {
-    const char* slash = strrchr(path, '/');
-    if (!slash) {
-        buffer[0] = '\0';
-        return;
-    }
-
-    const char* end = slash;
-    const char* start = end;
-    while (start > path && start[-1] != '/') {
-        start--;
-    }
-
-    size_t length = (size_t)(end - start);
-    if (length == 0 || length + 1 >= bufferSize) {
-        buffer[0] = '\0';
-        return;
-    }
-
-    memcpy(buffer, start, length);
-    buffer[length] = '_';
-    buffer[length + 1] = '\0';
-}
-
-static const char* TypedNodeText(struct CWriter* writer, struct AstNode* node, char* buffer, size_t bufferSize) {
-    if (!node || !IsTokenNode(node)) {
-        if (bufferSize > 0) {
-            buffer[0] = '\0';
-        }
-        return buffer;
-    }
-    return CTokenText(&node->token, writer->file, buffer, bufferSize);
-}
-
-static void CopyTypedNodeText(struct CWriter* writer, struct AstNode* node, char* buffer, size_t bufferSize) {
-    const char* text = TypedNodeText(writer, node, buffer, bufferSize);
-    if (text != buffer) {
-        snprintf(buffer, bufferSize, "%s", text);
-    }
-}
-
-static int IsGenericNode(struct AstNode* node) {
-    return node && node->type == AST_GENERIC;
-}
-
-static int TypedTokenTextEquals(struct CWriter* writer, struct AstNode* node, const char* text) {
-    size_t length = strlen(text);
-    return node
-        && IsTokenNode(node)
-        && (node->token.type == TOKEN_IDENTIFIER || node->token.type == TOKEN_NUMBER || node->token.type == TOKEN_STRING)
-        && node->token.location.length == length
-        && strncmp(writer->file->content + node->token.location.offset, text, length) == 0;
-}
-
-static struct AstNode* GenericArgNode(struct AstNode* args, size_t index) {
-    if (!IsGenericNode(args)) {
-        return NULL;
-    }
-    struct AstNode* arg = args->firstChild;
-    while (arg && index > 0) {
-        arg = arg->nextSibling;
-        index--;
-    }
-    return arg ? arg->firstChild : NULL;
-}
-
-static struct AstNode* GenericParamName(struct AstNode* params, size_t index) {
-    struct AstNode* param = GenericArgNode(params, index);
-    if (!param) {
-        return NULL;
-    }
-    if (param->type == AST_INDEX) {
-        param = param->nextSibling;
-    }
-    if (!param) {
-        return NULL;
-    }
-    if (param->nextSibling && IsPunctuationToken(&param->nextSibling->token, PUNCTUATION_COLON)) {
-        return param->nextSibling->nextSibling;
-    }
-    return param;
-}
-
-static struct AstNode* FindGenericSubstitution(struct CWriter* writer, struct AstNode* params, struct AstNode* args, struct AstNode* name) {
-    if (!name || !IsGenericNode(params) || !IsGenericNode(args)) {
-        return NULL;
-    }
-    size_t index = 0;
-    for (struct AstNode* param = params->firstChild; param; param = param->nextSibling, index++) {
-        struct AstNode* paramName = GenericParamName(params, index);
-        if (paramName && TypedTokenTextEquals(writer, name, TypedNodeText(writer, paramName, (char[128]){0}, 128))) {
-            return GenericArgNode(args, index);
-        }
-    }
-    return NULL;
-}
-
-static void AppendSanitized(char* buffer, size_t bufferSize, const char* text) {
-    size_t length = strlen(buffer);
-    for (const char* cursor = text; *cursor && length + 1 < bufferSize; cursor++) {
-        char ch = *cursor;
-        if (isalnum((unsigned char)ch) || ch == '_') {
-            buffer[length++] = ch;
-        } else if (length == 0 || buffer[length - 1] != '_') {
-            buffer[length++] = '_';
-        }
-    }
-    buffer[length] = '\0';
-}
-
-static void GenericArgTextFromFile(struct SourceFile* file, struct AstNode* arg, char* buffer, size_t bufferSize) {
-    if (bufferSize == 0) {
-        return;
-    }
-    buffer[0] = '\0';
-    if (!file || !arg) {
-        return;
-    }
-    size_t length = arg->location.length;
-    if (length >= bufferSize) {
-        length = bufferSize - 1;
-    }
-    memcpy(buffer, file->content + arg->location.offset, length);
-    buffer[length] = '\0';
-}
-
-static void GenericArgText(struct CWriter* writer, struct AstNode* arg, char* buffer, size_t bufferSize) {
-    GenericArgTextFromFile(writer->genericArgFile ? writer->genericArgFile : writer->file, arg, buffer, bufferSize);
-}
-
-static void GenericArgMangleText(struct CWriter* writer, struct SourceFile* argsFile, struct AstNode* arg, char* buffer, size_t bufferSize) {
-    struct AstNode* substitution = arg && IsTokenNode(arg)
-        ? FindGenericSubstitution(writer, writer->genericParams, writer->genericArgs, arg)
-        : NULL;
-    if (substitution) {
-        GenericArgText(writer, substitution, buffer, bufferSize);
-        return;
-    }
-    if (arg && IsTokenNode(arg) && IsGenericNode(arg->nextSibling)) {
-        char part[128];
-        struct SourceFile* previousFile = writer->file;
-        writer->file = argsFile ? argsFile : writer->file;
-        CopyTypedNodeText(writer, arg, buffer, bufferSize);
-        writer->file = previousFile;
-        for (struct AstNode* child = arg->nextSibling->firstChild; child; child = child->nextSibling) {
-            AppendSanitized(buffer, bufferSize, "__");
-            GenericArgMangleText(writer, argsFile, child->firstChild, part, sizeof(part));
-            AppendSanitized(buffer, bufferSize, part);
-        }
-        return;
-    }
-    GenericArgTextFromFile(argsFile ? argsFile : writer->file, arg, buffer, bufferSize);
-}
-
-static void MangleGenericNameWithFiles(struct CWriter* writer, struct SourceFile* baseFile, struct AstNode* baseName, struct SourceFile* argsFile, struct AstNode* args, char* buffer, size_t bufferSize) {
-    char part[128];
-    struct SourceFile* previousFile = writer->file;
-    buffer[0] = '\0';
-    writer->file = baseFile ? baseFile : previousFile;
-    CopyTypedNodeText(writer, baseName, part, sizeof(part));
-    writer->file = previousFile;
-    AppendSanitized(buffer, bufferSize, part);
-    for (struct AstNode* arg = IsGenericNode(args) ? args->firstChild : NULL; arg; arg = arg->nextSibling) {
-        AppendSanitized(buffer, bufferSize, "__");
-        GenericArgMangleText(writer, argsFile ? argsFile : previousFile, arg->firstChild, part, sizeof(part));
-        AppendSanitized(buffer, bufferSize, part);
-    }
-}
-
-static void AppendGenericArgsToNameWithWriter(struct CWriter* writer, struct SourceFile* argsFile, struct AstNode* args, char* buffer, size_t bufferSize) {
-    char part[128];
-    for (struct AstNode* arg = IsGenericNode(args) ? args->firstChild : NULL; arg; arg = arg->nextSibling) {
-        AppendSanitized(buffer, bufferSize, "__");
-        GenericArgMangleText(writer, argsFile, arg->firstChild, part, sizeof(part));
-        AppendSanitized(buffer, bufferSize, part);
-    }
-}
-
-static void MangleGenericName(struct CWriter* writer, struct AstNode* baseName, struct AstNode* args, char* buffer, size_t bufferSize) {
-    MangleGenericNameWithFiles(writer, writer->file, baseName, writer->file, args, buffer, bufferSize);
-}
-
-static void WriteSourceSlice(FILE* out, struct SourceFile* file, struct SourceLocation location) {
-    if (!file || location.offset >= file->length) {
-        return;
-    }
-    size_t length = location.length;
-    if (location.offset + length > file->length) {
-        length = file->length - location.offset;
-    }
-    fwrite(file->content + location.offset, 1, length, out);
-}
-
-static void CopyExprSource(struct CWriter* writer, struct KekExpr* expr, char* buffer, size_t bufferSize) {
-    if (bufferSize == 0) {
-        return;
-    }
-    buffer[0] = '\0';
-    if (!expr || !expr->source || !writer->file) {
-        return;
-    }
-    size_t length = expr->source->location.length;
-    if (length >= bufferSize) {
-        length = bufferSize - 1;
-    }
-    memcpy(buffer, writer->file->content + expr->source->location.offset, length);
-    buffer[length] = '\0';
-}
-
-static int GenericParamIndex(struct CWriter* writer, struct AstNode* params, struct AstNode* name) {
-    if (!name || !IsGenericNode(params)) {
-        return -1;
-    }
-
-    int index = 0;
-    for (struct AstNode* param = params->firstChild; param; param = param->nextSibling, index++) {
-        struct AstNode* paramName = GenericParamName(params, (size_t)index);
-        char buffer[128];
-        if (paramName && TypedTokenTextEquals(writer, name, TypedNodeText(writer, paramName, buffer, sizeof(buffer)))) {
-            return index;
-        }
-    }
-
-    return -1;
-}
-
-static int TypeDefaultsToAggregate(struct CWriter* writer, struct KekType* type, struct AstNode* params, struct AstNode* args, struct SourceFile* argsFile) {
-    if (!type) {
-        return 0;
-    }
-    if (type->kind == KEK_TYPE_ARRAY) {
-        return 1;
-    }
-    if (type->kind == KEK_TYPE_POINTER) {
-        return 0;
-    }
-
-    struct KekType* base = type;
-    while (base && base->kind == KEK_TYPE_ARRAY) {
-        base = base->element;
-    }
-    if (!base || !base->name) {
-        return 0;
-    }
-
-    int paramIndex = GenericParamIndex(writer, params, base->name);
-    if (paramIndex >= 0) {
-        struct AstNode* arg = GenericArgNode(args, (size_t)paramIndex);
-        if (!arg) {
-            return 0;
-        }
-        char argName[128];
-        if (arg && IsTokenNode(arg) && IsGenericNode(arg->nextSibling)) {
-            MangleGenericNameWithFiles(writer, argsFile, arg, argsFile, arg->nextSibling, argName, sizeof(argName));
         } else {
-            GenericArgTextFromFile(argsFile ? argsFile : writer->file, arg, argName, sizeof(argName));
+            ast_SelfReportParseError(parser,&open,"unterminated delimiter");
         }
-        return IsKnownStruct(writer, argName);
     }
-
-    char typeName[128];
-    CopyTypedNodeText(writer, base->name, typeName, sizeof(typeName));
-    return IsKnownStruct(writer, typeName);
+    if (parser->tree.nodes[node].childCount>0&&parser->tree.nodes[node].location.length==open.length) {
+        ast_SelfFinishLocationFromChildren(&parser->tree,node);
+        parser->tree.nodes[node].location.offset=open.offset;
+        parser->tree.nodes[node].location.line=open.line;
+        parser->tree.nodes[node].location.column=open.column;
+    }
+    return (node);
 }
-
-static void CopyTypedFieldDefaultWithContext(struct CWriter* writer, struct KekField* field, struct AstNode* params, struct AstNode* args, struct SourceFile* argsFile, char* buffer, size_t bufferSize, int* isAggregate) {
-    if (isAggregate) {
-        *isAggregate = 0;
-    }
-    if (field && field->isNestedStruct) {
-        if (isAggregate) {
-            *isAggregate = 1;
+usize ast_SelfParseGenericDelimited(struct SelfParser* parser) {
+    struct Token open=parser->tokens[parser->position];
+    parser->position+=1;
+    usize node=ast_SelfCreateAstNode(parser,SelfAstKind_Generic,ast_TokenLocation(open));
+    while (parser->position<parser->count&&!ast_IsGenericTerminator(&parser->tokens[parser->position])) {
+        if (ast_IsTriviaToken(&parser->tokens[parser->position])) {
+            parser->position+=1;
+            continue;
         }
-        snprintf(buffer, bufferSize, "{0}");
-        return;
-    }
-
-    if (field && field->defaultValue) {
-        CopyExprSource(writer, field->defaultValue, buffer, bufferSize);
-        return;
-    }
-
-    int aggregate = TypeDefaultsToAggregate(writer, field ? field->type : NULL, params, args, argsFile);
-    if (isAggregate) {
-        *isAggregate = aggregate;
-    }
-    snprintf(buffer, bufferSize, "%s", aggregate ? "{0}" : "0");
-}
-
-static void CopyTypedFieldDefault(struct CWriter* writer, struct KekField* field, char* buffer, size_t bufferSize, int* isAggregate) {
-    CopyTypedFieldDefaultWithContext(writer, field, NULL, NULL, NULL, buffer, bufferSize, isAggregate);
-}
-
-static void WriteTypedExpr(struct CWriter* writer, struct KekExpr* expr);
-
-static struct KekDecl* FindGenericDecl(struct KekModule* modules, size_t count, enum KekDeclKind kind, const char* name, struct SourceFile** fileOut) {
-    for (size_t i = 0; i < count; i++) {
-        for (struct KekDecl* decl = modules[i].firstDecl; decl; decl = decl->next) {
-            if (decl->kind != kind || !decl->genericParams || !decl->name) {
+        usize statement=ast_SelfCreateAstNode(parser,SelfAstKind_Statement,ast_TokenLocation(parser->tokens[parser->position]));
+        while (parser->position<parser->count&&!ast_IsGenericTerminator(&parser->tokens[parser->position])) {
+            struct Token* token=&parser->tokens[parser->position];
+            if (ast_IsTriviaToken(token)) {
+                parser->position+=1;
                 continue;
             }
-            struct SourceFile* file = modules[i].file;
-            if (!file || decl->name->token.location.length != strlen(name)) {
+            if (ast_IsPunctuationToken(token,PunctuationKind_Comma)) {
+                parser->position+=1;
+                break;
+            }
+            if (ast_IsPunctuationToken(token,PunctuationKind_LeftParen)) {
+                ast_SelfAddAstChild(&parser->tree,statement,ast_SelfParseDelimited(parser,SelfAstKind_Group,((u64)(PunctuationKind_RightParen))));
                 continue;
             }
-            if (strncmp(file->content + decl->name->token.location.offset, name, decl->name->token.location.length) == 0) {
-                if (fileOut) {
-                    *fileOut = file;
-                }
-                return decl;
+            if (ast_IsPunctuationToken(token,PunctuationKind_LeftBracket)) {
+                ast_SelfAddAstChild(&parser->tree,statement,ast_SelfParseDelimited(parser,SelfAstKind_Index,((u64)(PunctuationKind_RightBracket))));
+                continue;
             }
+            if (ast_SelfShouldParseGenericList(parser,parser->tree.nodes[statement].lastChild)) {
+                ast_SelfAddAstChild(&parser->tree,statement,ast_SelfParseGenericDelimited(parser));
+                continue;
+            }
+            ast_SelfAddAstChild(&parser->tree,statement,ast_SelfParseTokenNode(parser));
+        }
+        ast_SelfFinishLocationFromChildren(&parser->tree,statement);
+        if (parser->tree.nodes[statement].childCount>0) {
+            ast_SelfAddAstChild(&parser->tree,node,statement);
         }
     }
-    if (fileOut) {
-        *fileOut = NULL;
-    }
-    return NULL;
-}
-
-static int TypedDeclIsMethod(struct KekDecl* decl);
-static struct AstNode* TypedDeclReceiverName(struct KekDecl* decl);
-
-static struct CGenericInstance* FindGenericInstance(struct CGenericInstance* instances, size_t count, struct KekDecl* decl, struct AstNode* args) {
-    for (size_t i = 0; i < count; i++) {
-        if (instances[i].decl == decl && instances[i].args == args) {
-            return &instances[i];
-        }
-    }
-    return NULL;
-}
-
-static struct CGenericInstance* FindGenericInstanceByName(struct CGenericInstance* instances, size_t count, const char* name) {
-    for (size_t i = 0; i < count; i++) {
-        if (strcmp(instances[i].name, name) == 0) {
-            return &instances[i];
-        }
-    }
-    return NULL;
-}
-
-static void AddGenericStructInstance(struct CWriter* writer, struct KekDecl* decl, struct SourceFile* declFile, struct AstNode* args, struct SourceFile* argsFile) {
-    if (!decl || !args || FindGenericInstance(writer->genericStructs, writer->genericStructCount, decl, args)
-        || writer->genericStructCount >= sizeof(writer->genericStructs) / sizeof(writer->genericStructs[0])) {
-        return;
-    }
-
-    char instanceName[128];
-    MangleGenericNameWithFiles(writer, declFile, decl->name, argsFile, args, instanceName, sizeof(instanceName));
-    if (FindGenericInstanceByName(writer->genericStructs, writer->genericStructCount, instanceName)) {
-        return;
-    }
-
-    struct CGenericInstance* instance = &writer->genericStructs[writer->genericStructCount++];
-    memset(instance, 0, sizeof(*instance));
-    instance->decl = decl;
-    instance->args = args;
-    instance->declFile = declFile;
-    instance->argsFile = argsFile;
-    snprintf(instance->name, sizeof(instance->name), "%s", instanceName);
-    struct CStructInfo* info = AddStructInfo(writer, instance->name);
-    if (info) {
-        struct SourceFile* previousFile = writer->file;
-        writer->file = declFile ? declFile : previousFile;
-        for (struct KekField* field = decl->firstField; field && info->fieldCount < 64; field = field->next) {
-            CopyTypedNodeText(writer, field->name, info->fieldNames[info->fieldCount], sizeof(info->fieldNames[info->fieldCount]));
-            CopyTypedFieldDefaultWithContext(writer,
-                field,
-                decl->genericParams,
-                args,
-                argsFile,
-                info->defaults[info->fieldCount],
-                sizeof(info->defaults[info->fieldCount]),
-                &info->fieldIsAggregate[info->fieldCount]);
-            info->fieldCount++;
-        }
-        writer->file = previousFile;
-    }
-}
-
-static void AddGenericFunctionInstance(struct CWriter* writer, struct KekDecl* decl, struct SourceFile* declFile, struct AstNode* args, struct SourceFile* argsFile) {
-    if (!decl || !args || FindGenericInstance(writer->genericFunctions, writer->genericFunctionCount, decl, args)
-        || writer->genericFunctionCount >= sizeof(writer->genericFunctions) / sizeof(writer->genericFunctions[0])) {
-        return;
-    }
-
-    char instanceName[128];
-    if (TypedDeclIsMethod(decl)) {
-        char receiver[128];
-        MangleGenericNameWithFiles(writer, declFile, TypedDeclReceiverName(decl), argsFile, args, receiver, sizeof(receiver));
-        char method[64];
-        struct SourceFile* previousFile = writer->file;
-        writer->file = declFile ? declFile : previousFile;
-        CopyTypedNodeText(writer, decl->name, method, sizeof(method));
-        writer->file = previousFile;
-        snprintf(instanceName, sizeof(instanceName), "%s_%s", receiver, method);
+    if (parser->position<parser->count&&ast_IsOperatorToken(&parser->tokens[parser->position],OperatorKind_Greater)) {
+        struct Token close=parser->tokens[parser->position];
+        parser->position+=1;
+        parser->tree.nodes[node].location=ast_TokenLocation(open);
+        parser->tree.nodes[node].location.length=(close.offset+close.length)-open.offset;
     } else {
-        char prefix[64] = {0};
-        if (declFile) {
-            PackagePrefixFromPath(declFile->path, prefix, sizeof(prefix));
+        if (parser->position<parser->count) {
+            ast_SelfReportParseError(parser,&parser->tokens[parser->position],"expected '>'");
+        } else {
+            ast_SelfReportParseError(parser,&open,"unterminated generic list");
         }
-        char base[128];
-        MangleGenericNameWithFiles(writer, declFile, decl->name, argsFile, args, base, sizeof(base));
-        snprintf(instanceName, sizeof(instanceName), "%s", prefix);
-        AppendSanitized(instanceName, sizeof(instanceName), base);
     }
-    if (FindGenericInstanceByName(writer->genericFunctions, writer->genericFunctionCount, instanceName)) {
-        return;
+    if (parser->tree.nodes[node].childCount>0&&parser->tree.nodes[node].location.length==open.length) {
+        ast_SelfFinishLocationFromChildren(&parser->tree,node);
+        parser->tree.nodes[node].location.offset=open.offset;
+        parser->tree.nodes[node].location.line=open.line;
+        parser->tree.nodes[node].location.column=open.column;
     }
-
-    struct CGenericInstance* instance = &writer->genericFunctions[writer->genericFunctionCount++];
-    memset(instance, 0, sizeof(*instance));
-    instance->decl = decl;
-    instance->args = args;
-    instance->declFile = declFile;
-    instance->argsFile = argsFile;
-    snprintf(instance->name, sizeof(instance->name), "%s", instanceName);
+    return (node);
 }
-
-static const char* GenericStructInstanceName(struct CWriter* writer, struct KekType* type, char* buffer, size_t bufferSize) {
-    if (!type || !type->name || !type->genericArgs) {
-        return NULL;
-    }
-    MangleGenericName(writer, type->name, type->genericArgs, buffer, bufferSize);
-    return buffer;
-}
-
-static void AddGenericMethodInstancesForStructs(struct CWriter* writer, struct KekModule* modules, size_t count) {
-    for (size_t i = 0; i < writer->genericStructCount; i++) {
-        struct CGenericInstance* structInstance = &writer->genericStructs[i];
-        if (!structInstance->decl || !structInstance->decl->name) {
+usize ast_SelfParseStatement(struct SelfParser* parser,u64 closePunctuation) {
+    usize statement=ast_SelfCreateAstNode(parser,SelfAstKind_Statement,ast_TokenLocation(parser->tokens[parser->position]));
+    while (parser->position<parser->count&&!ast_IsAstTerminator(&parser->tokens[parser->position],closePunctuation)) {
+        struct Token* token=&parser->tokens[parser->position];
+        if (ast_IsTriviaToken(token)) {
+            parser->position+=1;
             continue;
         }
-        char structName[64];
-        struct SourceFile* previousFile = writer->file;
-        writer->file = structInstance->declFile ? structInstance->declFile : previousFile;
-        CopyTypedNodeText(writer, structInstance->decl->name, structName, sizeof(structName));
-        writer->file = previousFile;
-
-        for (size_t moduleIndex = 0; moduleIndex < count; moduleIndex++) {
-            for (struct KekDecl* decl = modules[moduleIndex].firstDecl; decl; decl = decl->next) {
-                if (!decl->genericParams || !TypedDeclIsMethod(decl)) {
-                    continue;
-                }
-                struct SourceFile* declFile = modules[moduleIndex].file;
-                previousFile = writer->file;
-                writer->file = declFile ? declFile : previousFile;
-                char receiver[64];
-                CopyTypedNodeText(writer, TypedDeclReceiverName(decl), receiver, sizeof(receiver));
-                writer->file = previousFile;
-                if (strcmp(receiver, structName) == 0) {
-                    AddGenericFunctionInstance(writer, decl, declFile, structInstance->args, structInstance->argsFile);
-                }
+        if (ast_IsPunctuationToken(token,PunctuationKind_Semicolon)||ast_IsPunctuationToken(token,PunctuationKind_Comma)) {
+            parser->position+=1;
+            break;
+        }
+        if (ast_IsClosingPunctuation(token)) {
+            break;
+        }
+        if (ast_IsPunctuationToken(token,PunctuationKind_LeftBrace)) {
+            ast_SelfAddAstChild(&parser->tree,statement,ast_SelfParseDelimited(parser,SelfAstKind_Block,((u64)(PunctuationKind_RightBrace))));
+            break;
+        }
+        if (ast_IsPunctuationToken(token,PunctuationKind_LeftParen)) {
+            ast_SelfAddAstChild(&parser->tree,statement,ast_SelfParseDelimited(parser,SelfAstKind_Group,((u64)(PunctuationKind_RightParen))));
+            continue;
+        }
+        if (ast_IsPunctuationToken(token,PunctuationKind_LeftBracket)) {
+            ast_SelfAddAstChild(&parser->tree,statement,ast_SelfParseDelimited(parser,SelfAstKind_Index,((u64)(PunctuationKind_RightBracket))));
+            continue;
+        }
+        if (ast_SelfShouldParseGenericList(parser,parser->tree.nodes[statement].lastChild)) {
+            ast_SelfAddAstChild(&parser->tree,statement,ast_SelfParseGenericDelimited(parser));
+            continue;
+        }
+        ast_SelfAddAstChild(&parser->tree,statement,ast_SelfParseTokenNode(parser));
+    }
+    ast_SelfFinishLocationFromChildren(&parser->tree,statement);
+    return (statement);
+}
+usize ast_SelfParseList(struct SelfParser* parser,SelfAstKind listKind,u64 closePunctuation) {
+    usize list=ast_SelfCreateAstNode(parser,listKind,ast_TokenLocation(parser->tokens[parser->position]));
+    ast_SelfParseChildrenInto(parser,list,closePunctuation);
+    if (closePunctuation==11&&parser->position<parser->count&&ast_IsClosingPunctuation(&parser->tokens[parser->position])) {
+        ast_SelfReportParseError(parser,&parser->tokens[parser->position],"unexpected closing delimiter");
+        parser->position+=1;
+    }
+    ast_SelfFinishLocationFromChildren(&parser->tree,list);
+    return (list);
+}
+Status ast_SelfParseTokens(struct Token* tokens,usize count,struct String source,i64 fileIndex,struct Allocator allocator,struct SelfDiagnosticBag* diagnostics,struct SelfAstTree* out) {
+    struct SelfParser parser={0};
+    parser.tokens=tokens;
+    parser.count=count;
+    parser.position=0;
+    parser.source=source;
+    parser.fileIndex=fileIndex;
+    parser.diagnostics=diagnostics;
+    parser.errorCount=0;
+    Status status=ast_SelfAstTreeInit(&parser.tree,allocator);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    usize root=ast_SelfParseList(&parser,SelfAstKind_File,11);
+    parser.tree.root=root;
+    parser.tree.nodes[root].location=diagnostics_SelfSourceLocationNew(1,1,0,source.len);
+    out->nodes=parser.tree.nodes;
+    out->len=parser.tree.len;
+    out->cap=parser.tree.cap;
+    out->root=parser.tree.root;
+    out->allocator=parser.tree.allocator;
+    return (Status_Ok);
+}
+Status ast_SelfWriteAstNodeDump(struct SelfAstTree* tree,usize nodeIndex,usize depth,struct StringBuilder* out) {
+    struct SelfAstNode* node=&tree->nodes[nodeIndex];
+    Status status=StringBuilder_WriteCString(out,"node|");
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    status=diagnostics_SelfWriteU64Field(out,((u64)(depth)),1);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    status=diagnostics_SelfWriteU64Field(out,((u64)(node->kind)),1);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    status=diagnostics_SelfWriteU64Field(out,((u64)(node->location.line)),1);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    status=diagnostics_SelfWriteU64Field(out,((u64)(node->location.column)),1);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    status=diagnostics_SelfWriteU64Field(out,((u64)(node->location.offset)),1);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    status=diagnostics_SelfWriteU64Field(out,((u64)(node->location.length)),1);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    status=diagnostics_SelfWriteU64Field(out,((u64)(node->childCount)),1);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    u64 tokenKind=0;
+    u64 tokenSubkind=0;
+    u64 tokenOffset=0;
+    u64 tokenLength=0;
+    if (node->kind==SelfAstKind_Token) {
+        tokenKind=((u64)(node->token.kind));
+        tokenSubkind=node->token.subkind;
+        tokenOffset=((u64)(node->token.offset));
+        tokenLength=((u64)(node->token.length));
+    }
+    status=diagnostics_SelfWriteU64Field(out,tokenKind,1);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    status=diagnostics_SelfWriteU64Field(out,tokenSubkind,1);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    status=diagnostics_SelfWriteU64Field(out,tokenOffset,1);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    status=diagnostics_SelfWriteU64Field(out,tokenLength,0);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    status=StringBuilder_WriteByte(out,'\n');
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    usize child=node->firstChild;
+    while (child!=0) {
+        status=ast_SelfWriteAstNodeDump(tree,child,depth+1,out);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        child=tree->nodes[child].nextSibling;
+    }
+    return (Status_Ok);
+}
+Status ast_SelfWriteAstBridgeDump(struct String source,struct StringBuilder* out) {
+    struct Allocator allocator=out->allocator;
+    struct Array__Token tokens={0};
+    Status status=tokenizer_TokenizeToArray(source,0,allocator,&tokens);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    struct SelfDiagnosticBag diagnostics={0};
+    diagnostics_SelfDiagnosticBagInit(&diagnostics,allocator);
+    struct SelfAstTree tree={0};
+    status=ast_SelfParseTokens(tokens.data,tokens.len,source,0,allocator,&diagnostics,&tree);
+    if (status==Status_Ok) {
+        status=ast_SelfWriteAstNodeDump(&tree,tree.root,0,out);
+    }
+    if (status==Status_Ok) {
+        status=diagnostics_SelfWriteDiagnosticDump(&diagnostics,out);
+    }
+    ast_SelfAstTreeDestroy(&tree);
+    diagnostics_SelfDiagnosticBagDestroy(&diagnostics);
+    tokenizer_TokenArrayDestroy(&tokens);
+    return (status);
+}
+bool compiler_SelfCIsOk(Status status) {
+    return (status==Status_Ok);
+}
+struct String compiler_SelfCTokenText(struct SelfCProgram* program,usize fileIndex,usize tokenIndex) {
+    struct SelfCTokenFile* file=&program->tokenFiles[fileIndex];
+    struct Token token=file->tokens[tokenIndex];
+    struct String sourceText=file->sourceText;
+    return (String_Slice(&sourceText,token.offset,token.length));
+}
+bool compiler_SelfCTokenEquals(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,str text) {
+    struct String value=compiler_SelfCTokenText(program,fileIndex,tokenIndex);
+    return (String_EqualsCString(&value,text));
+}
+bool compiler_SelfCStringEquals(struct String value,str text) {
+    return (String_EqualsCString(&value,text));
+}
+bool compiler_SelfCIsTokenKind(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,TokenKind kind) {
+    return (program->tokenFiles[fileIndex].tokens[tokenIndex].kind==kind);
+}
+bool compiler_SelfCIsPunctuation(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,PunctuationKind kind) {
+    struct Token token=program->tokenFiles[fileIndex].tokens[tokenIndex];
+    return (token.kind==TokenKind_Punctuation&&token.subkind==((u64)(kind)));
+}
+bool compiler_SelfCIsOperator(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,OperatorKind kind) {
+    struct Token token=program->tokenFiles[fileIndex].tokens[tokenIndex];
+    return (token.kind==TokenKind_Operator&&token.subkind==((u64)(kind)));
+}
+bool compiler_SelfCIsKeyword(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,KeywordKind kind) {
+    struct Token token=program->tokenFiles[fileIndex].tokens[tokenIndex];
+    return (token.kind==TokenKind_Keyword&&token.subkind==((u64)(kind)));
+}
+bool compiler_SelfCIsIdentifierText(struct SelfCProgram* program,usize fileIndex,usize tokenIndex,str text) {
+    struct Token token=program->tokenFiles[fileIndex].tokens[tokenIndex];
+    if (!(token.kind==TokenKind_Identifier||token.kind==TokenKind_Keyword)) {
+        return (0);
+    }
+    return (compiler_SelfCTokenEquals(program,fileIndex,tokenIndex,text));
+}
+bool compiler_SelfCIsEof(struct SelfCProgram* program,usize fileIndex,usize tokenIndex) {
+    return (program->tokenFiles[fileIndex].tokens[tokenIndex].kind==TokenKind_Eof);
+}
+usize compiler_SelfCFileTokenCount(struct SelfCProgram* program,usize fileIndex) {
+    return (program->tokenFiles[fileIndex].tokenLen);
+}
+Status compiler_SelfCWrite(struct StringBuilder* out,str text) {
+    return (StringBuilder_WriteCString(out,text));
+}
+Status compiler_SelfCWriteString(struct StringBuilder* out,struct String text) {
+    return (StringBuilder_WriteString(out,text));
+}
+Status compiler_SelfCWriteToken(struct SelfCProgram* program,struct StringBuilder* out,usize fileIndex,usize tokenIndex) {
+    return (StringBuilder_WriteString(out,compiler_SelfCTokenText(program,fileIndex,tokenIndex)));
+}
+Status compiler_SelfCCloneCString(struct SelfCProgram* program,str text,struct OwnedString* out) {
+    return (std_CloneCString(text,program->allocator,out));
+}
+Status compiler_SelfCCloneString(struct SelfCProgram* program,struct String text,struct OwnedString* out) {
+    return (std_CloneString(text,program->allocator,out));
+}
+struct String compiler_SelfCOwnedView(struct OwnedString* value) {
+    return (std_OwnedStringView(value));
+}
+bool compiler_SelfCOwnedEqualsCString(struct OwnedString* value,str text) {
+    struct String view=std_OwnedStringView(value);
+    return (String_EqualsCString(&view,text));
+}
+bool compiler_SelfCOwnedEquals(struct OwnedString* left,struct OwnedString* right) {
+    struct String leftView=std_OwnedStringView(left);
+    struct String rightView=std_OwnedStringView(right);
+    return (String_Equals(&leftView,rightView));
+}
+Status compiler_SelfCDetachBuilder(struct StringBuilder* builder,struct OwnedString* out) {
+    struct Result__OwnedString detached=StringBuilder_Detach(builder);
+    if (detached.status!=Status_Ok) {
+        return (detached.status);
+    }
+    out->data=detached.value.data;
+    out->len=detached.value.len;
+    out->cap=detached.value.cap;
+    out->allocator=detached.value.allocator;
+    return (Status_Ok);
+}
+Status compiler_SelfCMakeOwnedEmpty(struct SelfCProgram* program,struct OwnedString* out) {
+    return (compiler_SelfCCloneCString(program,"",out));
+}
+Status compiler_SelfCWriteOwned(struct StringBuilder* out,struct OwnedString* text) {
+    return (StringBuilder_WriteString(out,std_OwnedStringView(text)));
+}
+usize compiler_SelfCStringLastSlash(struct String path) {
+    usize last=path.len;
+    for (usize i=0;i<path.len;i++) {
+        if (path.data[i]=='/') {
+            last=i;
+        }
+    }
+    return (last);
+}
+Status compiler_SelfCPackageNameFromPath(struct String path,struct Allocator allocator,struct OwnedString* out) {
+    usize lastSlash=compiler_SelfCStringLastSlash(path);
+    if (lastSlash==path.len) {
+        return (std_CloneCString("",allocator,out));
+    }
+    if (String_StartsWith(&path,std_StringFromCString("std/"))) {
+        return (std_CloneCString("std",allocator,out));
+    }
+    usize segmentStart=0;
+    for (usize i=0;i<lastSlash;i++) {
+        if (path.data[i]=='/') {
+            segmentStart=i+1;
+        }
+    }
+    return (std_CloneString(String_Slice(&path,segmentStart,lastSlash-segmentStart),allocator,out));
+}
+Status compiler_SelfCProgramInit(struct SelfCProgram* program,struct Allocator allocator) {
+    program->allocator=allocator;
+    diagnostics_SelfDiagnosticBagInit(&program->diagnostics,allocator);
+    source_SelfFileTableInit(&program->files,allocator);
+    program->tokenFileCount=0;
+    program->declCount=0;
+    program->paramCount=0;
+    program->fieldCount=0;
+    program->typeUseCount=0;
+    program->funcUseCount=0;
+    return (Status_Ok);
+}
+Status compiler_SelfCProgramDestroy(struct SelfCProgram* program) {
+    for (usize i=0;i<program->tokenFileCount;i++) {
+        struct Array__Token tokens={0};
+        tokens.data=program->tokenFiles[i].tokens;
+        tokens.len=program->tokenFiles[i].tokenLen;
+        tokens.cap=program->tokenFiles[i].tokenCap;
+        tokens.allocator=program->allocator;
+        tokenizer_TokenArrayDestroy(&tokens);
+        std_DestroyOwnedString(&program->tokenFiles[i].packageName);
+    }
+    for (usize i=0;i<program->declCount;i++) {
+        std_DestroyOwnedString(&program->decls[i].packageName);
+    }
+    for (usize i=0;i<program->typeUseCount;i++) {
+        std_DestroyOwnedString(&program->typeUses[i].key);
+        std_DestroyOwnedString(&program->typeUses[i].cName);
+        std_DestroyOwnedString(&program->typeUses[i].baseName);
+        std_DestroyOwnedString(&program->typeUses[i].arg0);
+        std_DestroyOwnedString(&program->typeUses[i].arg1);
+        std_DestroyOwnedString(&program->typeUses[i].arg2);
+    }
+    for (usize i=0;i<program->funcUseCount;i++) {
+        std_DestroyOwnedString(&program->funcUses[i].key);
+        std_DestroyOwnedString(&program->funcUses[i].cName);
+        std_DestroyOwnedString(&program->funcUses[i].arg0);
+        std_DestroyOwnedString(&program->funcUses[i].arg1);
+        std_DestroyOwnedString(&program->funcUses[i].arg2);
+    }
+    source_SelfFileTableDestroy(&program->files);
+    diagnostics_SelfDiagnosticBagDestroy(&program->diagnostics);
+    return (Status_Ok);
+}
+Status compiler_SelfCAddDiagnostic(struct SelfCProgram* program,str message) {
+    return (diagnostics_SelfDiagnosticAddCString(&program->diagnostics,SelfDiagnosticSeverity_Error,SelfDiagnosticPhase_Semantic,-1,diagnostics_SelfSourceLocationNew(0,0,0,0),message));
+}
+Status compiler_SelfCLoadAndTokenize(struct SelfCProgram* program,str entryPath) {
+    Status status=source_SelfLoadCompilationSources(entryPath,program->allocator,&program->files,&program->diagnostics);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    for (usize i=0;i<program->files.count;i++) {
+        if (program->tokenFileCount>=(sizeof(program->tokenFiles)/sizeof((program->tokenFiles)[0]))) {
+            return (compiler_SelfCAddDiagnostic(program,"too many source files"));
+        }
+        struct SelfSourceFile* sourceFile=&program->files.files[i];
+        struct SelfCTokenFile* tokenFile=&program->tokenFiles[program->tokenFileCount];
+        tokenFile->sourceText=std_OwnedStringView(&sourceFile->content);
+        tokenFile->path=std_OwnedStringView(&sourceFile->path);
+        tokenFile->fileIndex=program->tokenFileCount;
+        status=compiler_SelfCPackageNameFromPath(tokenFile->path,program->allocator,&tokenFile->packageName);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        if (i==0) {
+            std_DestroyOwnedString(&tokenFile->packageName);
+            status=compiler_SelfCMakeOwnedEmpty(program,&tokenFile->packageName);
+            if (status!=Status_Ok) {
+                return (status);
+            }
+        }
+        struct Array__Token tokens={0};
+        status=tokenizer_TokenizeToArray(tokenFile->sourceText,0,program->allocator,&tokens);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        tokenFile->tokens=tokens.data;
+        tokenFile->tokenLen=tokens.len;
+        tokenFile->tokenCap=tokens.cap;
+        struct SelfAstTree tree={0};
+        status=ast_SelfParseTokens(tokenFile->tokens,tokenFile->tokenLen,tokenFile->sourceText,((i64)(program->tokenFileCount)),program->allocator,&program->diagnostics,&tree);
+        if (status==Status_Ok) {
+            ast_SelfAstTreeDestroy(&tree);
+        }
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        program->tokenFileCount+=1;
+    }
+    return (Status_Ok);
+}
+int compiler_SelfCompilerFail(str text) {
+    struct File stderr=std_Stderr();
+    std_WriteStringToFile(&stderr,std_StringFromCString(text));
+    return (1);
+}
+int compiler_SelfCompilerPrintHelp(void) {
+    struct File stdout=std_Stdout();
+    std_WriteStringToFile(&stdout,std_StringFromCString("kek build <input.kek> -o <output.c>\n"));
+    std_WriteStringToFile(&stdout,std_StringFromCString("kek --help\n"));
+    std_WriteStringToFile(&stdout,std_StringFromCString("kek --version\n"));
+    return (0);
+}
+Status compiler_SelfCWriteDiagnostics(struct SelfCProgram* program) {
+    struct StringBuilder builder=std_StringBuilderNew(program->allocator);
+    Status status=diagnostics_SelfWriteDiagnosticDump(&program->diagnostics,&builder);
+    if (status==Status_Ok) {
+        struct File stderr=std_Stderr();
+        struct String view=StringBuilder_View(&builder);
+        struct Result__usize write=File_Write(&stderr,String_Bytes(&view));
+        status=write.status;
+    }
+    StringBuilder_Destroy(&builder);
+    return (status);
+}
+bool compiler_SelfCIsOpenDelimiter(struct SelfCProgram* program,usize fileIndex,usize index) {
+    return (compiler_SelfCIsPunctuation(program,fileIndex,index,PunctuationKind_LeftParen)||compiler_SelfCIsPunctuation(program,fileIndex,index,PunctuationKind_LeftBrace)||compiler_SelfCIsPunctuation(program,fileIndex,index,PunctuationKind_LeftBracket)||compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_Less));
+}
+bool compiler_SelfCDelimiterMatches(struct SelfCProgram* program,usize fileIndex,usize openIndex,usize closeIndex) {
+    if (compiler_SelfCIsPunctuation(program,fileIndex,openIndex,PunctuationKind_LeftParen)) {
+        return (compiler_SelfCIsPunctuation(program,fileIndex,closeIndex,PunctuationKind_RightParen));
+    }
+    if (compiler_SelfCIsPunctuation(program,fileIndex,openIndex,PunctuationKind_LeftBrace)) {
+        return (compiler_SelfCIsPunctuation(program,fileIndex,closeIndex,PunctuationKind_RightBrace));
+    }
+    if (compiler_SelfCIsPunctuation(program,fileIndex,openIndex,PunctuationKind_LeftBracket)) {
+        return (compiler_SelfCIsPunctuation(program,fileIndex,closeIndex,PunctuationKind_RightBracket));
+    }
+    if (compiler_SelfCIsOperator(program,fileIndex,openIndex,OperatorKind_Less)) {
+        return (compiler_SelfCIsOperator(program,fileIndex,closeIndex,OperatorKind_Greater));
+    }
+    return (0);
+}
+usize compiler_SelfCFindMatching(struct SelfCProgram* program,usize fileIndex,usize openIndex) {
+    usize count=compiler_SelfCFileTokenCount(program,fileIndex);
+    usize depth=0;
+    bool isParen=compiler_SelfCIsPunctuation(program,fileIndex,openIndex,PunctuationKind_LeftParen);
+    bool isBrace=compiler_SelfCIsPunctuation(program,fileIndex,openIndex,PunctuationKind_LeftBrace);
+    bool isBracket=compiler_SelfCIsPunctuation(program,fileIndex,openIndex,PunctuationKind_LeftBracket);
+    bool isGeneric=compiler_SelfCIsOperator(program,fileIndex,openIndex,OperatorKind_Less);
+    for (usize i=openIndex;i<count;i++) {
+        if ((isParen&&compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftParen))||(isBrace&&compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBrace))||(isBracket&&compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBracket))||(isGeneric&&compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Less))) {
+            depth+=1;
+            continue;
+        }
+        if ((isParen&&compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_RightParen))||(isBrace&&compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_RightBrace))||(isBracket&&compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_RightBracket))||(isGeneric&&compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Greater))) {
+            if (depth==0) {
+                return (i);
+            }
+            depth-=1;
+            if (depth==0) {
+                return (i);
             }
         }
     }
+    return (count);
 }
-
-static void WriteTypedNonArrayTypeWithGenericContext(struct CWriter* writer, struct KekType* type, struct AstNode* params, struct AstNode* args) {
-    if (!type || !type->name) {
-        fputs("void", writer->out);
-        return;
+usize compiler_SelfCSkipDelimited(struct SelfCProgram* program,usize fileIndex,usize index) {
+    usize match=compiler_SelfCFindMatching(program,fileIndex,index);
+    if (match>=compiler_SelfCFileTokenCount(program,fileIndex)) {
+        return (index+1);
     }
-
-    if (type->kind == KEK_TYPE_POINTER && type->element) {
-        WriteTypedNonArrayTypeWithGenericContext(writer, type->element, params, args);
-        fputc('*', writer->out);
-        return;
+    return (match+1);
+}
+usize compiler_SelfCSkipAttributes(struct SelfCProgram* program,usize fileIndex,usize index) {
+    while (index<compiler_SelfCFileTokenCount(program,fileIndex)&&compiler_SelfCIsPunctuation(program,fileIndex,index,PunctuationKind_LeftBracket)) {
+        index=compiler_SelfCSkipDelimited(program,fileIndex,index);
     }
-
-    char buffer[128];
-    struct AstNode* substitution = FindGenericSubstitution(writer, params, args, type->name);
-    if (substitution) {
-        GenericArgMangleText(writer, writer->genericArgFile ? writer->genericArgFile : writer->file, substitution, buffer, sizeof(buffer));
-        if (IsKnownStruct(writer, buffer)) {
-            fprintf(writer->out, "struct %s", buffer);
-        } else {
-            fputs(buffer, writer->out);
+    return (index);
+}
+usize compiler_SelfCFindTopLevelColon(struct SelfCProgram* program,usize fileIndex,usize start,usize end) {
+    usize parenDepth=0;
+    usize braceDepth=0;
+    usize bracketDepth=0;
+    usize genericDepth=0;
+    for (usize i=start;i<end;i++) {
+        if (compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftParen)) {
+            parenDepth+=1;
+            continue;
         }
-        return;
-    }
-    if (GenericStructInstanceName(writer, type, buffer, sizeof(buffer))) {
-        fprintf(writer->out, "struct %s", buffer);
-        return;
-    }
-    const char* typeName = TypedNodeText(writer, type->name, buffer, sizeof(buffer));
-    if (IsKnownStruct(writer, typeName)) {
-        fprintf(writer->out, "struct %s", typeName);
-    } else {
-        fputs(typeName, writer->out);
-    }
-}
-
-static void WriteTypedBaseTypeWithGenericContext(struct CWriter* writer, struct KekType* type, struct AstNode* params, struct AstNode* args) {
-    while (type && type->kind == KEK_TYPE_ARRAY) {
-        type = type->element;
-    }
-    WriteTypedNonArrayTypeWithGenericContext(writer, type, params, args);
-}
-
-static void WriteTypedBaseType(struct CWriter* writer, struct KekType* type) {
-    WriteTypedBaseTypeWithGenericContext(writer, type, writer->genericParams, writer->genericArgs);
-}
-
-static void WriteTypedArraySuffix(struct CWriter* writer, struct KekType* type) {
-    if (!type || type->kind != KEK_TYPE_ARRAY) {
-        return;
-    }
-    WriteTypedArraySuffix(writer, type->element);
-    fputc('[', writer->out);
-    WriteTypedExpr(writer, type->arraySize);
-    fputc(']', writer->out);
-}
-
-static void WriteTypedTypeAndNameWithGenericContext(struct CWriter* writer, struct KekType* type, struct AstNode* name, struct AstNode* params, struct AstNode* args) {
-    char nameBuffer[128];
-    struct KekType* base = type;
-    while (base && base->kind == KEK_TYPE_ARRAY) {
-        base = base->element;
-    }
-
-    WriteTypedNonArrayTypeWithGenericContext(writer, base, params, args);
-    fputc(' ', writer->out);
-    fputs(TypedNodeText(writer, name, nameBuffer, sizeof(nameBuffer)), writer->out);
-    WriteTypedArraySuffix(writer, type);
-}
-
-static void WriteTypedTypeAndName(struct CWriter* writer, struct KekType* type, struct AstNode* name) {
-    WriteTypedTypeAndNameWithGenericContext(writer, type, name, writer->genericParams, writer->genericArgs);
-}
-
-static void WriteTypedExprList(struct CWriter* writer, struct KekExpr* firstArg) {
-    int first = 1;
-    for (struct KekExpr* arg = firstArg; arg; arg = arg->next) {
-        if (!first) {
-            fputc(',', writer->out);
+        if (compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_RightParen)) {
+            if (parenDepth>0) {
+                parenDepth-=1;
+            }
+            continue;
         }
-        first = 0;
-        WriteTypedExpr(writer, arg);
-    }
-}
-
-static int ExprCalleeNameEquals(struct CWriter* writer, struct KekExpr* expr, const char* name) {
-    return expr && expr->kind == KEK_EXPR_NAME && expr->token && TypedTokenTextEquals(writer, expr->token, name);
-}
-
-static int TypedCalleeName(struct CWriter* writer, struct KekExpr* expr, char* buffer, size_t bufferSize) {
-    if (!expr || bufferSize == 0) {
-        return 0;
-    }
-    buffer[0] = '\0';
-    if (expr->kind == KEK_EXPR_NAME && expr->token) {
-        char name[128];
-        CopyTypedNodeText(writer, expr->token, name, sizeof(name));
-        snprintf(buffer, bufferSize, "%s%s", writer->namespacePrefix, name);
-        return 1;
-    }
-    if (expr->kind == KEK_EXPR_SCOPE) {
-        char left[128] = {0};
-        char right[128] = {0};
-        if (expr->left && expr->left->kind == KEK_EXPR_NAME && expr->left->token) {
-            CopyTypedNodeText(writer, expr->left->token, left, sizeof(left));
-        } else if (expr->left) {
-            (void)TypedCalleeName(writer, expr->left, left, sizeof(left));
+        if (compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBrace)) {
+            braceDepth+=1;
+            continue;
         }
-        if (expr->right && expr->right->token) {
-            CopyTypedNodeText(writer, expr->right->token, right, sizeof(right));
+        if (compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_RightBrace)) {
+            if (braceDepth>0) {
+                braceDepth-=1;
+            }
+            continue;
         }
-        if (left[0] != '\0') {
-            snprintf(buffer, bufferSize, "%s_%s", left, right);
-        } else {
-            snprintf(buffer, bufferSize, "%s", right);
+        if (compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBracket)) {
+            bracketDepth+=1;
+            continue;
         }
-        return buffer[0] != '\0';
-    }
-    return 0;
-}
-
-static int TypedNamedArgument(struct CWriter* writer, struct KekExpr* arg, char* name, size_t nameSize, struct KekExpr** value) {
-    if (!arg || arg->kind != KEK_EXPR_ASSIGN || !arg->left || arg->left->kind != KEK_EXPR_NAME || !arg->left->token) {
-        return 0;
-    }
-    CopyTypedNodeText(writer, arg->left->token, name, nameSize);
-    *value = arg->right;
-    return 1;
-}
-
-static int FindParameterIndex(struct CFunctionInfo* function, const char* name) {
-    for (size_t i = 0; i < function->paramCount; i++) {
-        if (strcmp(function->paramNames[i], name) == 0) {
-            return (int)i;
+        if (compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_RightBracket)) {
+            if (bracketDepth>0) {
+                bracketDepth-=1;
+            }
+            continue;
+        }
+        if (compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Less)) {
+            genericDepth+=1;
+            continue;
+        }
+        if (compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Greater)) {
+            if (genericDepth>0) {
+                genericDepth-=1;
+            }
+            continue;
+        }
+        if (parenDepth==0&&braceDepth==0&&bracketDepth==0&&genericDepth==0&&compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_Colon)) {
+            return (i);
         }
     }
-    return -1;
+    return (end);
 }
-
-static int ExprIsThisName(struct CWriter* writer, struct KekExpr* expr) {
-    return expr
-        && expr->kind == KEK_EXPR_NAME
-        && expr->token
-        && TokenTextEquals(&expr->token->token, writer->file, "this");
-}
-
-static void WriteTypedKnownCallArgs(struct CWriter* writer, struct KekExpr* call, struct CFunctionInfo* function, struct KekExpr* implicitThis, int implicitThisIsPointer) {
-    struct KekExpr* ordered[16] = {0};
-    int consumed[16] = {0};
-    size_t positionalIndex = 0;
-
-    if (implicitThis && function->paramCount > 0) {
-        ordered[0] = implicitThis;
-        consumed[0] = 1;
-        positionalIndex = 1;
+usize compiler_SelfCFindTokenAtDepthZero(struct SelfCProgram* program,usize fileIndex,usize start,usize end,PunctuationKind punctuation) {
+    usize parenDepth=0;
+    usize braceDepth=0;
+    usize bracketDepth=0;
+    usize genericDepth=0;
+    for (usize i=start;i<end;i++) {
+        if (compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftParen)) {
+            parenDepth+=1;
+            continue;
+        }
+        if (compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_RightParen)) {
+            if (parenDepth>0) {
+                parenDepth-=1;
+            }
+            continue;
+        }
+        if (compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBrace)) {
+            braceDepth+=1;
+            continue;
+        }
+        if (compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_RightBrace)) {
+            if (braceDepth>0) {
+                braceDepth-=1;
+            }
+            continue;
+        }
+        if (compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBracket)) {
+            bracketDepth+=1;
+            continue;
+        }
+        if (compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_RightBracket)) {
+            if (bracketDepth>0) {
+                bracketDepth-=1;
+            }
+            continue;
+        }
+        if (parenDepth==0&&braceDepth==0&&bracketDepth==0&&genericDepth==0&&compiler_SelfCIsPunctuation(program,fileIndex,i,punctuation)) {
+            return (i);
+        }
     }
-
-    for (struct KekExpr* arg = call->firstArg; arg; arg = arg->next) {
-        char name[64];
-        struct KekExpr* value = NULL;
-        if (TypedNamedArgument(writer, arg, name, sizeof(name), &value)) {
-            int index = FindParameterIndex(function, name);
-            if (index >= 0 && (size_t)index < function->paramCount) {
-                ordered[index] = value;
-                consumed[index] = 1;
+    return (end);
+}
+usize compiler_SelfCFindOperatorScope(struct SelfCProgram* program,usize fileIndex,usize start,usize end) {
+    usize genericDepth=0;
+    for (usize i=start;i<end;i++) {
+        if (compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Less)) {
+            genericDepth+=1;
+            continue;
+        }
+        if (compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Greater)) {
+            if (genericDepth>0) {
+                genericDepth-=1;
+            }
+            continue;
+        }
+        if (genericDepth==0&&compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Scope)) {
+            return (i);
+        }
+    }
+    return (end);
+}
+usize compiler_SelfCFindNextGroup(struct SelfCProgram* program,usize fileIndex,usize start,usize end) {
+    for (usize i=start;i<end;i++) {
+        if (compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftParen)) {
+            return (i);
+        }
+    }
+    return (end);
+}
+usize compiler_SelfCFindNextBlock(struct SelfCProgram* program,usize fileIndex,usize start,usize end) {
+    for (usize i=start;i<end;i++) {
+        if (compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBrace)) {
+            return (i);
+        }
+    }
+    return (end);
+}
+u8 compiler_SelfCOperatorCode(struct SelfCProgram* program,usize fileIndex,usize index) {
+    struct Token token=program->tokenFiles[fileIndex].tokens[index];
+    if (token.kind==TokenKind_Operator) {
+        return (((u8)(token.subkind+1)));
+    }
+    return (0);
+}
+Status compiler_SelfCAddDecl(struct SelfCProgram* program,struct SelfCDecl* decl) {
+    if (program->declCount>=(sizeof(program->decls)/sizeof((program->decls)[0]))) {
+        return (compiler_SelfCAddDiagnostic(program,"too many declarations"));
+    }
+    program->decls[program->declCount]=decl[0];
+    program->declCount+=1;
+    return (Status_Ok);
+}
+Status compiler_SelfCAddParam(struct SelfCProgram* program,struct SelfCParam* param) {
+    if (program->paramCount>=(sizeof(program->params)/sizeof((program->params)[0]))) {
+        return (compiler_SelfCAddDiagnostic(program,"too many parameters"));
+    }
+    program->params[program->paramCount]=param[0];
+    program->paramCount+=1;
+    return (Status_Ok);
+}
+Status compiler_SelfCAddField(struct SelfCProgram* program,struct SelfCField* field) {
+    if (program->fieldCount>=(sizeof(program->fields)/sizeof((program->fields)[0]))) {
+        return (compiler_SelfCAddDiagnostic(program,"too many fields"));
+    }
+    program->fields[program->fieldCount]=field[0];
+    program->fieldCount+=1;
+    return (Status_Ok);
+}
+Status compiler_SelfCParseParams(struct SelfCProgram* program,struct SelfCDecl* decl,usize fileIndex,usize start,usize end) {
+    decl->firstParam=program->paramCount;
+    decl->paramCount=0;
+    usize itemStart=start;
+    while (itemStart<end) {
+        if (compiler_SelfCIsPunctuation(program,fileIndex,itemStart,PunctuationKind_Comma)) {
+            itemStart+=1;
+            continue;
+        }
+        usize itemEnd=compiler_SelfCFindTokenAtDepthZero(program,fileIndex,itemStart,end,PunctuationKind_Comma);
+        usize colon=compiler_SelfCFindTopLevelColon(program,fileIndex,itemStart,itemEnd);
+        if (colon>=itemEnd) {
+            break;
+        }
+        struct SelfCParam param={0};
+        param.fileIndex=fileIndex;
+        param.typeStart=itemStart;
+        param.typeEnd=colon;
+        param.nameIndex=colon+1;
+        param.defaultStart=itemEnd;
+        param.defaultEnd=itemEnd;
+        param.hasDefault=0;
+        for (usize i=param.nameIndex+1;i<itemEnd;i++) {
+            if (compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Assign)) {
+                param.defaultStart=i+1;
+                param.defaultEnd=itemEnd;
+                param.hasDefault=1;
+                break;
+            }
+        }
+        Status status=compiler_SelfCAddParam(program,&param);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        decl->paramCount+=1;
+        if (itemEnd>=end) {
+            break;
+        }
+        itemStart=itemEnd+1;
+    }
+    return (Status_Ok);
+}
+Status compiler_SelfCParseFields(struct SelfCProgram* program,struct SelfCDecl* decl,usize fileIndex,usize start,usize end) {
+    decl->firstField=program->fieldCount;
+    decl->fieldCount=0;
+    usize itemStart=start;
+    while (itemStart<end) {
+        itemStart=compiler_SelfCSkipAttributes(program,fileIndex,itemStart);
+        if (itemStart>=end) {
+            break;
+        }
+        if (compiler_SelfCIsPunctuation(program,fileIndex,itemStart,PunctuationKind_Semicolon)) {
+            itemStart+=1;
+            continue;
+        }
+        struct SelfCField field={0};
+        field.fileIndex=fileIndex;
+        field.typeStart=itemStart;
+        field.typeEnd=itemStart;
+        field.nameIndex=itemStart;
+        field.defaultStart=end;
+        field.defaultEnd=end;
+        field.arrayStart=end;
+        field.arrayEnd=end;
+        field.hasDefault=0;
+        field.isArray=0;
+        field.isNestedStruct=0;
+        field.nestedBodyStart=end;
+        field.nestedBodyEnd=end;
+        if (compiler_SelfCIsKeyword(program,fileIndex,itemStart,KeywordKind_Struct)) {
+            usize colon=itemStart+1;
+            if (colon<end&&compiler_SelfCIsPunctuation(program,fileIndex,colon,PunctuationKind_Colon)) {
+                usize nameIndex=colon+1;
+                usize blockStart=compiler_SelfCFindNextBlock(program,fileIndex,nameIndex+1,end);
+                usize blockEnd=compiler_SelfCFindMatching(program,fileIndex,blockStart);
+                field.isNestedStruct=1;
+                field.nameIndex=nameIndex;
+                field.nestedBodyStart=blockStart+1;
+                field.nestedBodyEnd=blockEnd;
+                Status addNested=compiler_SelfCAddField(program,&field);
+                if (addNested!=Status_Ok) {
+                    return (addNested);
+                }
+                decl->fieldCount+=1;
+                itemStart=blockEnd+1;
+                if (itemStart<end&&compiler_SelfCIsPunctuation(program,fileIndex,itemStart,PunctuationKind_Semicolon)) {
+                    itemStart+=1;
+                }
                 continue;
             }
         }
-
-        while (positionalIndex < function->paramCount && consumed[positionalIndex]) {
-            positionalIndex++;
+        usize itemEnd=itemStart;
+        while (itemEnd<end&&!compiler_SelfCIsPunctuation(program,fileIndex,itemEnd,PunctuationKind_Semicolon)) {
+            if (compiler_SelfCIsPunctuation(program,fileIndex,itemEnd,PunctuationKind_LeftBrace)||compiler_SelfCIsPunctuation(program,fileIndex,itemEnd,PunctuationKind_LeftParen)||compiler_SelfCIsPunctuation(program,fileIndex,itemEnd,PunctuationKind_LeftBracket)) {
+                itemEnd=compiler_SelfCSkipDelimited(program,fileIndex,itemEnd);
+                continue;
+            }
+            itemEnd+=1;
         }
-        if (positionalIndex < function->paramCount) {
-            ordered[positionalIndex] = arg;
-            consumed[positionalIndex] = 1;
-            positionalIndex++;
-        }
-    }
-
-    for (size_t i = 0; i < function->paramCount; i++) {
-        if (i > 0) {
-            fputc(',', writer->out);
-        }
-        if (ordered[i]) {
-            if (i == 0 && implicitThis && (implicitThisIsPointer || (writer->thisIsPointer && ExprIsThisName(writer, implicitThis)))) {
-                WriteTypedExpr(writer, ordered[i]);
-            } else if (i == 0 && implicitThis) {
-                fputc('&', writer->out);
-                WriteTypedExpr(writer, ordered[i]);
-            } else {
-                WriteTypedExpr(writer, ordered[i]);
-            }
-        } else if (function->defaults[i][0] != '\0') {
-            fputs(function->defaults[i], writer->out);
-        } else {
-            fputc('0', writer->out);
-        }
-    }
-}
-
-static void WriteTypedCall(struct CWriter* writer, struct KekExpr* expr) {
-    if (ExprCalleeNameEquals(writer, expr->callee, "sizeof") && expr->firstArg) {
-        fputs("sizeof(", writer->out);
-        if (expr->firstArg->kind == KEK_EXPR_NAME && expr->firstArg->token) {
-            struct AstNode* substitution = FindGenericSubstitution(writer, writer->genericParams, writer->genericArgs, expr->firstArg->token);
-            char typeName[128];
-            if (substitution) {
-                GenericArgMangleText(writer, writer->genericArgFile ? writer->genericArgFile : writer->file, substitution, typeName, sizeof(typeName));
-            } else {
-                CopyTypedNodeText(writer, expr->firstArg->token, typeName, sizeof(typeName));
-            }
-            if (IsKnownStruct(writer, typeName)) {
-                fprintf(writer->out, "struct %s", typeName);
-            } else {
-                fputs(typeName, writer->out);
-            }
-        } else {
-            WriteTypedExpr(writer, expr->firstArg);
-        }
-        fputc(')', writer->out);
-        return;
-    }
-
-    if (ExprCalleeNameEquals(writer, expr->callee, "len") && expr->firstArg) {
-        fputs("(sizeof(", writer->out);
-        WriteTypedExpr(writer, expr->firstArg);
-        fputs(")/sizeof((", writer->out);
-        WriteTypedExpr(writer, expr->firstArg);
-        fputs(")[0]))", writer->out);
-        return;
-    }
-
-    if (expr->callee && expr->callee->kind == KEK_EXPR_FIELD && expr->callee->right && expr->callee->right->token) {
-        char objectName[64] = {0};
-        char methodName[64] = {0};
-        char functionName[128];
-        if (expr->callee->left && expr->callee->left->kind == KEK_EXPR_NAME && expr->callee->left->token) {
-            CopyTypedNodeText(writer, expr->callee->left->token, objectName, sizeof(objectName));
-        }
-        CopyTypedNodeText(writer, expr->callee->right->token, methodName, sizeof(methodName));
-        const char* objectType = FindLocalType(writer, objectName);
-        if (objectType) {
-            snprintf(functionName, sizeof(functionName), "%s_%s", objectType, methodName);
-            fputs(functionName, writer->out);
-            fputc('(', writer->out);
-            struct CFunctionInfo* function = FindFunctionInfo(writer, functionName);
-            if (function) {
-                WriteTypedKnownCallArgs(writer, expr, function, expr->callee->left, FindLocalIsPointer(writer, objectName));
-            } else {
-                if (!(writer->thisIsPointer && ExprIsThisName(writer, expr->callee->left))) {
-                    fputc('&', writer->out);
-                }
-                WriteTypedExpr(writer, expr->callee->left);
-                if (expr->firstArg) {
-                    fputc(',', writer->out);
-                    WriteTypedExprList(writer, expr->firstArg);
-                }
-            }
-            fputc(')', writer->out);
-            return;
-        }
-    }
-
-    char calleeName[128];
-    struct CFunctionInfo* function = NULL;
-    if (expr->callee && expr->callee->genericArgs && (expr->callee->kind == KEK_EXPR_NAME || expr->callee->kind == KEK_EXPR_SCOPE)) {
-        if (expr->callee->kind == KEK_EXPR_NAME) {
-            char baseName[128];
-            MangleGenericName(writer, expr->callee->token, expr->callee->genericArgs, baseName, sizeof(baseName));
-            snprintf(calleeName, sizeof(calleeName), "%s%s", writer->namespacePrefix, baseName);
-        } else if (TypedCalleeName(writer, expr->callee, calleeName, sizeof(calleeName))) {
-            AppendGenericArgsToNameWithWriter(writer, writer->file, expr->callee->genericArgs, calleeName, sizeof(calleeName));
-        }
-        function = FindFunctionInfo(writer, calleeName);
-        fputs(calleeName, writer->out);
-        fputc('(', writer->out);
-        if (function) {
-            WriteTypedKnownCallArgs(writer, expr, function, NULL, 0);
-        } else {
-            WriteTypedExprList(writer, expr->firstArg);
-        }
-        fputc(')', writer->out);
-        return;
-    }
-    if (TypedCalleeName(writer, expr->callee, calleeName, sizeof(calleeName))) {
-        function = FindFunctionInfo(writer, calleeName);
-        fputs(calleeName, writer->out);
-    } else {
-        WriteTypedExpr(writer, expr->callee);
-    }
-    fputc('(', writer->out);
-    if (function) {
-        WriteTypedKnownCallArgs(writer, expr, function, NULL, 0);
-    } else {
-        WriteTypedExprList(writer, expr->firstArg);
-    }
-    fputc(')', writer->out);
-}
-
-static void WriteTypedStructLiteral(struct CWriter* writer, struct KekExpr* expr) {
-    int isArrayLiteral = expr && expr->type && expr->type->kind == KEK_TYPE_ARRAY;
-    if (isArrayLiteral) {
-        fputc('{', writer->out);
-    } else {
-        fputc('(', writer->out);
-        WriteTypedBaseType(writer, expr ? expr->type : NULL);
-        fputs("){", writer->out);
-    }
-
-    int first = 1;
-    for (struct KekExpr* field = expr ? expr->firstArg : NULL; field; field = field->next) {
-        if (!first) {
-            fputc(',', writer->out);
-        }
-        first = 0;
-
-        if (field->kind == KEK_EXPR_ASSIGN && field->left && field->left->kind == KEK_EXPR_NAME && field->left->token) {
-            char fieldName[64];
-            CopyTypedNodeText(writer, field->left->token, fieldName, sizeof(fieldName));
-            fprintf(writer->out, ".%s=", fieldName);
-            WriteTypedExpr(writer, field->right);
-        } else {
-            WriteTypedExpr(writer, field);
-        }
-    }
-
-    fputc('}', writer->out);
-}
-
-static const char* TypedExprLocalType(struct CWriter* writer, struct KekExpr* expr) {
-    if (!expr) {
-        return NULL;
-    }
-    if (expr->kind == KEK_EXPR_NAME && expr->token) {
-        char name[64];
-        CopyTypedNodeText(writer, expr->token, name, sizeof(name));
-        return FindLocalType(writer, name);
-    }
-    if (expr->kind == KEK_EXPR_GROUP) {
-        return TypedExprLocalType(writer, expr->right);
-    }
-    if (expr->kind == KEK_EXPR_STRUCT_LITERAL && expr->type && expr->type->name) {
-        static char typeName[128];
-        CopyTypedNodeText(writer, expr->type->name, typeName, sizeof(typeName));
-        return typeName;
-    }
-    return NULL;
-}
-
-static const char* ExprOperatorMangle(struct KekExpr* expr) {
-    if (!expr || !expr->token || expr->token->token.type != TOKEN_OPERATOR) {
-        return NULL;
-    }
-    return OperatorMangleName(expr->token->token.value.operator);
-}
-
-static int TryWriteTypedUnaryOperatorCall(struct CWriter* writer, struct KekExpr* expr) {
-    const char* operandType = TypedExprLocalType(writer, expr ? expr->right : NULL);
-    const char* opName = ExprOperatorMangle(expr);
-    if (expr && expr->token && IsOperatorToken(&expr->token->token, OPERATOR_BITWISE_AND)) {
-        return 0;
-    }
-    if (!operandType || !opName || !IsKnownStruct(writer, operandType)) {
-        return 0;
-    }
-
-    char functionName[128];
-    snprintf(functionName, sizeof(functionName), "%s_%s_0", operandType, opName);
-    if (!FindFunctionInfo(writer, functionName)) {
-        return 0;
-    }
-
-    fputs(functionName, writer->out);
-    fputc('(', writer->out);
-    fputc('&', writer->out);
-    WriteTypedExpr(writer, expr->right);
-    fputc(')', writer->out);
-    return 1;
-}
-
-static int TryWriteTypedBinaryOperatorCall(struct CWriter* writer, struct KekExpr* expr) {
-    const char* leftType = TypedExprLocalType(writer, expr ? expr->left : NULL);
-    const char* opName = ExprOperatorMangle(expr);
-    if (!leftType || !opName || !IsKnownStruct(writer, leftType)) {
-        return 0;
-    }
-
-    char functionName[128];
-    snprintf(functionName, sizeof(functionName), "%s_%s_1", leftType, opName);
-    if (!FindFunctionInfo(writer, functionName)) {
-        return 0;
-    }
-
-    fputs(functionName, writer->out);
-    fputc('(', writer->out);
-    fputc('&', writer->out);
-    WriteTypedExpr(writer, expr->left);
-    fputc(',', writer->out);
-    WriteTypedExpr(writer, expr->right);
-    fputc(')', writer->out);
-    return 1;
-}
-
-static void WriteTypedExpr(struct CWriter* writer, struct KekExpr* expr) {
-    if (!expr) {
-        return;
-    }
-
-    char buffer[128];
-    switch (expr->kind) {
-        case KEK_EXPR_NAME:
-        case KEK_EXPR_NUMBER:
-        case KEK_EXPR_STRING:
-            if (expr->kind == KEK_EXPR_NAME) {
-                struct AstNode* substitution = FindGenericSubstitution(writer, writer->genericParams, writer->genericArgs, expr->token);
-                if (substitution) {
-                    GenericArgText(writer, substitution, buffer, sizeof(buffer));
-                    fputs(buffer, writer->out);
-                    break;
-                }
-            }
-            fputs(TypedNodeText(writer, expr->token, buffer, sizeof(buffer)), writer->out);
-            break;
-        case KEK_EXPR_BOOL:
-            fputs(IsKeywordToken(&expr->token->token, KEYWORD_TRUE) ? "1" : "0", writer->out);
-            break;
-        case KEK_EXPR_CALL:
-            WriteTypedCall(writer, expr);
-            break;
-        case KEK_EXPR_FIELD:
-            WriteTypedExpr(writer, expr->left);
-            if (expr->left && expr->left->kind == KEK_EXPR_NAME && expr->left->token) {
-                char localName[64];
-                CopyTypedNodeText(writer, expr->left->token, localName, sizeof(localName));
-                fputs((writer->thisIsPointer && TokenTextEquals(&expr->left->token->token, writer->file, "this"))
-                    || FindLocalIsPointer(writer, localName) ? "->" : ".", writer->out);
-            } else {
-                fputc('.', writer->out);
-            }
-            WriteTypedExpr(writer, expr->right);
-            break;
-        case KEK_EXPR_SCOPE:
-            if (expr->left) {
-                WriteTypedExpr(writer, expr->left);
-                fputc('_', writer->out);
-            }
-            WriteTypedExpr(writer, expr->right);
-            break;
-        case KEK_EXPR_INDEX:
-            WriteTypedExpr(writer, expr->left);
-            fputc('[', writer->out);
-            WriteTypedExpr(writer, expr->right);
-            fputc(']', writer->out);
-            break;
-        case KEK_EXPR_GROUP:
-            fputc('(', writer->out);
-            WriteTypedExpr(writer, expr->right);
-            fputc(')', writer->out);
-            break;
-        case KEK_EXPR_STRUCT_LITERAL:
-            WriteTypedStructLiteral(writer, expr);
-            break;
-        case KEK_EXPR_UNARY:
-            if (TryWriteTypedUnaryOperatorCall(writer, expr)) {
-                break;
-            }
-            fputs(TypedNodeText(writer, expr->token, buffer, sizeof(buffer)), writer->out);
-            WriteTypedExpr(writer, expr->right);
-            break;
-        case KEK_EXPR_BINARY:
-        case KEK_EXPR_ASSIGN:
-            if (TryWriteTypedBinaryOperatorCall(writer, expr)) {
-                break;
-            }
-            WriteTypedExpr(writer, expr->left);
-            fputs(TypedNodeText(writer, expr->token, buffer, sizeof(buffer)), writer->out);
-            WriteTypedExpr(writer, expr->right);
-            break;
-        case KEK_EXPR_CAST:
-            fputs("((", writer->out);
-            WriteTypedBaseType(writer, expr->type);
-            fputs(")(", writer->out);
-            WriteTypedExpr(writer, expr->right);
-            fputs("))", writer->out);
-            break;
-        case KEK_EXPR_SIZEOF:
-            fputs("sizeof(", writer->out);
-            if (expr->type) {
-                WriteTypedBaseType(writer, expr->type);
-            } else if (expr->right) {
-                WriteTypedExpr(writer, expr->right);
-            }
-            fputc(')', writer->out);
-            break;
-        case KEK_EXPR_ALIGNOF:
-            fputs("_Alignof(", writer->out);
-            if (expr->type) {
-                WriteTypedBaseType(writer, expr->type);
-            }
-            fputc(')', writer->out);
-            break;
-        case KEK_EXPR_OFFSETOF:
-            fputs("offsetof(", writer->out);
-            if (expr->type) {
-                WriteTypedBaseType(writer, expr->type);
-            }
-            fputc(',', writer->out);
-            if (expr->right) {
-                WriteTypedExpr(writer, expr->right);
-            }
-            fputc(')', writer->out);
-            break;
-        case KEK_EXPR_LEN:
-            fputs("(sizeof(", writer->out);
-            if (expr->right) {
-                WriteTypedExpr(writer, expr->right);
-            }
-            fputs(")/sizeof((", writer->out);
-            if (expr->right) {
-                WriteTypedExpr(writer, expr->right);
-            }
-            fputs(")[0]))", writer->out);
-            break;
-        case KEK_EXPR_RANGE:
-            // Range expressions are primarily handled inline by KEK_STMT_EACH codegen.
-            // If range appears in other contexts (e.g., array init), emit source for now.
-            if (expr->source) {
-                WriteSourceSlice(writer->out, writer->file, expr->source->location);
-            }
-            break;
-        case KEK_EXPR_UNKNOWN:
-        case KEK_EXPR_COUNT:
-            if (expr->source) {
-                WriteSourceSlice(writer->out, writer->file, expr->source->location);
-            }
-            break;
-    }
-}
-
-static void WriteTypedStatement(struct CWriter* writer, struct KekStmt* stmt);
-static void WriteTypedBlock(struct CWriter* writer, struct KekStmt* block);
-static struct KekStmt* FirstTypedBlockChild(struct KekStmt* stmt);
-
-static void WriteDeferredStatement(struct CWriter* writer, struct KekStmt* stmt) {
-    if (!stmt || stmt->kind != KEK_STMT_DEFER) {
-        return;
-    }
-
-    struct KekStmt* block = FirstTypedBlockChild(stmt);
-    if (block) {
-        WriteTypedBlock(writer, block);
-        return;
-    }
-
-    WriteTypedExpr(writer, stmt->expr);
-    fputc(';', writer->out);
-}
-
-static void WriteDeferredRange(struct CWriter* writer, size_t start, size_t end) {
-    while (end > start) {
-        end--;
-        WriteIndent(writer->out, writer->indent);
-        WriteDeferredStatement(writer, writer->deferred[end]);
-        fputc('\n', writer->out);
-    }
-}
-
-static void WriteAllActiveDefers(struct CWriter* writer) {
-    WriteDeferredRange(writer, 0, writer->deferCount);
-}
-
-static void WriteTypedBlock(struct CWriter* writer, struct KekStmt* block) {
-    fputs("{\n", writer->out);
-    writer->indent++;
-    size_t blockDeferStart = writer->deferCount;
-    for (struct KekStmt* child = block ? block->firstChild : NULL; child; child = child->next) {
-        if (child->kind == KEK_STMT_DEFER) {
-            if (writer->deferCount < sizeof(writer->deferred) / sizeof(writer->deferred[0])) {
-                writer->deferred[writer->deferCount++] = child;
-            }
+        usize colon=compiler_SelfCFindTopLevelColon(program,fileIndex,itemStart,itemEnd);
+        if (colon>=itemEnd) {
+            itemStart=itemEnd+1;
             continue;
         }
-        if (child->kind == KEK_STMT_RETURN) {
-            WriteAllActiveDefers(writer);
-        } else if (child->kind == KEK_STMT_BREAK || child->kind == KEK_STMT_CONTINUE) {
-            WriteDeferredRange(writer, blockDeferStart, writer->deferCount);
+        field.typeStart=itemStart;
+        field.typeEnd=colon;
+        field.nameIndex=colon+1;
+        usize afterName=field.nameIndex+1;
+        if (afterName<itemEnd&&compiler_SelfCIsPunctuation(program,fileIndex,afterName,PunctuationKind_LeftBracket)) {
+            field.isArray=1;
+            field.arrayStart=afterName+1;
+            field.arrayEnd=compiler_SelfCFindMatching(program,fileIndex,afterName);
+            afterName=field.arrayEnd+1;
         }
-        WriteIndent(writer->out, writer->indent);
-        WriteTypedStatement(writer, child);
-        fputc('\n', writer->out);
+        for (usize i=afterName;i<itemEnd;i++) {
+            if (compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Assign)) {
+                field.hasDefault=1;
+                field.defaultStart=i+1;
+                field.defaultEnd=itemEnd;
+                break;
+            }
+        }
+        Status status=compiler_SelfCAddField(program,&field);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        decl->fieldCount+=1;
+        itemStart=itemEnd+1;
     }
-    WriteDeferredRange(writer, blockDeferStart, writer->deferCount);
-    writer->deferCount = blockDeferStart;
-    if (writer->indent > 0) {
-        writer->indent--;
-    }
-    WriteIndent(writer->out, writer->indent);
-    fputc('}', writer->out);
+    return (Status_Ok);
 }
-
-static struct KekStmt* FirstTypedBlockChild(struct KekStmt* stmt) {
-    for (struct KekStmt* child = stmt ? stmt->firstChild : NULL; child; child = child->next) {
-        if (child->kind == KEK_STMT_BLOCK) {
-            return child;
-        }
+bool compiler_SelfCDeclNameMatches(struct SelfCProgram* program,struct SelfCDecl* decl,struct String name) {
+    if (decl->nameIndex>=compiler_SelfCFileTokenCount(program,decl->fileIndex)) {
+        return (0);
     }
-    return NULL;
+    struct String declName=compiler_SelfCTokenText(program,decl->fileIndex,decl->nameIndex);
+    return (String_Equals(&declName,name));
 }
-
-static void WriteTypedDeclStatement(struct CWriter* writer, struct KekStmt* stmt, int withSemicolon) {
-    char nameBuffer[128];
-    WriteTypedTypeAndName(writer, stmt->declType, stmt->declName);
-    CopyTypedNodeText(writer, stmt->declName, nameBuffer, sizeof(nameBuffer));
-
-    struct KekType* base = stmt->declType;
-    while (base && base->kind == KEK_TYPE_ARRAY) {
-        base = base->element;
-    }
-    if (base && base->name) {
-        char typeBuffer[128];
-        if (!GenericStructInstanceName(writer, base, typeBuffer, sizeof(typeBuffer))) {
-            CopyTypedNodeText(writer, base->name, typeBuffer, sizeof(typeBuffer));
+struct SelfCDecl* compiler_SelfCFindTypeDecl(struct SelfCProgram* program,struct String name) {
+    for (usize i=0;i<program->declCount;i++) {
+        struct SelfCDecl* decl=&program->decls[i];
+        if ((decl->kind==SelfCDeclKind_Struct||decl->kind==SelfCDeclKind_Union||decl->kind==SelfCDeclKind_Enum||decl->kind==SelfCDeclKind_Alias)&&compiler_SelfCDeclNameMatches(program,decl,name)) {
+            return (decl);
         }
-        AddLocalTypeEx(writer, nameBuffer, typeBuffer, stmt->declType && stmt->declType->kind == KEK_TYPE_POINTER);
-        if (!stmt->expr && IsKnownStruct(writer, typeBuffer)) {
-            struct CStructInfo* info = FindStructInfo(writer, typeBuffer);
-            if (info && info->fieldCount > 0) {
-                fputs(" = {", writer->out);
-                for (size_t i = 0; i < info->fieldCount; i++) {
-                    if (i > 0) {
-                        fputc(',', writer->out);
-                    }
-                    fprintf(writer->out, ".%s=%s", info->fieldNames[i], info->defaults[i]);
-                }
-                fputc('}', writer->out);
+    }
+    return (0);
+}
+Status compiler_SelfCParseAliasDecl(struct SelfCProgram* program,usize fileIndex,usize start,usize* outEnd) {
+    usize count=compiler_SelfCFileTokenCount(program,fileIndex);
+    usize end=start;
+    while (end<count&&!compiler_SelfCIsPunctuation(program,fileIndex,end,PunctuationKind_Semicolon)&&!compiler_SelfCIsEof(program,fileIndex,end)) {
+        end+=1;
+    }
+    struct SelfCDecl decl={0};
+    decl.kind=SelfCDeclKind_Alias;
+    decl.fileIndex=fileIndex;
+    decl.start=start;
+    decl.end=end+1;
+    decl.nameIndex=start+2;
+    decl.returnStart=end;
+    decl.returnEnd=end;
+    decl.receiverStart=end;
+    decl.receiverEnd=end;
+    decl.hasReceiver=0;
+    decl.isOperator=0;
+    decl.operatorCode=0;
+    decl.genericStart=end;
+    decl.genericEnd=end;
+    decl.isGeneric=0;
+    decl.paramStart=end;
+    decl.paramEnd=end;
+    decl.bodyStart=end;
+    decl.bodyEnd=end;
+    decl.hasBody=0;
+    decl.firstParam=0;
+    decl.paramCount=0;
+    decl.firstField=0;
+    decl.fieldCount=0;
+    decl.emitted=0;
+    Status clone=compiler_SelfCCloneString(program,std_OwnedStringView(&program->tokenFiles[fileIndex].packageName),&decl.packageName);
+    if (clone!=Status_Ok) {
+        return (clone);
+    }
+    for (usize i=start+3;i<end;i++) {
+        if (compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Assign)) {
+            decl.returnStart=i+1;
+            decl.returnEnd=end;
+            break;
+        }
+    }
+    Status status=compiler_SelfCAddDecl(program,&decl);
+    outEnd[0]=end+1;
+    return (status);
+}
+Status compiler_SelfCParseTypeDecl(struct SelfCProgram* program,usize fileIndex,usize start,SelfCDeclKind kind,usize* outEnd) {
+    usize count=compiler_SelfCFileTokenCount(program,fileIndex);
+    usize colon=start+1;
+    usize nameIndex=colon+1;
+    if (kind==SelfCDeclKind_Enum) {
+        if (colon<count&&compiler_SelfCIsPunctuation(program,fileIndex,colon,PunctuationKind_Colon)) {
+            usize secondColon=compiler_SelfCFindTopLevelColon(program,fileIndex,colon+1,count);
+            if (secondColon<count) {
+                nameIndex=secondColon+1;
             }
         }
     }
-
-    if (stmt->expr) {
-        fputc('=', writer->out);
-        WriteTypedExpr(writer, stmt->expr);
+    usize genericStart=count;
+    usize genericEnd=count;
+    if (nameIndex+1<count&&compiler_SelfCIsOperator(program,fileIndex,nameIndex+1,OperatorKind_Less)) {
+        genericStart=nameIndex+1;
+        genericEnd=compiler_SelfCFindMatching(program,fileIndex,genericStart);
     }
-    if (withSemicolon) {
-        fputc(';', writer->out);
+    usize blockStart=compiler_SelfCFindNextBlock(program,fileIndex,nameIndex+1,count);
+    usize blockEnd=compiler_SelfCFindMatching(program,fileIndex,blockStart);
+    struct SelfCDecl decl={0};
+    decl.kind=kind;
+    decl.fileIndex=fileIndex;
+    decl.start=start;
+    decl.end=blockEnd+1;
+    decl.nameIndex=nameIndex;
+    decl.returnStart=start;
+    decl.returnEnd=start;
+    decl.receiverStart=start;
+    decl.receiverEnd=start;
+    decl.hasReceiver=0;
+    decl.isOperator=0;
+    decl.operatorCode=0;
+    decl.genericStart=genericStart;
+    decl.genericEnd=genericEnd;
+    decl.isGeneric=genericStart<count;
+    decl.paramStart=start;
+    decl.paramEnd=start;
+    decl.bodyStart=blockStart+1;
+    decl.bodyEnd=blockEnd;
+    decl.hasBody=1;
+    decl.firstParam=0;
+    decl.paramCount=0;
+    decl.firstField=0;
+    decl.fieldCount=0;
+    decl.emitted=0;
+    Status clone=compiler_SelfCCloneString(program,std_OwnedStringView(&program->tokenFiles[fileIndex].packageName),&decl.packageName);
+    if (clone!=Status_Ok) {
+        return (clone);
     }
+    if (kind==SelfCDeclKind_Struct||kind==SelfCDeclKind_Union) {
+        Status fields=compiler_SelfCParseFields(program,&decl,fileIndex,blockStart+1,blockEnd);
+        if (fields!=Status_Ok) {
+            return (fields);
+        }
+    }
+    Status status=compiler_SelfCAddDecl(program,&decl);
+    outEnd[0]=blockEnd+1;
+    if (outEnd[0]<count&&compiler_SelfCIsPunctuation(program,fileIndex,outEnd[0],PunctuationKind_Semicolon)) {
+        outEnd[0]+=1;
+    }
+    return (status);
 }
-
-static void WriteTypedStatement(struct CWriter* writer, struct KekStmt* stmt) {
-    if (!stmt) {
-        return;
+Status compiler_SelfCParseExternDecl(struct SelfCProgram* program,usize fileIndex,usize start,usize* outEnd) {
+    usize count=compiler_SelfCFileTokenCount(program,fileIndex);
+    usize blockStart=compiler_SelfCFindNextBlock(program,fileIndex,start,count);
+    usize blockEnd=compiler_SelfCFindMatching(program,fileIndex,blockStart);
+    struct SelfCDecl decl={0};
+    decl.kind=SelfCDeclKind_ExternC;
+    decl.fileIndex=fileIndex;
+    decl.start=start;
+    decl.end=blockEnd+1;
+    decl.nameIndex=start;
+    decl.returnStart=start;
+    decl.returnEnd=start;
+    decl.receiverStart=start;
+    decl.receiverEnd=start;
+    decl.hasReceiver=0;
+    decl.isOperator=0;
+    decl.operatorCode=0;
+    decl.genericStart=start;
+    decl.genericEnd=start;
+    decl.isGeneric=0;
+    decl.paramStart=start;
+    decl.paramEnd=start;
+    decl.bodyStart=blockStart+1;
+    decl.bodyEnd=blockEnd;
+    decl.hasBody=1;
+    decl.firstParam=0;
+    decl.paramCount=0;
+    decl.firstField=0;
+    decl.fieldCount=0;
+    decl.emitted=0;
+    Status clone=compiler_SelfCCloneString(program,std_OwnedStringView(&program->tokenFiles[fileIndex].packageName),&decl.packageName);
+    if (clone!=Status_Ok) {
+        return (clone);
     }
-    switch (stmt->kind) {
-        case KEK_STMT_BLOCK:
-            WriteTypedBlock(writer, stmt);
-            break;
-        case KEK_STMT_DECL:
-            WriteTypedDeclStatement(writer, stmt, 1);
-            break;
-        case KEK_STMT_EXPR:
-            WriteTypedExpr(writer, stmt->expr);
-            fputc(';', writer->out);
-            break;
-        case KEK_STMT_IF:
-            fputs("if (", writer->out);
-            WriteTypedExpr(writer, stmt->condition);
-            fputs(") ", writer->out);
-            WriteTypedBlock(writer, FirstTypedBlockChild(stmt));
-            break;
-        case KEK_STMT_ELSE:
-            fputs("else ", writer->out);
-            WriteTypedBlock(writer, FirstTypedBlockChild(stmt));
-            break;
-        case KEK_STMT_WHILE:
-            fputs("while (", writer->out);
-            WriteTypedExpr(writer, stmt->condition);
-            fputs(") ", writer->out);
-            WriteTypedBlock(writer, FirstTypedBlockChild(stmt));
-            break;
-        case KEK_STMT_DO_WHILE:
-            fputs("do ", writer->out);
-            WriteTypedBlock(writer, FirstTypedBlockChild(stmt));
-            fputs(" while (", writer->out);
-            WriteTypedExpr(writer, stmt->condition);
-            fputs(");", writer->out);
-            break;
-        case KEK_STMT_FOR:
-            fputs("for (", writer->out);
-            if (stmt->initStmt) {
-                WriteTypedDeclStatement(writer, stmt->initStmt, 0);
-            } else {
-                WriteTypedExpr(writer, stmt->expr);
+    Status status=compiler_SelfCAddDecl(program,&decl);
+    outEnd[0]=blockEnd+1;
+    return (status);
+}
+Status compiler_SelfCParseFunctionDecl(struct SelfCProgram* program,usize fileIndex,usize start,usize* outEnd) {
+    usize count=compiler_SelfCFileTokenCount(program,fileIndex);
+    usize groupStart=compiler_SelfCFindNextGroup(program,fileIndex,start,count);
+    if (groupStart>=count) {
+        outEnd[0]=start+1;
+        return (Status_Ok);
+    }
+    usize groupEnd=compiler_SelfCFindMatching(program,fileIndex,groupStart);
+    usize colon=compiler_SelfCFindTopLevelColon(program,fileIndex,start,groupStart);
+    if (colon>=groupStart) {
+        outEnd[0]=groupEnd+1;
+        return (Status_Ok);
+    }
+    usize blockStart=groupEnd+1;
+    bool hasBody=0;
+    usize blockEnd=groupEnd;
+    if (blockStart<count&&compiler_SelfCIsPunctuation(program,fileIndex,blockStart,PunctuationKind_LeftBrace)) {
+        hasBody=1;
+        blockEnd=compiler_SelfCFindMatching(program,fileIndex,blockStart);
+    }
+    struct SelfCDecl decl={0};
+    decl.kind=SelfCDeclKind_Function;
+    decl.fileIndex=fileIndex;
+    decl.start=start;
+    decl.end=blockEnd+1;
+    decl.nameIndex=colon+1;
+    decl.returnStart=start;
+    decl.returnEnd=colon;
+    decl.receiverStart=colon+1;
+    decl.receiverEnd=colon+1;
+    decl.hasReceiver=0;
+    decl.isOperator=0;
+    decl.operatorCode=0;
+    decl.genericStart=count;
+    decl.genericEnd=count;
+    decl.isGeneric=0;
+    decl.paramStart=groupStart+1;
+    decl.paramEnd=groupEnd;
+    decl.bodyStart=blockStart+1;
+    decl.bodyEnd=blockEnd;
+    decl.hasBody=hasBody;
+    decl.firstParam=0;
+    decl.paramCount=0;
+    decl.firstField=0;
+    decl.fieldCount=0;
+    decl.emitted=0;
+    Status clone=compiler_SelfCCloneString(program,std_OwnedStringView(&program->tokenFiles[fileIndex].packageName),&decl.packageName);
+    if (clone!=Status_Ok) {
+        return (clone);
+    }
+    usize scope=compiler_SelfCFindOperatorScope(program,fileIndex,colon+1,groupStart);
+    if (scope<groupStart) {
+        decl.hasReceiver=1;
+        decl.receiverStart=colon+1;
+        decl.receiverEnd=scope;
+        decl.nameIndex=scope+1;
+    }
+    if (decl.nameIndex<groupStart&&compiler_SelfCIsIdentifierText(program,fileIndex,decl.nameIndex,"operator")) {
+        decl.isOperator=1;
+        decl.operatorCode=compiler_SelfCOperatorCode(program,fileIndex,decl.nameIndex+1);
+    }
+    usize genericProbe=decl.nameIndex+1;
+    if (decl.isOperator) {
+        genericProbe=decl.nameIndex+2;
+    }
+    if (genericProbe<groupStart&&compiler_SelfCIsOperator(program,fileIndex,genericProbe,OperatorKind_Less)) {
+        decl.genericStart=genericProbe;
+        decl.genericEnd=compiler_SelfCFindMatching(program,fileIndex,genericProbe);
+        decl.isGeneric=1;
+    }
+    for (usize i=decl.receiverStart;i<decl.receiverEnd;i++) {
+        if (compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Less)) {
+            decl.isGeneric=1;
+        }
+    }
+    Status params=compiler_SelfCParseParams(program,&decl,fileIndex,groupStart+1,groupEnd);
+    if (params!=Status_Ok) {
+        return (params);
+    }
+    Status status=compiler_SelfCAddDecl(program,&decl);
+    outEnd[0]=blockEnd+1;
+    if (outEnd[0]<count&&compiler_SelfCIsPunctuation(program,fileIndex,outEnd[0],PunctuationKind_Semicolon)) {
+        outEnd[0]+=1;
+    }
+    return (status);
+}
+Status compiler_SelfCParseDeclarations(struct SelfCProgram* program) {
+    for (usize fileIndex=0;fileIndex<program->tokenFileCount;fileIndex++) {
+        usize index=0;
+        usize count=compiler_SelfCFileTokenCount(program,fileIndex);
+        while (index<count&&!compiler_SelfCIsEof(program,fileIndex,index)) {
+            index=compiler_SelfCSkipAttributes(program,fileIndex,index);
+            if (index>=count||compiler_SelfCIsEof(program,fileIndex,index)) {
+                break;
             }
-            fputc(';', writer->out);
-            WriteTypedExpr(writer, stmt->condition);
-            fputc(';', writer->out);
-            WriteTypedExpr(writer, stmt->step);
-            fputs(") ", writer->out);
-            WriteTypedBlock(writer, FirstTypedBlockChild(stmt));
-            break;
-        case KEK_STMT_EACH: {
-            // each<Type:val>(arr){ body } or each<IndexType:i, Type:val>(arr){ body }
-            char idxName[64];
-            char valName[64];
-
-            // Determine index variable name
-            if (stmt->indexName) {
-                // User provided index variable
-                CopyTypedNodeText(writer, stmt->indexName, idxName, sizeof(idxName));
-            } else {
-                // Generate hidden index variable
-                snprintf(idxName, sizeof(idxName), "__kek_each_idx_%d", writer->eachIndexCounter++);
-            }
-
-            // Get value variable name
-            CopyTypedNodeText(writer, stmt->declName, valName, sizeof(valName));
-
-            // Check if iterating over a range expression
-            if (stmt->expr && stmt->expr->kind == KEK_EXPR_RANGE) {
-                // Optimized: direct for loop over range
-                // for (Type var = start; var < end; var += step) { body }
-                struct KekExpr* range = stmt->expr;
-
-                fputs("for (", writer->out);
-                WriteTypedBaseType(writer, stmt->declType);
-                fprintf(writer->out, " %s = ", valName);
-                WriteTypedExpr(writer, range->left);  // start
-                fprintf(writer->out, "; %s < ", valName);
-                WriteTypedExpr(writer, range->right); // end
-                fprintf(writer->out, "; %s += ", valName);
-                if (range->step) {
-                    WriteTypedExpr(writer, range->step);
-                } else {
-                    fputc('1', writer->out);
-                }
-                fputs(") ", writer->out);
-                WriteTypedBlock(writer, FirstTypedBlockChild(stmt));
-            } else {
-                // Array iteration
-                // for (IndexType idx = 0; idx < (sizeof(arr)/sizeof(arr[0])); idx++) {
-                //     Type val = arr[idx];
-                //     body
-                // }
-                fputs("for (", writer->out);
-                if (stmt->indexType) {
-                    WriteTypedBaseType(writer, stmt->indexType);
-                } else {
-                    fputs("size_t", writer->out);
-                }
-                fprintf(writer->out, " %s = 0; %s < (sizeof(", idxName, idxName);
-                WriteTypedExpr(writer, stmt->expr);
-                fputs(")/sizeof((", writer->out);
-                WriteTypedExpr(writer, stmt->expr);
-                fprintf(writer->out, ")[0])); %s++) {\n", idxName);
-                writer->indent++;
-
-                // Declare value variable at the top of the block
-                WriteIndent(writer->out, writer->indent);
-                WriteTypedBaseType(writer, stmt->declType);
-                fprintf(writer->out, " %s = (", valName);
-                WriteTypedExpr(writer, stmt->expr);
-                fprintf(writer->out, ")[%s];\n", idxName);
-
-                // Write body statements from the block
-                struct KekStmt* block = FirstTypedBlockChild(stmt);
-                if (block) {
-                    for (struct KekStmt* child = block->firstChild; child; child = child->next) {
-                        WriteIndent(writer->out, writer->indent);
-                        WriteTypedStatement(writer, child);
-                        fputc('\n', writer->out);
+            usize next=index+1;
+            Status status=Status_Ok;
+            if (compiler_SelfCIsPunctuation(program,fileIndex,index,PunctuationKind_Hash)) {
+                usize groupStart=compiler_SelfCFindNextGroup(program,fileIndex,index,count);
+                if (groupStart<count) {
+                    next=compiler_SelfCSkipDelimited(program,fileIndex,groupStart);
+                    if (next<count&&compiler_SelfCIsPunctuation(program,fileIndex,next,PunctuationKind_Semicolon)) {
+                        next+=1;
                     }
                 }
-
-                writer->indent--;
-                WriteIndent(writer->out, writer->indent);
-                fputc('}', writer->out);
-            }
-            break;
-        }
-        case KEK_STMT_SWITCH:
-            fputs("switch (", writer->out);
-            WriteTypedExpr(writer, stmt->condition);
-            fputs(") ", writer->out);
-            WriteTypedBlock(writer, FirstTypedBlockChild(stmt));
-            break;
-        case KEK_STMT_CASE:
-            fputs("case ", writer->out);
-            WriteTypedExpr(writer, stmt->condition);
-            fputs(": ", writer->out);
-            if (FirstTypedBlockChild(stmt)) {
-                WriteTypedBlock(writer, FirstTypedBlockChild(stmt));
-            }
-            break;
-        case KEK_STMT_DEFAULT:
-            fputs("default:", writer->out);
-            if (FirstTypedBlockChild(stmt)) {
-                fputc(' ', writer->out);
-                WriteTypedBlock(writer, FirstTypedBlockChild(stmt));
-            } else if (stmt->expr) {
-                fputc(' ', writer->out);
-                WriteTypedExpr(writer, stmt->expr);
-                fputc(';', writer->out);
-            }
-            break;
-        case KEK_STMT_DEFER:
-            WriteDeferredStatement(writer, stmt);
-            break;
-        case KEK_STMT_RETURN:
-            fputs("return", writer->out);
-            if (stmt->expr) {
-                fputc('(', writer->out);
-                WriteTypedExpr(writer, stmt->expr);
-                fputc(')', writer->out);
-            }
-            fputc(';', writer->out);
-            break;
-        case KEK_STMT_BREAK:
-            fputs("break;", writer->out);
-            break;
-        case KEK_STMT_CONTINUE:
-            fputs("continue;", writer->out);
-            break;
-        case KEK_STMT_UNREACHABLE:
-            fputs("__builtin_unreachable();", writer->out);
-            break;
-        case KEK_STMT_PANIC:
-            fputs("do { fprintf(stderr, \"panic: %s\\n\", ", writer->out);
-            if (stmt->expr) {
-                WriteTypedExpr(writer, stmt->expr);
             } else {
-                fputs("\"\"", writer->out);
-            }
-            fputs("); abort(); } while(0);", writer->out);
-            break;
-        case KEK_STMT_UNKNOWN:
-        case KEK_STMT_COUNT:
-            if (stmt->source) {
-                WriteSourceSlice(writer->out, writer->file, stmt->source->location);
-            }
-            break;
-    }
-}
-
-static void RegisterTypedStruct(struct CWriter* writer, struct KekDecl* decl) {
-    if (!decl || !decl->name) {
-        return;
-    }
-    char structName[64];
-    CopyTypedNodeText(writer, decl->name, structName, sizeof(structName));
-    struct CStructInfo* info = AddStructInfo(writer, structName);
-    if (!info) {
-        return;
-    }
-    for (struct KekField* field = decl->firstField; field && info->fieldCount < 64; field = field->next) {
-        CopyTypedNodeText(writer, field->name, info->fieldNames[info->fieldCount], sizeof(info->fieldNames[info->fieldCount]));
-        CopyTypedFieldDefault(writer,
-            field,
-            info->defaults[info->fieldCount],
-            sizeof(info->defaults[info->fieldCount]),
-            &info->fieldIsAggregate[info->fieldCount]);
-        info->fieldCount++;
-    }
-}
-
-static void RegisterTypedFunction(struct CWriter* writer, const char* functionName, struct KekDecl* decl, int includeThis) {
-    struct CFunctionInfo* function = AddFunctionInfo(writer, functionName);
-    if (!function) {
-        return;
-    }
-    if (includeThis && function->paramCount < 16) {
-        snprintf(function->paramNames[function->paramCount++], sizeof(function->paramNames[0]), "this");
-    }
-    for (struct KekParam* param = decl->firstParam; param && function->paramCount < 16; param = param->next) {
-        CopyTypedNodeText(writer, param->name, function->paramNames[function->paramCount], sizeof(function->paramNames[function->paramCount]));
-        if (param->defaultValue) {
-            CopyExprSource(writer, param->defaultValue, function->defaults[function->paramCount], sizeof(function->defaults[function->paramCount]));
-        }
-        function->paramCount++;
-    }
-}
-
-static void RegisterTypedFunctionWithName(struct CWriter* writer, const char* functionName, struct KekDecl* decl, int includeThis) {
-    RegisterTypedFunction(writer, functionName, decl, includeThis);
-}
-
-static int TypedDeclIsMethod(struct KekDecl* decl) {
-    struct AstNode* receiver = TypedDeclReceiverName(decl);
-    struct AstNode* afterReceiver = receiver ? NextSibling(receiver) : NULL;
-    if (IsGenericNode(afterReceiver)) {
-        afterReceiver = NextSibling(afterReceiver);
-    }
-    return decl
-        && decl->kind == KEK_DECL_FUNCTION
-        && decl->type
-        && receiver
-        && IsTokenNode(receiver)
-        && afterReceiver
-        && IsTokenNode(afterReceiver)
-        && IsOperatorToken(&afterReceiver->token, OPERATOR_SCOPE);
-}
-
-static struct AstNode* TypedDeclReceiverName(struct KekDecl* decl) {
-    if (!decl || !decl->type) {
-        return NULL;
-    }
-    struct AstNode* colon = NextSibling(decl->type);
-    if (IsGenericNode(colon)) {
-        colon = NextSibling(colon);
-    }
-    if (!colon) {
-        return NULL;
-    }
-    return NextSibling(colon);
-}
-
-static void TypedFunctionName(struct CWriter* writer, struct KekDecl* decl, char* buffer, size_t bufferSize) {
-    char name[64];
-    TypedDeclBaseName(writer, decl, name, sizeof(name));
-    if (TypedDeclIsMethod(decl)) {
-        char receiver[64];
-        CopyTypedNodeText(writer, TypedDeclReceiverName(decl), receiver, sizeof(receiver));
-        snprintf(buffer, bufferSize, "%s_%s", receiver, name);
-    } else {
-        snprintf(buffer, bufferSize, "%s%s", writer->namespacePrefix, name);
-    }
-}
-
-static void RegisterTypedDeclForCodegen(struct CWriter* writer, struct KekDecl* decl) {
-    if (decl->genericParams) {
-        return;
-    }
-    if (decl->kind == KEK_DECL_STRUCT) {
-        RegisterTypedStruct(writer, decl);
-    } else if (decl->kind == KEK_DECL_EXTERN_C) {
-        RegisterExternCStructs(writer, decl);
-    } else if (decl->kind == KEK_DECL_FUNCTION) {
-        char functionName[128];
-        TypedFunctionName(writer, decl, functionName, sizeof(functionName));
-        RegisterTypedFunction(writer, functionName, decl, TypedDeclIsMethod(decl));
-    }
-}
-
-static int AttributeListContains(struct CWriter* writer, struct AstNode* attributes, const char* name) {
-    if (!attributes || attributes->type != AST_INDEX) {
-        return 0;
-    }
-    for (struct AstNode* attribute = attributes->firstChild; attribute; attribute = attribute->nextSibling) {
-        struct AstNode* token = attribute->firstChild;
-        if (token && IsTokenNode(token) && TokenTextEquals(&token->token, writer->file, name)) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-static int GetAlignedValue(struct CWriter* writer, struct AstNode* attributes) {
-    if (!attributes || attributes->type != AST_INDEX) {
-        return 0;
-    }
-
-    for (struct AstNode* statement = attributes->firstChild; statement; statement = statement->nextSibling) {
-        struct AstNode* first = statement->firstChild;
-        if (!first || !IsTokenNode(first)) {
-            continue;
-        }
-        char buffer[256];
-        const char* text = CTokenText(&first->token, writer->file, buffer, sizeof(buffer));
-        if (strcmp(text, "aligned") == 0) {
-            struct AstNode* group = first->nextSibling;
-            if (group && group->type == AST_GROUP && group->firstChild && group->firstChild->firstChild) {
-                struct AstNode* valueNode = group->firstChild->firstChild;
-                if (IsTokenNode(valueNode) && valueNode->token.type == TOKEN_NUMBER) {
-                    CopyTokenText(&valueNode->token, writer->file, buffer, sizeof(buffer));
-                    return atoi(buffer);
-                }
-            }
-        }
-    }
-
-    return 0;
-}
-
-static int TypedDeclHasAttribute(struct CWriter* writer, struct KekDecl* decl, const char* name) {
-    struct AstNode* first = decl && decl->source ? decl->source->firstChild : NULL;
-    return first && first->type == AST_INDEX && AttributeListContains(writer, first, name);
-}
-
-static int TypedDeclGetAlignedValue(struct CWriter* writer, struct KekDecl* decl) {
-    struct AstNode* first = decl && decl->source ? decl->source->firstChild : NULL;
-    if (first && first->type == AST_INDEX) {
-        return GetAlignedValue(writer, first);
-    }
-    return 0;
-}
-
-static void WriteTypedParams(struct CWriter* writer, struct KekDecl* decl) {
-    if (!decl->firstParam) {
-        fputs("void", writer->out);
-        return;
-    }
-    int first = 1;
-    for (struct KekParam* param = decl->firstParam; param; param = param->next) {
-        if (!first) {
-            fputc(',', writer->out);
-        }
-        first = 0;
-        WriteTypedTypeAndName(writer, param->type, param->name);
-    }
-}
-
-static void WriteTypedFunctionSignature(struct CWriter* writer, struct KekDecl* decl, const char* functionName) {
-    char returnName[128];
-    if (TypedDeclHasAttribute(writer, decl, "static")) {
-        fputs("static ", writer->out);
-    }
-    if (TypedDeclHasAttribute(writer, decl, "inline")) {
-        fputs("inline ", writer->out);
-    }
-    if (!TypedDeclIsMethod(decl)
-        && TypedNodeText(writer, decl->parsedType ? decl->parsedType->name : NULL, returnName, sizeof(returnName))
-        && strcmp(returnName, "i64") == 0
-        && strcmp(functionName, "main") == 0) {
-        fputs("int", writer->out);
-    } else {
-        WriteTypedBaseType(writer, decl->parsedType);
-    }
-    fprintf(writer->out, " %s(", functionName);
-    if (TypedDeclIsMethod(decl)) {
-        char receiver[64];
-        CopyTypedNodeText(writer, TypedDeclReceiverName(decl), receiver, sizeof(receiver));
-        fprintf(writer->out, "struct %s* this", receiver);
-        if (decl->firstParam) {
-            fputc(',', writer->out);
-            WriteTypedParams(writer, decl);
-        }
-    } else {
-        WriteTypedParams(writer, decl);
-    }
-    fputc(')', writer->out);
-}
-
-static void WriteTypedGenericStructInstance(struct CWriter* writer, struct CGenericInstance* instance) {
-    if (!instance || !instance->decl) {
-        return;
-    }
-    struct SourceFile* previousFile = writer->file;
-    struct AstNode* previousParams = writer->genericParams;
-    struct AstNode* previousArgs = writer->genericArgs;
-    struct SourceFile* previousArgFile = writer->genericArgFile;
-    writer->file = instance->declFile ? instance->declFile : writer->file;
-    writer->genericParams = instance->decl->genericParams;
-    writer->genericArgs = instance->args;
-    writer->genericArgFile = instance->argsFile ? instance->argsFile : writer->file;
-
-    fprintf(writer->out, "struct %s {\n", instance->name);
-    writer->indent++;
-    for (struct KekField* field = instance->decl->firstField; field; field = field->next) {
-        WriteIndent(writer->out, writer->indent);
-        WriteTypedTypeAndName(writer, field->type, field->name);
-        fputs(";\n", writer->out);
-    }
-    writer->indent--;
-    fputs("};", writer->out);
-
-    writer->file = previousFile;
-    writer->genericParams = previousParams;
-    writer->genericArgs = previousArgs;
-    writer->genericArgFile = previousArgFile;
-}
-
-static void WriteTypedGenericFunctionSignature(struct CWriter* writer, struct CGenericInstance* instance) {
-    struct KekDecl* decl = instance->decl;
-    struct SourceFile* previousFile = writer->file;
-    struct AstNode* previousParams = writer->genericParams;
-    struct AstNode* previousArgs = writer->genericArgs;
-    struct SourceFile* previousArgFile = writer->genericArgFile;
-
-    writer->file = instance->declFile ? instance->declFile : previousFile;
-    writer->genericParams = decl->genericParams;
-    writer->genericArgs = instance->args;
-    writer->genericArgFile = instance->argsFile;
-
-    WriteTypedBaseType(writer, decl->parsedType);
-    fprintf(writer->out, " %s(", instance->name);
-    if (TypedDeclIsMethod(decl)) {
-        char receiver[128];
-        MangleGenericNameWithFiles(writer, instance->declFile, TypedDeclReceiverName(decl), instance->argsFile, instance->args, receiver, sizeof(receiver));
-        fprintf(writer->out, "struct %s* this", receiver);
-        if (decl->firstParam) {
-            fputc(',', writer->out);
-            WriteTypedParams(writer, decl);
-        }
-    } else {
-        WriteTypedParams(writer, decl);
-    }
-    fputc(')', writer->out);
-
-    writer->file = previousFile;
-    writer->genericParams = previousParams;
-    writer->genericArgs = previousArgs;
-    writer->genericArgFile = previousArgFile;
-}
-
-static void WriteTypedGenericFunctionInstance(struct CWriter* writer, struct CGenericInstance* instance) {
-    if (!instance || !instance->decl) {
-        return;
-    }
-    struct KekDecl* decl = instance->decl;
-    struct SourceFile* previousFile = writer->file;
-    struct AstNode* previousParams = writer->genericParams;
-    struct AstNode* previousArgs = writer->genericArgs;
-    struct SourceFile* previousArgFile = writer->genericArgFile;
-    writer->file = instance->declFile ? instance->declFile : writer->file;
-    if (writer->file) {
-        PackagePrefixFromPath(writer->file->path, writer->namespacePrefix, sizeof(writer->namespacePrefix));
-    }
-    writer->genericParams = decl->genericParams;
-    writer->genericArgs = instance->args;
-    writer->genericArgFile = instance->argsFile ? instance->argsFile : writer->file;
-
-    WriteTypedGenericFunctionSignature(writer, instance);
-    fputc(' ', writer->out);
-    int previousThisIsPointer = writer->thisIsPointer;
-    size_t previousLocalCount = writer->localCount;
-    if (TypedDeclIsMethod(decl)) {
-        char receiver[128];
-        MangleGenericNameWithFiles(writer, instance->declFile, TypedDeclReceiverName(decl), instance->argsFile, instance->args, receiver, sizeof(receiver));
-        AddLocalTypeEx(writer, "this", receiver, 1);
-    }
-    for (struct KekParam* param = decl->firstParam; param; param = param->next) {
-        char paramName[64];
-        char typeName[64];
-        struct KekType* base = param->type;
-        while (base && (base->kind == KEK_TYPE_ARRAY || base->kind == KEK_TYPE_POINTER)) {
-            base = base->element;
-        }
-        CopyTypedNodeText(writer, param->name, paramName, sizeof(paramName));
-        CopyTypedNodeText(writer, base ? base->name : NULL, typeName, sizeof(typeName));
-        AddLocalTypeEx(writer, paramName, typeName, param->type && param->type->kind == KEK_TYPE_POINTER);
-    }
-    writer->thisIsPointer = TypedDeclIsMethod(decl);
-    WriteTypedBlock(writer, decl->firstStmt);
-    writer->thisIsPointer = previousThisIsPointer;
-    writer->localCount = previousLocalCount;
-
-    writer->file = previousFile;
-    writer->genericParams = previousParams;
-    writer->genericArgs = previousArgs;
-    writer->genericArgFile = previousArgFile;
-}
-
-static void WriteTypedDecl(struct CWriter* writer, struct KekDecl* decl) {
-    char name[128];
-    if (decl->genericParams) {
-        return;
-    }
-    switch (decl->kind) {
-        case KEK_DECL_IMPORT:
-        case KEK_DECL_USING:
-            break;
-        case KEK_DECL_EXTERN_C:
-            if (decl->body && decl->body->location.length >= 2) {
-                struct SourceLocation body = decl->body->location;
-                body.offset++;
-                body.length -= 2;
-                fputs("#if defined(__GNUC__) || defined(__clang__)\n", writer->out);
-                fputs("#pragma GCC diagnostic push\n", writer->out);
-                fputs("#pragma GCC diagnostic ignored \"-Wunused-function\"\n", writer->out);
-                fputs("#endif\n", writer->out);
-                WriteSourceSlice(writer->out, writer->file, body);
-                fputs("\n#if defined(__GNUC__) || defined(__clang__)\n", writer->out);
-                fputs("#pragma GCC diagnostic pop\n", writer->out);
-                fputs("#endif\n", writer->out);
-            }
-            break;
-        case KEK_DECL_ALIAS:
-            fputs("typedef ", writer->out);
-            WriteTypedBaseType(writer, decl->parsedType);
-            fputc(' ', writer->out);
-            fputs(TypedNodeText(writer, decl->name, name, sizeof(name)), writer->out);
-            fputc(';', writer->out);
-            break;
-        case KEK_DECL_STRUCT:
-            fputs("struct", writer->out);
-            {
-                int isPacked = TypedDeclHasAttribute(writer, decl, "packed");
-                int alignedValue = TypedDeclGetAlignedValue(writer, decl);
-                if (isPacked || alignedValue > 0) {
-                    fputs(" __attribute__((", writer->out);
-                    if (isPacked) {
-                        fputs("packed", writer->out);
-                        if (alignedValue > 0) {
-                            fputc(',', writer->out);
+                if (compiler_SelfCIsKeyword(program,fileIndex,index,KeywordKind_Extern)) {
+                    status=compiler_SelfCParseExternDecl(program,fileIndex,index,&next);
+                } else {
+                    if (compiler_SelfCIsKeyword(program,fileIndex,index,KeywordKind_Alias)||compiler_SelfCIsIdentifierText(program,fileIndex,index,"alias")) {
+                        status=compiler_SelfCParseAliasDecl(program,fileIndex,index,&next);
+                    } else {
+                        if (compiler_SelfCIsKeyword(program,fileIndex,index,KeywordKind_Struct)||compiler_SelfCIsIdentifierText(program,fileIndex,index,"struct")) {
+                            status=compiler_SelfCParseTypeDecl(program,fileIndex,index,SelfCDeclKind_Struct,&next);
+                        } else {
+                            if (compiler_SelfCIsKeyword(program,fileIndex,index,KeywordKind_Union)||compiler_SelfCIsIdentifierText(program,fileIndex,index,"union")) {
+                                status=compiler_SelfCParseTypeDecl(program,fileIndex,index,SelfCDeclKind_Union,&next);
+                            } else {
+                                if (compiler_SelfCIsKeyword(program,fileIndex,index,KeywordKind_Enum)||compiler_SelfCIsIdentifierText(program,fileIndex,index,"enum")) {
+                                    status=compiler_SelfCParseTypeDecl(program,fileIndex,index,SelfCDeclKind_Enum,&next);
+                                } else {
+                                    status=compiler_SelfCParseFunctionDecl(program,fileIndex,index,&next);
+                                }
+                            }
                         }
                     }
-                    if (alignedValue > 0) {
-                        fprintf(writer->out, "aligned(%d)", alignedValue);
-                    }
-                    fputs("))", writer->out);
                 }
             }
-            fputc(' ', writer->out);
-            fputs(TypedNodeText(writer, decl->name, name, sizeof(name)), writer->out);
-            fputs(" {\n", writer->out);
-            writer->indent++;
-            for (struct KekField* field = decl->firstField; field; field = field->next) {
-                WriteIndent(writer->out, writer->indent);
-                if (field->isNestedStruct) {
-                    // Nested struct: emit inline struct definition
-                    char nestedName[128];
-                    fputs("struct {\n", writer->out);
-                    writer->indent++;
-                    for (struct KekField* nested = field->nestedFields; nested; nested = nested->next) {
-                        WriteIndent(writer->out, writer->indent);
-                        WriteTypedTypeAndName(writer, nested->type, nested->name);
-                        fputs(";\n", writer->out);
+            if (status!=Status_Ok) {
+                return (status);
+            }
+            if (next<=index) {
+                next=index+1;
+            }
+            index=next;
+        }
+    }
+    return (Status_Ok);
+}
+Status compiler_SelfCWriteTokenRangeRaw(struct SelfCProgram* program,struct StringBuilder* out,usize fileIndex,usize start,usize end) {
+    for (usize i=start;i<end;i++) {
+        Status status=compiler_SelfCWriteToken(program,out,fileIndex,i);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+    }
+    return (Status_Ok);
+}
+bool compiler_SelfCIsBuiltinTypeName(struct String name) {
+    return (String_EqualsCString(&name,"void")||String_EqualsCString(&name,"bool")||String_EqualsCString(&name,"int")||String_EqualsCString(&name,"u8")||String_EqualsCString(&name,"u16")||String_EqualsCString(&name,"u32")||String_EqualsCString(&name,"u64")||String_EqualsCString(&name,"i8")||String_EqualsCString(&name,"i16")||String_EqualsCString(&name,"i32")||String_EqualsCString(&name,"i64")||String_EqualsCString(&name,"f32")||String_EqualsCString(&name,"f64")||String_EqualsCString(&name,"ptr")||String_EqualsCString(&name,"str")||String_EqualsCString(&name,"byte")||String_EqualsCString(&name,"usize")||String_EqualsCString(&name,"isize")||String_EqualsCString(&name,"RawHandle"));
+}
+Status compiler_SelfCWriteSanitized(struct StringBuilder* out,struct String text) {
+    for (usize i=0;i<text.len;i++) {
+        byte c=text.data[i];
+        if ((c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='_') {
+            Status status=StringBuilder_WriteByte(out,c);
+            if (status!=Status_Ok) {
+                return (status);
+            }
+        } else {
+            Status status=StringBuilder_WriteByte(out,'_');
+            if (status!=Status_Ok) {
+                return (status);
+            }
+        }
+    }
+    return (Status_Ok);
+}
+Status compiler_SelfCWriteOperatorName(struct StringBuilder* out,u8 operatorCode) {
+    u64 kind=((u64)(operatorCode));
+    if (kind==((u64)(OperatorKind_Plus))+1) {
+        return (StringBuilder_WriteCString(out,"plus"));
+    }
+    if (kind==((u64)(OperatorKind_Minus))+1) {
+        return (StringBuilder_WriteCString(out,"minus"));
+    }
+    if (kind==((u64)(OperatorKind_Equal))+1) {
+        return (StringBuilder_WriteCString(out,"equal"));
+    }
+    if (kind==((u64)(OperatorKind_PlusAssign))+1) {
+        return (StringBuilder_WriteCString(out,"plus_assign"));
+    }
+    if (kind==((u64)(OperatorKind_MinusAssign))+1) {
+        return (StringBuilder_WriteCString(out,"minus_assign"));
+    }
+    if (kind==((u64)(OperatorKind_Less))+1) {
+        return (StringBuilder_WriteCString(out,"less"));
+    }
+    if (kind==((u64)(OperatorKind_Greater))+1) {
+        return (StringBuilder_WriteCString(out,"greater"));
+    }
+    return (StringBuilder_WriteCString(out,"op"));
+}
+bool compiler_SelfCDeclPackageIsRoot(struct SelfCDecl* decl) {
+    struct String packageName=std_OwnedStringView(&decl->packageName);
+    return (packageName.len==0);
+}
+Status compiler_SelfCWriteDeclCName(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl) {
+    if (decl->hasReceiver) {
+        Status status=compiler_SelfCWriteTypeSuffixFromRange(program,out,decl->fileIndex,decl->receiverStart,decl->receiverEnd);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        status=StringBuilder_WriteByte(out,'_');
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        if (decl->isOperator) {
+            status=StringBuilder_WriteCString(out,"operator_");
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteOperatorName(out,decl->operatorCode);
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out,"_");
+            }
+            if (status==Status_Ok) {
+                status=std_FormatU64ToBuilder(out,((u64)(decl->paramCount)),10);
+            }
+            return (status);
+        }
+        return (compiler_SelfCWriteToken(program,out,decl->fileIndex,decl->nameIndex));
+    }
+    if (!compiler_SelfCDeclPackageIsRoot(decl)) {
+        Status status=StringBuilder_WriteString(out,std_OwnedStringView(&decl->packageName));
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        status=StringBuilder_WriteByte(out,'_');
+        if (status!=Status_Ok) {
+            return (status);
+        }
+    }
+    Status nameStatus=compiler_SelfCWriteToken(program,out,decl->fileIndex,decl->nameIndex);
+    if (nameStatus!=Status_Ok) {
+        return (nameStatus);
+    }
+    if (decl->isGeneric&&decl->genericStart<compiler_SelfCFileTokenCount(program,decl->fileIndex)) {
+        return (Status_Ok);
+    }
+    return (Status_Ok);
+}
+Status compiler_SelfCWriteTypeSuffixFromRange(struct SelfCProgram* program,struct StringBuilder* out,usize fileIndex,usize start,usize end) {
+    if (start>=end) {
+        return (Status_Ok);
+    }
+    if (start+1<end&&compiler_SelfCIsOperator(program,fileIndex,start+1,OperatorKind_Less)) {
+        Status status=compiler_SelfCWriteSanitized(out,compiler_SelfCTokenText(program,fileIndex,start));
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        usize genericEnd=compiler_SelfCFindMatching(program,fileIndex,start+1);
+        usize argStart=start+2;
+        while (argStart<genericEnd) {
+            usize argEnd=compiler_SelfCFindTokenAtDepthZero(program,fileIndex,argStart,genericEnd,PunctuationKind_Comma);
+            status=StringBuilder_WriteCString(out,"__");
+            if (status!=Status_Ok) {
+                return (status);
+            }
+            status=compiler_SelfCWriteTypeSuffixFromRange(program,out,fileIndex,argStart,argEnd);
+            if (status!=Status_Ok) {
+                return (status);
+            }
+            if (argEnd>=genericEnd) {
+                break;
+            }
+            argStart=argEnd+1;
+        }
+        return (Status_Ok);
+    }
+    return (compiler_SelfCWriteSanitized(out,compiler_SelfCTokenText(program,fileIndex,start)));
+}
+Status compiler_SelfCTypeInfoDestroy(struct SelfCTypeInfo* info) {
+    std_DestroyOwnedString(&info->key);
+    std_DestroyOwnedString(&info->cType);
+    std_DestroyOwnedString(&info->baseName);
+    std_DestroyOwnedString(&info->arg0);
+    std_DestroyOwnedString(&info->arg1);
+    std_DestroyOwnedString(&info->arg2);
+    return (Status_Ok);
+}
+Status compiler_SelfCTypeInfoInitEmpty(struct SelfCProgram* program,struct SelfCTypeInfo* info) {
+    Status status=compiler_SelfCMakeOwnedEmpty(program,&info->key);
+    if (status==Status_Ok) {
+        status=compiler_SelfCMakeOwnedEmpty(program,&info->cType);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCMakeOwnedEmpty(program,&info->baseName);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCMakeOwnedEmpty(program,&info->arg0);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCMakeOwnedEmpty(program,&info->arg1);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCMakeOwnedEmpty(program,&info->arg2);
+    }
+    info->argCount=0;
+    info->isPointer=0;
+    return (status);
+}
+Status compiler_SelfCReplaceOwned(struct OwnedString* target,struct OwnedString value) {
+    std_DestroyOwnedString(target);
+    target->data=value.data;
+    target->len=value.len;
+    target->cap=value.cap;
+    target->allocator=value.allocator;
+    return (Status_Ok);
+}
+Status compiler_SelfCBuildTypeKey(struct SelfCProgram* program,usize fileIndex,usize start,usize end,struct OwnedString* out) {
+    struct StringBuilder builder=std_StringBuilderNew(program->allocator);
+    Status status=compiler_SelfCWriteTypeSuffixFromRange(program,&builder,fileIndex,start,end);
+    if (status==Status_Ok) {
+        status=compiler_SelfCDetachBuilder(&builder,out);
+    }
+    StringBuilder_Destroy(&builder);
+    return (status);
+}
+Status compiler_SelfCWriteCTypeFromKey(struct SelfCProgram* program,struct StringBuilder* out,struct String key) {
+    if (String_EqualsCString(&key,"f32")) {
+        return (StringBuilder_WriteCString(out,"float"));
+    }
+    if (String_EqualsCString(&key,"f64")) {
+        return (StringBuilder_WriteCString(out,"double"));
+    }
+    if (String_EqualsCString(&key,"ptr")) {
+        return (StringBuilder_WriteCString(out,"ptr"));
+    }
+    if (String_EqualsCString(&key,"str")) {
+        return (StringBuilder_WriteCString(out,"str"));
+    }
+    if (compiler_SelfCIsBuiltinTypeName(key)) {
+        return (StringBuilder_WriteString(out,key));
+    }
+    struct Result__usize ptrMarker=String_FindByte(&key,'*');
+    if (ptrMarker.status==Status_Ok) {
+        return (StringBuilder_WriteString(out,key));
+    }
+    struct SelfCDecl* decl=compiler_SelfCFindTypeDecl(program,key);
+    if (decl!=0) {
+        if (decl->kind==SelfCDeclKind_Struct) {
+            Status status=StringBuilder_WriteCString(out,"struct ");
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteString(out,key);
+            }
+            return (status);
+        }
+        return (StringBuilder_WriteString(out,key));
+    }
+    for (usize i=0;i<program->typeUseCount;i++) {
+        struct String useKey=std_OwnedStringView(&program->typeUses[i].key);
+        if (String_Equals(&useKey,key)) {
+            struct SelfCDecl* baseDecl=compiler_SelfCFindTypeDecl(program,std_OwnedStringView(&program->typeUses[i].baseName));
+            if (baseDecl!=0&&baseDecl->kind==SelfCDeclKind_Struct) {
+                Status status=StringBuilder_WriteCString(out,"struct ");
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteString(out,key);
+                }
+                return (status);
+            }
+            return (StringBuilder_WriteString(out,key));
+        }
+    }
+    if (key.len>0&&key.data[0]>='A'&&key.data[0]<='Z') {
+        Status status=StringBuilder_WriteCString(out,"struct ");
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(out,key);
+        }
+        return (status);
+    }
+    return (StringBuilder_WriteString(out,key));
+}
+Status compiler_SelfCMakeCTypeFromKey(struct SelfCProgram* program,struct String key,struct OwnedString* out) {
+    struct StringBuilder builder=std_StringBuilderNew(program->allocator);
+    Status status=compiler_SelfCWriteCTypeFromKey(program,&builder,key);
+    if (status==Status_Ok) {
+        status=compiler_SelfCDetachBuilder(&builder,out);
+    }
+    StringBuilder_Destroy(&builder);
+    return (status);
+}
+Status compiler_SelfCTypeInfoFromKey(struct SelfCProgram* program,struct String key,struct SelfCTypeInfo* info) {
+    Status status=compiler_SelfCTypeInfoInitEmpty(program,info);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    struct OwnedString keyOwned={0};
+    status=compiler_SelfCCloneString(program,key,&keyOwned);
+    if (status==Status_Ok) {
+        status=compiler_SelfCReplaceOwned(&info->key,keyOwned);
+    }
+    struct OwnedString cOwned={0};
+    if (status==Status_Ok) {
+        status=compiler_SelfCMakeCTypeFromKey(program,key,&cOwned);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCReplaceOwned(&info->cType,cOwned);
+    }
+    struct Result__usize ptrMarker=String_FindByte(&key,'*');
+    info->isPointer=ptrMarker.status==Status_Ok;
+    return (status);
+}
+Status compiler_SelfCRenderTypeInfo(struct SelfCProgram* program,usize fileIndex,usize start,usize end,struct SelfCTypeInfo* info) {
+    Status status=compiler_SelfCTypeInfoInitEmpty(program,info);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    if (start>=end) {
+        return (Status_Ok);
+    }
+    struct String first=compiler_SelfCTokenText(program,fileIndex,start);
+    if (String_EqualsCString(&first,"ptr")&&start+1<end&&compiler_SelfCIsOperator(program,fileIndex,start+1,OperatorKind_Less)) {
+        usize genericEnd=compiler_SelfCFindMatching(program,fileIndex,start+1);
+        struct SelfCTypeInfo inner={0};
+        status=compiler_SelfCRenderTypeInfo(program,fileIndex,start+2,genericEnd,&inner);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        struct StringBuilder key=std_StringBuilderNew(program->allocator);
+        status=StringBuilder_WriteString(&key,std_OwnedStringView(&inner.key));
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(&key,'*');
+        }
+        struct OwnedString keyOwned={0};
+        if (status==Status_Ok) {
+            status=compiler_SelfCDetachBuilder(&key,&keyOwned);
+        }
+        StringBuilder_Destroy(&key);
+        if (status==Status_Ok) {
+            status=compiler_SelfCReplaceOwned(&info->key,keyOwned);
+        }
+        struct StringBuilder cType=std_StringBuilderNew(program->allocator);
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(&cType,std_OwnedStringView(&inner.cType));
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(&cType,'*');
+        }
+        struct OwnedString cOwned={0};
+        if (status==Status_Ok) {
+            status=compiler_SelfCDetachBuilder(&cType,&cOwned);
+        }
+        StringBuilder_Destroy(&cType);
+        if (status==Status_Ok) {
+            status=compiler_SelfCReplaceOwned(&info->cType,cOwned);
+        }
+        info->isPointer=1;
+        compiler_SelfCTypeInfoDestroy(&inner);
+        return (status);
+    }
+    status=compiler_SelfCBuildTypeKey(program,fileIndex,start,end,&info->key);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    if (start+1<end&&compiler_SelfCIsOperator(program,fileIndex,start+1,OperatorKind_Less)) {
+        status=compiler_SelfCCloneString(program,first,&info->baseName);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        usize genericEnd=compiler_SelfCFindMatching(program,fileIndex,start+1);
+        usize argStart=start+2;
+        while (argStart<genericEnd) {
+            usize argEnd=compiler_SelfCFindTokenAtDepthZero(program,fileIndex,argStart,genericEnd,PunctuationKind_Comma);
+            struct SelfCTypeInfo argInfo={0};
+            status=compiler_SelfCRenderTypeInfo(program,fileIndex,argStart,argEnd,&argInfo);
+            if (status!=Status_Ok) {
+                return (status);
+            }
+            if (info->argCount==0) {
+                struct OwnedString cloneArg={0};
+                status=compiler_SelfCCloneString(program,std_OwnedStringView(&argInfo.key),&cloneArg);
+                if (status==Status_Ok) {
+                    status=compiler_SelfCReplaceOwned(&info->arg0,cloneArg);
+                }
+            } else {
+                if (info->argCount==1) {
+                    struct OwnedString cloneArg1={0};
+                    status=compiler_SelfCCloneString(program,std_OwnedStringView(&argInfo.key),&cloneArg1);
+                    if (status==Status_Ok) {
+                        status=compiler_SelfCReplaceOwned(&info->arg1,cloneArg1);
                     }
-                    writer->indent--;
-                    WriteIndent(writer->out, writer->indent);
-                    fprintf(writer->out, "} %s;\n", TypedNodeText(writer, field->name, nestedName, sizeof(nestedName)));
                 } else {
-                    WriteTypedTypeAndName(writer, field->type, field->name);
-                    fputs(";\n", writer->out);
+                    if (info->argCount==2) {
+                        struct OwnedString cloneArg2={0};
+                        status=compiler_SelfCCloneString(program,std_OwnedStringView(&argInfo.key),&cloneArg2);
+                        if (status==Status_Ok) {
+                            status=compiler_SelfCReplaceOwned(&info->arg2,cloneArg2);
+                        }
+                    }
                 }
             }
-            writer->indent--;
-            fputs("};", writer->out);
-            break;
-        case KEK_DECL_ENUM:
-            fputs("typedef enum ", writer->out);
-            fputs(TypedNodeText(writer, decl->name, name, sizeof(name)), writer->out);
-            fputs(" {\n", writer->out);
-            writer->indent++;
-            for (struct KekVariant* variant = decl->firstVariant; variant; variant = variant->next) {
-                char variantName[128];
-                WriteIndent(writer->out, writer->indent);
-                fprintf(writer->out, "%s_%s", name, TypedNodeText(writer, variant->name, variantName, sizeof(variantName)));
-                if (variant->value) {
-                    fputc('=', writer->out);
-                    WriteTypedExpr(writer, variant->value);
+            info->argCount+=1;
+            compiler_SelfCTypeInfoDestroy(&argInfo);
+            if (status!=Status_Ok) {
+                return (status);
+            }
+            if (argEnd>=genericEnd) {
+                break;
+            }
+            argStart=argEnd+1;
+        }
+    }
+    status=compiler_SelfCMakeCTypeFromKey(program,std_OwnedStringView(&info->key),&info->cType);
+    return (status);
+}
+bool compiler_SelfCTypeUseExists(struct SelfCProgram* program,struct String key) {
+    for (usize i=0;i<program->typeUseCount;i++) {
+        struct String useKey=std_OwnedStringView(&program->typeUses[i].key);
+        if (String_Equals(&useKey,key)) {
+            return (1);
+        }
+    }
+    return (0);
+}
+Status compiler_SelfCAddTypeUse(struct SelfCProgram* program,struct SelfCTypeInfo* info) {
+    if (info->argCount==0) {
+        return (Status_Ok);
+    }
+    struct String key=std_OwnedStringView(&info->key);
+    if (compiler_SelfCTypeUseExists(program,key)) {
+        return (Status_Ok);
+    }
+    if (program->typeUseCount>=(sizeof(program->typeUses)/sizeof((program->typeUses)[0]))) {
+        return (compiler_SelfCAddDiagnostic(program,"too many generic type uses"));
+    }
+    struct SelfCTypeUse* use=&program->typeUses[program->typeUseCount];
+    Status status=compiler_SelfCCloneString(program,key,&use->key);
+    if (status==Status_Ok) {
+        status=compiler_SelfCCloneString(program,std_OwnedStringView(&info->cType),&use->cName);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCCloneString(program,std_OwnedStringView(&info->baseName),&use->baseName);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCCloneString(program,std_OwnedStringView(&info->arg0),&use->arg0);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCCloneString(program,std_OwnedStringView(&info->arg1),&use->arg1);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCCloneString(program,std_OwnedStringView(&info->arg2),&use->arg2);
+    }
+    use->argCount=info->argCount;
+    use->emitted=0;
+    if (status==Status_Ok) {
+        program->typeUseCount+=1;
+    }
+    return (status);
+}
+Status compiler_SelfCAddTypeUseFromBaseArg(struct SelfCProgram* program,str baseName,struct String arg0) {
+    struct StringBuilder keyBuilder=std_StringBuilderNew(program->allocator);
+    Status status=StringBuilder_WriteCString(&keyBuilder,baseName);
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(&keyBuilder,"__");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteString(&keyBuilder,arg0);
+    }
+    struct String key=StringBuilder_View(&keyBuilder);
+    if (status==Status_Ok&&compiler_SelfCTypeUseExists(program,key)) {
+        StringBuilder_Destroy(&keyBuilder);
+        return (Status_Ok);
+    }
+    if (status==Status_Ok&&program->typeUseCount>=(sizeof(program->typeUses)/sizeof((program->typeUses)[0]))) {
+        StringBuilder_Destroy(&keyBuilder);
+        return (compiler_SelfCAddDiagnostic(program,"too many generic type uses"));
+    }
+    struct SelfCTypeUse* use=&program->typeUses[program->typeUseCount];
+    if (status==Status_Ok) {
+        status=compiler_SelfCCloneString(program,key,&use->key);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCCloneString(program,key,&use->cName);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCCloneString(program,std_StringFromCString(baseName),&use->baseName);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCCloneString(program,arg0,&use->arg0);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCMakeOwnedEmpty(program,&use->arg1);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCMakeOwnedEmpty(program,&use->arg2);
+    }
+    use->argCount=1;
+    use->emitted=0;
+    if (status==Status_Ok) {
+        program->typeUseCount+=1;
+    }
+    StringBuilder_Destroy(&keyBuilder);
+    return (status);
+}
+bool compiler_SelfCConcreteTypeKey(struct SelfCProgram* program,struct String key) {
+    if (key.len==0) {
+        return (0);
+    }
+    if (compiler_SelfCIsBuiltinTypeName(key)) {
+        return (1);
+    }
+    if (String_ContainsByte(&key,'*')) {
+        return (1);
+    }
+    if (compiler_SelfCFindTypeDecl(program,key)!=0) {
+        return (1);
+    }
+    for (usize i=0;i<program->typeUseCount;i++) {
+        struct String useKey=std_OwnedStringView(&program->typeUses[i].key);
+        if (String_Equals(&useKey,key)) {
+            return (1);
+        }
+    }
+    return (0);
+}
+bool compiler_SelfCTypeInfoConcrete(struct SelfCProgram* program,struct SelfCTypeInfo* info) {
+    if (info->argCount==0) {
+        return (compiler_SelfCConcreteTypeKey(program,std_OwnedStringView(&info->key)));
+    }
+    if (info->argCount>=1&&!compiler_SelfCConcreteTypeKey(program,std_OwnedStringView(&info->arg0))) {
+        return (0);
+    }
+    if (info->argCount>=2&&!compiler_SelfCConcreteTypeKey(program,std_OwnedStringView(&info->arg1))) {
+        return (0);
+    }
+    if (info->argCount>=3&&!compiler_SelfCConcreteTypeKey(program,std_OwnedStringView(&info->arg2))) {
+        return (0);
+    }
+    return (1);
+}
+Status compiler_SelfCCollectTypeUsesInRange(struct SelfCProgram* program,usize fileIndex,usize start,usize end) {
+    usize i=start;
+    while (i<end) {
+        if (i+1<end&&compiler_SelfCIsOperator(program,fileIndex,i+1,OperatorKind_Less)) {
+            struct String name=compiler_SelfCTokenText(program,fileIndex,i);
+            struct SelfCDecl* decl=compiler_SelfCFindTypeDecl(program,name);
+            if (decl!=0&&decl->isGeneric) {
+                usize genericEnd=compiler_SelfCFindMatching(program,fileIndex,i+1);
+                struct SelfCTypeInfo info={0};
+                Status status=compiler_SelfCRenderTypeInfo(program,fileIndex,i,genericEnd+1,&info);
+                if (status!=Status_Ok) {
+                    return (status);
                 }
-                fputs(",\n", writer->out);
-            }
-            writer->indent--;
-            fprintf(writer->out, "} %s;", name);
-            break;
-        case KEK_DECL_UNION:
-            fputs("typedef union ", writer->out);
-            fputs(TypedNodeText(writer, decl->name, name, sizeof(name)), writer->out);
-            fputs(" {\n", writer->out);
-            writer->indent++;
-            for (struct KekField* field = decl->firstField; field; field = field->next) {
-                WriteIndent(writer->out, writer->indent);
-                WriteTypedTypeAndName(writer, field->type, field->name);
-                fputs(";\n", writer->out);
-            }
-            writer->indent--;
-            fprintf(writer->out, "} %s;", name);
-            break;
-        case KEK_DECL_FUNCTION: {
-            char functionName[128];
-            TypedFunctionName(writer, decl, functionName, sizeof(functionName));
-            WriteTypedFunctionSignature(writer, decl, functionName);
-            fputc(' ', writer->out);
-            int previousThisIsPointer = writer->thisIsPointer;
-            size_t previousLocalCount = writer->localCount;
-            if (TypedDeclIsMethod(decl)) {
-                char receiver[64];
-                CopyTypedNodeText(writer, TypedDeclReceiverName(decl), receiver, sizeof(receiver));
-                AddLocalTypeEx(writer, "this", receiver, 1);
-            }
-            for (struct KekParam* param = decl->firstParam; param; param = param->next) {
-                char paramName[64];
-                char typeName[64];
-                struct KekType* base = param->type;
-                while (base && (base->kind == KEK_TYPE_ARRAY || base->kind == KEK_TYPE_POINTER)) {
-                    base = base->element;
+                if (compiler_SelfCTypeInfoConcrete(program,&info)) {
+                    status=compiler_SelfCAddTypeUse(program,&info);
                 }
-                CopyTypedNodeText(writer, param->name, paramName, sizeof(paramName));
-                CopyTypedNodeText(writer, base ? base->name : NULL, typeName, sizeof(typeName));
-                AddLocalTypeEx(writer, paramName, typeName, param->type && param->type->kind == KEK_TYPE_POINTER);
+                compiler_SelfCTypeInfoDestroy(&info);
+                if (status!=Status_Ok) {
+                    return (status);
+                }
+                i=genericEnd+1;
+                continue;
             }
-            writer->thisIsPointer = TypedDeclIsMethod(decl);
-            WriteTypedBlock(writer, decl->firstStmt);
-            writer->thisIsPointer = previousThisIsPointer;
-            writer->localCount = previousLocalCount;
+        }
+        i+=1;
+    }
+    return (Status_Ok);
+}
+struct SelfCDecl* compiler_SelfCFindFunctionDeclByName(struct SelfCProgram* program,struct String name,struct String packageName) {
+    for (usize i=0;i<program->declCount;i++) {
+        struct SelfCDecl* decl=&program->decls[i];
+        if (decl->kind!=SelfCDeclKind_Function) {
+            continue;
+        }
+        if (decl->hasReceiver) {
+            continue;
+        }
+        if (!compiler_SelfCDeclNameMatches(program,decl,name)) {
+            continue;
+        }
+        struct String declPackage=std_OwnedStringView(&decl->packageName);
+        if (packageName.len==0||String_Equals(&declPackage,packageName)) {
+            return (decl);
+        }
+    }
+    return (0);
+}
+bool compiler_SelfCFuncUseExists(struct SelfCProgram* program,usize declIndex,struct String key) {
+    for (usize i=0;i<program->funcUseCount;i++) {
+        struct String useKey=std_OwnedStringView(&program->funcUses[i].key);
+        if (program->funcUses[i].declIndex==declIndex&&String_Equals(&useKey,key)) {
+            return (1);
+        }
+    }
+    return (0);
+}
+usize compiler_SelfCDeclIndex(struct SelfCProgram* program,struct SelfCDecl* decl) {
+    for (usize i=0;i<program->declCount;i++) {
+        if (&program->decls[i]==decl) {
+            return (i);
+        }
+    }
+    return ((sizeof(program->decls)/sizeof((program->decls)[0])));
+}
+Status compiler_SelfCBuildGenericFuncCName(struct SelfCProgram* program,struct SelfCDecl* decl,struct SelfCTypeInfo* arg0,struct SelfCTypeInfo* arg1,struct SelfCTypeInfo* arg2,usize argCount,struct OwnedString* out) {
+    struct StringBuilder builder=std_StringBuilderNew(program->allocator);
+    Status status=Status_Ok;
+    if (decl->hasReceiver&&argCount>=1) {
+        status=compiler_SelfCWriteSanitized(&builder,compiler_SelfCTokenText(program,decl->fileIndex,decl->receiverStart));
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(&builder,"__");
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(&builder,std_OwnedStringView(&arg0->key));
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(&builder,'_');
+        }
+        if (decl->isOperator) {
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(&builder,"operator_");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteOperatorName(&builder,decl->operatorCode);
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(&builder,"_");
+            }
+            if (status==Status_Ok) {
+                status=std_FormatU64ToBuilder(&builder,((u64)(decl->paramCount)),10);
+            }
+        } else {
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteToken(program,&builder,decl->fileIndex,decl->nameIndex);
+            }
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCDetachBuilder(&builder,out);
+        }
+        StringBuilder_Destroy(&builder);
+        return (status);
+    }
+    status=compiler_SelfCWriteDeclCName(program,&builder,decl);
+    if (status==Status_Ok&&argCount>=1) {
+        status=StringBuilder_WriteCString(&builder,"__");
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(&builder,std_OwnedStringView(&arg0->key));
+        }
+    }
+    if (status==Status_Ok&&argCount>=2) {
+        status=StringBuilder_WriteCString(&builder,"__");
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(&builder,std_OwnedStringView(&arg1->key));
+        }
+    }
+    if (status==Status_Ok&&argCount>=3) {
+        status=StringBuilder_WriteCString(&builder,"__");
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(&builder,std_OwnedStringView(&arg2->key));
+        }
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCDetachBuilder(&builder,out);
+    }
+    StringBuilder_Destroy(&builder);
+    return (status);
+}
+Status compiler_SelfCAddFuncUse(struct SelfCProgram* program,struct SelfCDecl* decl,struct SelfCTypeInfo* arg0,struct SelfCTypeInfo* arg1,struct SelfCTypeInfo* arg2,usize argCount) {
+    if (argCount==0) {
+        return (Status_Ok);
+    }
+    if (argCount>=1&&!compiler_SelfCTypeInfoConcrete(program,arg0)) {
+        return (Status_Ok);
+    }
+    if (argCount>=2&&!compiler_SelfCTypeInfoConcrete(program,arg1)) {
+        return (Status_Ok);
+    }
+    if (argCount>=3&&!compiler_SelfCTypeInfoConcrete(program,arg2)) {
+        return (Status_Ok);
+    }
+    struct OwnedString cName={0};
+    Status status=compiler_SelfCBuildGenericFuncCName(program,decl,arg0,arg1,arg2,argCount,&cName);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    usize declIndex=compiler_SelfCDeclIndex(program,decl);
+    struct String key=std_OwnedStringView(&cName);
+    if (compiler_SelfCFuncUseExists(program,declIndex,key)) {
+        std_DestroyOwnedString(&cName);
+        return (Status_Ok);
+    }
+    if (program->funcUseCount>=(sizeof(program->funcUses)/sizeof((program->funcUses)[0]))) {
+        std_DestroyOwnedString(&cName);
+        return (compiler_SelfCAddDiagnostic(program,"too many generic function uses"));
+    }
+    struct SelfCFuncUse* use=&program->funcUses[program->funcUseCount];
+    use->declIndex=declIndex;
+    status=compiler_SelfCCloneString(program,key,&use->key);
+    if (status==Status_Ok) {
+        use->cName=cName;
+    } else {
+        std_DestroyOwnedString(&cName);
+    }
+    if (status==Status_Ok&&argCount>=1) {
+        status=compiler_SelfCCloneString(program,std_OwnedStringView(&arg0->key),&use->arg0);
+    } else {
+        if (status==Status_Ok) {
+            status=compiler_SelfCMakeOwnedEmpty(program,&use->arg0);
+        }
+    }
+    if (status==Status_Ok&&argCount>=2) {
+        status=compiler_SelfCCloneString(program,std_OwnedStringView(&arg1->key),&use->arg1);
+    } else {
+        if (status==Status_Ok) {
+            status=compiler_SelfCMakeOwnedEmpty(program,&use->arg1);
+        }
+    }
+    if (status==Status_Ok&&argCount>=3) {
+        status=compiler_SelfCCloneString(program,std_OwnedStringView(&arg2->key),&use->arg2);
+    } else {
+        if (status==Status_Ok) {
+            status=compiler_SelfCMakeOwnedEmpty(program,&use->arg2);
+        }
+    }
+    use->argCount=argCount;
+    use->emitted=0;
+    if (status==Status_Ok) {
+        program->funcUseCount+=1;
+    }
+    return (status);
+}
+Status compiler_SelfCCollectGenericFunctionUsesInRange(struct SelfCProgram* program,usize fileIndex,usize start,usize end) {
+    usize i=start;
+    while (i<end) {
+        if (i+2<end&&compiler_SelfCIsOperator(program,fileIndex,i+1,OperatorKind_Less)) {
+            usize genericEnd=compiler_SelfCFindMatching(program,fileIndex,i+1);
+            if (genericEnd+1<end&&compiler_SelfCIsPunctuation(program,fileIndex,genericEnd+1,PunctuationKind_LeftParen)) {
+                struct String name=compiler_SelfCTokenText(program,fileIndex,i);
+                struct String packageName=std_StringFromCString("");
+                if (i>=2&&compiler_SelfCIsOperator(program,fileIndex,i-1,OperatorKind_Scope)) {
+                    packageName=compiler_SelfCTokenText(program,fileIndex,i-2);
+                }
+                struct SelfCDecl* decl=compiler_SelfCFindFunctionDeclByName(program,name,packageName);
+                if (decl!=0&&decl->isGeneric) {
+                    struct SelfCTypeInfo arg0={0};
+                    struct SelfCTypeInfo arg1={0};
+                    struct SelfCTypeInfo arg2={0};
+                    compiler_SelfCTypeInfoInitEmpty(program,&arg0);
+                    compiler_SelfCTypeInfoInitEmpty(program,&arg1);
+                    compiler_SelfCTypeInfoInitEmpty(program,&arg2);
+                    usize argCount=0;
+                    usize argStart=i+2;
+                    Status status=Status_Ok;
+                    while (argStart<genericEnd) {
+                        usize argEnd=compiler_SelfCFindTokenAtDepthZero(program,fileIndex,argStart,genericEnd,PunctuationKind_Comma);
+                        if (argCount==0) {
+                            status=compiler_SelfCRenderTypeInfo(program,fileIndex,argStart,argEnd,&arg0);
+                        } else {
+                            if (argCount==1) {
+                                status=compiler_SelfCRenderTypeInfo(program,fileIndex,argStart,argEnd,&arg1);
+                            } else {
+                                if (argCount==2) {
+                                    status=compiler_SelfCRenderTypeInfo(program,fileIndex,argStart,argEnd,&arg2);
+                                }
+                            }
+                        }
+                        argCount+=1;
+                        if (status!=Status_Ok||argEnd>=genericEnd) {
+                            break;
+                        }
+                        argStart=argEnd+1;
+                    }
+                    if (status==Status_Ok) {
+                        status=compiler_SelfCAddFuncUse(program,decl,&arg0,&arg1,&arg2,argCount);
+                    }
+                    compiler_SelfCTypeInfoDestroy(&arg0);
+                    compiler_SelfCTypeInfoDestroy(&arg1);
+                    compiler_SelfCTypeInfoDestroy(&arg2);
+                    if (status!=Status_Ok) {
+                        return (status);
+                    }
+                }
+                i=genericEnd+1;
+                continue;
+            }
+        }
+        i+=1;
+    }
+    return (Status_Ok);
+}
+struct SelfCDecl* compiler_SelfCFindGenericMethodDecl(struct SelfCProgram* program,struct String receiverBase,str methodName) {
+    for (usize i=0;i<program->declCount;i++) {
+        struct SelfCDecl* decl=&program->decls[i];
+        if (decl->kind!=SelfCDeclKind_Function||!decl->hasReceiver||!decl->isGeneric||decl->isOperator) {
+            continue;
+        }
+        struct String base=compiler_SelfCTokenText(program,decl->fileIndex,decl->receiverStart);
+        if (!String_Equals(&base,receiverBase)) {
+            continue;
+        }
+        struct String name=compiler_SelfCTokenText(program,decl->fileIndex,decl->nameIndex);
+        if (String_EqualsCString(&name,methodName)) {
+            return (decl);
+        }
+    }
+    return (0);
+}
+Status compiler_SelfCAddGenericMethodUseByName(struct SelfCProgram* program,struct SelfCTypeUse* typeUse,str methodName) {
+    struct String baseName=std_OwnedStringView(&typeUse->baseName);
+    struct SelfCDecl* decl=compiler_SelfCFindGenericMethodDecl(program,baseName,methodName);
+    if (decl==0) {
+        return (Status_Ok);
+    }
+    struct SelfCTypeInfo arg0={0};
+    struct SelfCTypeInfo arg1={0};
+    struct SelfCTypeInfo arg2={0};
+    bool arg0Ready=0;
+    bool arg1Ready=0;
+    bool arg2Ready=0;
+    Status status=compiler_SelfCTypeInfoInitEmpty(program,&arg1);
+    if (status==Status_Ok) {
+        arg1Ready=1;
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCTypeInfoInitEmpty(program,&arg2);
+    }
+    if (status==Status_Ok) {
+        arg2Ready=1;
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCTypeInfoFromKey(program,std_OwnedStringView(&typeUse->arg0),&arg0);
+    }
+    if (status==Status_Ok) {
+        arg0Ready=1;
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCAddFuncUse(program,decl,&arg0,&arg1,&arg2,1);
+    }
+    if (arg0Ready) {
+        compiler_SelfCTypeInfoDestroy(&arg0);
+    }
+    if (arg1Ready) {
+        compiler_SelfCTypeInfoDestroy(&arg1);
+    }
+    if (arg2Ready) {
+        compiler_SelfCTypeInfoDestroy(&arg2);
+    }
+    return (status);
+}
+Status compiler_SelfCCollectGenericCollectionMethods(struct SelfCProgram* program) {
+    usize typeUseLimit=program->typeUseCount;
+    for (usize i=0;i<typeUseLimit;i++) {
+        struct SelfCTypeUse* use=&program->typeUses[i];
+        struct String base=std_OwnedStringView(&use->baseName);
+        if (use->argCount<1) {
+            continue;
+        }
+        Status status=Status_Ok;
+        if (String_EqualsCString(&base,"Array")) {
+            status=compiler_SelfCAddTypeUseFromBaseArg(program,"Result",std_OwnedStringView(&use->arg0));
+            if (status==Status_Ok) {
+                status=compiler_SelfCAddTypeUseFromBaseArg(program,"Slice",std_OwnedStringView(&use->arg0));
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCAddTypeUseFromBaseArg(program,"Span",std_OwnedStringView(&use->arg0));
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCAddGenericMethodUseByName(program,use,"Destroy");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCAddGenericMethodUseByName(program,use,"Clear");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCAddGenericMethodUseByName(program,use,"Reserve");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCAddGenericMethodUseByName(program,use,"AppendSlice");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCAddGenericMethodUseByName(program,use,"Push");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCAddGenericMethodUseByName(program,use,"PushZeroed");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCAddGenericMethodUseByName(program,use,"Pop");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCAddGenericMethodUseByName(program,use,"Get");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCAddGenericMethodUseByName(program,use,"Set");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCAddGenericMethodUseByName(program,use,"GetPtr");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCAddGenericMethodUseByName(program,use,"LastPtr");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCAddGenericMethodUseByName(program,use,"Span");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCAddGenericMethodUseByName(program,use,"Slice");
+            }
+        } else {
+            if (String_EqualsCString(&base,"LinkedList")) {
+                status=compiler_SelfCAddTypeUseFromBaseArg(program,"ListNode",std_OwnedStringView(&use->arg0));
+                if (status==Status_Ok) {
+                    status=compiler_SelfCAddTypeUseFromBaseArg(program,"Result",std_OwnedStringView(&use->arg0));
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCAddGenericMethodUseByName(program,use,"PushBack");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCAddGenericMethodUseByName(program,use,"PushFront");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCAddGenericMethodUseByName(program,use,"PopBack");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCAddGenericMethodUseByName(program,use,"Destroy");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCAddGenericMethodUseByName(program,use,"PopFront");
+                }
+            }
+        }
+        if (status!=Status_Ok) {
+            return (status);
+        }
+    }
+    return (Status_Ok);
+}
+Status compiler_SelfCCollectGenericFunctionUses(struct SelfCProgram* program) {
+    for (usize i=0;i<program->declCount;i++) {
+        struct SelfCDecl* decl=&program->decls[i];
+        Status status=compiler_SelfCCollectGenericFunctionUsesInRange(program,decl->fileIndex,decl->start,decl->end);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+    }
+    return (compiler_SelfCCollectGenericCollectionMethods(program));
+}
+Status compiler_SelfCCollectTypeUses(struct SelfCProgram* program) {
+    for (usize i=0;i<program->declCount;i++) {
+        struct SelfCDecl* decl=&program->decls[i];
+        Status status=compiler_SelfCCollectTypeUsesInRange(program,decl->fileIndex,decl->start,decl->end);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+    }
+    return (Status_Ok);
+}
+Status compiler_SelfCWritePrelude(struct StringBuilder* out) {
+    Status status=StringBuilder_WriteCString(out,"#include <assert.h>");
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,10);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"#include <stdint.h>");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,10);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"#include <stddef.h>");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,10);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"#include <stdbool.h>");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,10);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,10);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"typedef uint8_t u8;");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,10);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"typedef uint16_t u16;");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,10);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"typedef uint32_t u32;");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,10);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"typedef uint64_t u64;");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,10);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"typedef int8_t i8;");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,10);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"typedef int16_t i16;");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,10);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"typedef int32_t i32;");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,10);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"typedef int64_t i64;");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,10);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"typedef float f32;");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,10);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"typedef double f64;");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,10);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"typedef void* ptr;");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,10);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"typedef const char* str;");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,10);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,10);
+    }
+    return (status);
+}
+Status compiler_SelfCWriteDeclarator(struct SelfCProgram* program,struct StringBuilder* out,usize fileIndex,usize typeStart,usize typeEnd,usize nameIndex,bool isArray,usize arrayStart,usize arrayEnd) {
+    struct SelfCTypeInfo info={0};
+    Status status=compiler_SelfCRenderTypeInfo(program,fileIndex,typeStart,typeEnd,&info);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    status=StringBuilder_WriteString(out,std_OwnedStringView(&info.cType));
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,' ');
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteToken(program,out,fileIndex,nameIndex);
+    }
+    if (status==Status_Ok&&isArray) {
+        status=StringBuilder_WriteByte(out,'[');
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteTokenRangeRaw(program,out,fileIndex,arrayStart,arrayEnd);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(out,']');
+        }
+    }
+    compiler_SelfCTypeInfoDestroy(&info);
+    return (status);
+}
+Status compiler_SelfCWriteFields(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl) {
+    for (usize i=0;i<decl->fieldCount;i++) {
+        struct SelfCField* field=&program->fields[decl->firstField+i];
+        Status status=StringBuilder_WriteCString(out,"    ");
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        if (field->isNestedStruct) {
+            status=StringBuilder_WriteCString(out,"struct {\n");
+            if (status!=Status_Ok) {
+                return (status);
+            }
+            struct SelfCDecl nested={0};
+            nested.kind=SelfCDeclKind_Struct;
+            nested.fileIndex=field->fileIndex;
+            nested.bodyStart=field->nestedBodyStart;
+            nested.bodyEnd=field->nestedBodyEnd;
+            nested.firstField=program->fieldCount;
+            nested.fieldCount=0;
+            nested.nameIndex=field->nameIndex;
+            nested.isGeneric=0;
+            Status parseNested=compiler_SelfCParseFields(program,&nested,field->fileIndex,field->nestedBodyStart,field->nestedBodyEnd);
+            if (parseNested!=Status_Ok) {
+                return (parseNested);
+            }
+            status=compiler_SelfCWriteFields(program,out,&nested);
+            if (status!=Status_Ok) {
+                return (status);
+            }
+            status=StringBuilder_WriteCString(out,"    } ");
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteToken(program,out,field->fileIndex,field->nameIndex);
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out,";\n");
+            }
+            return (status);
+        }
+        status=compiler_SelfCWriteDeclarator(program,out,field->fileIndex,field->typeStart,field->typeEnd,field->nameIndex,field->isArray,field->arrayStart,field->arrayEnd);
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,";\n");
+        }
+        if (status!=Status_Ok) {
+            return (status);
+        }
+    }
+    return (Status_Ok);
+}
+bool compiler_SelfCGenericParamEquals(struct SelfCProgram* program,struct SelfCDecl* decl,usize paramIndex,struct String name) {
+    if (!decl->isGeneric) {
+        return (0);
+    }
+    if (decl->genericStart<compiler_SelfCFileTokenCount(program,decl->fileIndex)) {
+        usize index=decl->genericStart+1;
+        usize current=0;
+        while (index<decl->genericEnd) {
+            if (compiler_SelfCIsPunctuation(program,decl->fileIndex,index,PunctuationKind_Comma)) {
+                index+=1;
+                continue;
+            }
+            if (current==paramIndex) {
+                struct String paramName=compiler_SelfCTokenText(program,decl->fileIndex,index);
+                return (String_Equals(&paramName,name));
+            }
+            current+=1;
+            while (index<decl->genericEnd&&!compiler_SelfCIsPunctuation(program,decl->fileIndex,index,PunctuationKind_Comma)) {
+                index+=1;
+            }
+        }
+    }
+    if (decl->hasReceiver&&decl->receiverStart+1<decl->receiverEnd&&compiler_SelfCIsOperator(program,decl->fileIndex,decl->receiverStart+1,OperatorKind_Less)) {
+        usize genericEnd=compiler_SelfCFindMatching(program,decl->fileIndex,decl->receiverStart+1);
+        usize index=decl->receiverStart+2;
+        usize current=0;
+        while (index<genericEnd) {
+            if (compiler_SelfCIsPunctuation(program,decl->fileIndex,index,PunctuationKind_Comma)) {
+                index+=1;
+                continue;
+            }
+            if (current==paramIndex) {
+                struct String paramName=compiler_SelfCTokenText(program,decl->fileIndex,index);
+                return (String_Equals(&paramName,name));
+            }
+            current+=1;
+            while (index<genericEnd&&!compiler_SelfCIsPunctuation(program,decl->fileIndex,index,PunctuationKind_Comma)) {
+                index+=1;
+            }
+        }
+    }
+    return (0);
+}
+Status compiler_SelfCWriteTypeSuffixSubst(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCTypeUse* use,usize fileIndex,usize start,usize end) {
+    if (start>=end) {
+        return (Status_Ok);
+    }
+    struct String first=compiler_SelfCTokenText(program,fileIndex,start);
+    if (end==start+1) {
+        if (compiler_SelfCGenericParamEquals(program,decl,0,first)) {
+            return (StringBuilder_WriteString(out,std_OwnedStringView(&use->arg0)));
+        }
+        if (compiler_SelfCGenericParamEquals(program,decl,1,first)) {
+            return (StringBuilder_WriteString(out,std_OwnedStringView(&use->arg1)));
+        }
+        if (compiler_SelfCGenericParamEquals(program,decl,2,first)) {
+            return (StringBuilder_WriteString(out,std_OwnedStringView(&use->arg2)));
+        }
+        return (compiler_SelfCWriteSanitized(out,first));
+    }
+    if (start+1<end&&compiler_SelfCIsOperator(program,fileIndex,start+1,OperatorKind_Less)) {
+        Status status=compiler_SelfCWriteSanitized(out,first);
+        usize genericEnd=compiler_SelfCFindMatching(program,fileIndex,start+1);
+        usize argStart=start+2;
+        while (argStart<genericEnd) {
+            usize argEnd=compiler_SelfCFindTokenAtDepthZero(program,fileIndex,argStart,genericEnd,PunctuationKind_Comma);
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out,"__");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteTypeSuffixSubst(program,out,decl,use,fileIndex,argStart,argEnd);
+            }
+            if (status!=Status_Ok||argEnd>=genericEnd) {
+                break;
+            }
+            argStart=argEnd+1;
+        }
+        return (status);
+    }
+    return (compiler_SelfCWriteTypeSuffixFromRange(program,out,fileIndex,start,end));
+}
+Status compiler_SelfCMakeSubstTypeKey(struct SelfCProgram* program,struct SelfCDecl* decl,struct SelfCTypeUse* use,usize fileIndex,usize start,usize end,struct OwnedString* out) {
+    struct StringBuilder builder=std_StringBuilderNew(program->allocator);
+    Status status=compiler_SelfCWriteTypeSuffixSubst(program,&builder,decl,use,fileIndex,start,end);
+    if (status==Status_Ok) {
+        status=compiler_SelfCDetachBuilder(&builder,out);
+    }
+    StringBuilder_Destroy(&builder);
+    return (status);
+}
+Status compiler_SelfCWriteDeclaratorSubst(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCTypeUse* use,usize fileIndex,usize typeStart,usize typeEnd,usize nameIndex,bool isArray,usize arrayStart,usize arrayEnd) {
+    struct String first=compiler_SelfCTokenText(program,fileIndex,typeStart);
+    struct OwnedString key={0};
+    Status status=Status_Ok;
+    if (String_EqualsCString(&first,"ptr")&&typeStart+1<typeEnd&&compiler_SelfCIsOperator(program,fileIndex,typeStart+1,OperatorKind_Less)) {
+        usize genericEnd=compiler_SelfCFindMatching(program,fileIndex,typeStart+1);
+        struct OwnedString innerKey={0};
+        status=compiler_SelfCMakeSubstTypeKey(program,decl,use,fileIndex,typeStart+2,genericEnd,&innerKey);
+        struct StringBuilder ct=std_StringBuilderNew(program->allocator);
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteCTypeFromKey(program,&ct,std_OwnedStringView(&innerKey));
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(&ct,'*');
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(out,StringBuilder_View(&ct));
+        }
+        StringBuilder_Destroy(&ct);
+        std_DestroyOwnedString(&innerKey);
+    } else {
+        status=compiler_SelfCMakeSubstTypeKey(program,decl,use,fileIndex,typeStart,typeEnd,&key);
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteCTypeFromKey(program,out,std_OwnedStringView(&key));
+        }
+        if (status==Status_Ok) {
+            std_DestroyOwnedString(&key);
+        }
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,' ');
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteToken(program,out,fileIndex,nameIndex);
+    }
+    if (status==Status_Ok&&isArray) {
+        status=StringBuilder_WriteByte(out,'[');
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteTokenRangeRaw(program,out,fileIndex,arrayStart,arrayEnd);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(out,']');
+        }
+    }
+    return (status);
+}
+Status compiler_SelfCWriteFieldsSubst(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCTypeUse* use) {
+    for (usize i=0;i<decl->fieldCount;i++) {
+        struct SelfCField* field=&program->fields[decl->firstField+i];
+        Status status=StringBuilder_WriteCString(out,"    ");
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteDeclaratorSubst(program,out,decl,use,field->fileIndex,field->typeStart,field->typeEnd,field->nameIndex,field->isArray,field->arrayStart,field->arrayEnd);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,";\n");
+        }
+        if (status!=Status_Ok) {
+            return (status);
+        }
+    }
+    return (Status_Ok);
+}
+Status compiler_SelfCWriteStructDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct String specializedName) {
+    Status status=StringBuilder_WriteCString(out,"struct ");
+    bool hasPacked=0;
+    bool hasAligned=0;
+    usize alignedValue=0;
+    if (decl->start>0) {
+        usize scan=decl->start;
+        while (scan>0) {
+            scan-=1;
+            if (compiler_SelfCIsPunctuation(program,decl->fileIndex,scan,PunctuationKind_LeftBracket)) {
+                for (usize i=scan;i<decl->start;i++) {
+                    if (compiler_SelfCIsIdentifierText(program,decl->fileIndex,i,"packed")) {
+                        hasPacked=1;
+                    }
+                    if (compiler_SelfCIsIdentifierText(program,decl->fileIndex,i,"aligned")) {
+                        hasAligned=1;
+                        if (i+2<decl->start&&compiler_SelfCIsPunctuation(program,decl->fileIndex,i+1,PunctuationKind_LeftParen)) {
+                            alignedValue=i+2;
+                        }
+                    }
+                }
+                break;
+            }
+            if (compiler_SelfCIsPunctuation(program,decl->fileIndex,scan,PunctuationKind_Semicolon)||compiler_SelfCIsPunctuation(program,decl->fileIndex,scan,PunctuationKind_RightBrace)) {
+                break;
+            }
+        }
+    }
+    if (status==Status_Ok&&(hasPacked||hasAligned)) {
+        status=StringBuilder_WriteCString(out,"__attribute__((");
+        if (status==Status_Ok&&hasPacked) {
+            status=StringBuilder_WriteCString(out,"packed");
+        }
+        if (status==Status_Ok&&hasAligned) {
+            if (hasPacked) {
+                status=StringBuilder_WriteByte(out,',');
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out,"aligned(");
+            }
+            if (status==Status_Ok&&alignedValue!=0) {
+                status=compiler_SelfCWriteToken(program,out,decl->fileIndex,alignedValue);
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteByte(out,')');
+            }
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,")) ");
+        }
+    }
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    if (specializedName.len>0) {
+        status=StringBuilder_WriteString(out,specializedName);
+    } else {
+        status=compiler_SelfCWriteToken(program,out,decl->fileIndex,decl->nameIndex);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out," {\n");
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteFields(program,out,decl);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"};\n");
+    }
+    return (status);
+}
+Status compiler_SelfCWriteUnionDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl) {
+    Status status=StringBuilder_WriteCString(out,"typedef union ");
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteToken(program,out,decl->fileIndex,decl->nameIndex);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out," {\n");
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteFields(program,out,decl);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"} ");
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteToken(program,out,decl->fileIndex,decl->nameIndex);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,";\n");
+    }
+    return (status);
+}
+Status compiler_SelfCWriteEnumDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl) {
+    Status status=StringBuilder_WriteCString(out,"typedef enum ");
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteToken(program,out,decl->fileIndex,decl->nameIndex);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out," {\n");
+    }
+    usize i=decl->bodyStart;
+    while (i<decl->bodyEnd) {
+        if (compiler_SelfCIsPunctuation(program,decl->fileIndex,i,PunctuationKind_Comma)) {
+            i+=1;
+            continue;
+        }
+        if (!compiler_SelfCIsTokenKind(program,decl->fileIndex,i,TokenKind_Identifier)) {
+            i+=1;
+            continue;
+        }
+        status=StringBuilder_WriteCString(out,"    ");
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteToken(program,out,decl->fileIndex,decl->nameIndex);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(out,'_');
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteToken(program,out,decl->fileIndex,i);
+        }
+        i+=1;
+        if (i<decl->bodyEnd&&compiler_SelfCIsOperator(program,decl->fileIndex,i,OperatorKind_Assign)) {
+            status=StringBuilder_WriteByte(out,'=');
+            i+=1;
+            while (i<decl->bodyEnd&&!compiler_SelfCIsPunctuation(program,decl->fileIndex,i,PunctuationKind_Comma)) {
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteToken(program,out,decl->fileIndex,i);
+                }
+                i+=1;
+            }
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,",\n");
+        }
+        if (status!=Status_Ok) {
+            return (status);
+        }
+    }
+    status=StringBuilder_WriteCString(out,"} ");
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteToken(program,out,decl->fileIndex,decl->nameIndex);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,";\n");
+    }
+    return (status);
+}
+Status compiler_SelfCWriteAliasDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl) {
+    struct SelfCTypeInfo info={0};
+    Status status=compiler_SelfCRenderTypeInfo(program,decl->fileIndex,decl->returnStart,decl->returnEnd,&info);
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"typedef ");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteString(out,std_OwnedStringView(&info.cType));
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,' ');
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteToken(program,out,decl->fileIndex,decl->nameIndex);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,";\n");
+    }
+    compiler_SelfCTypeInfoDestroy(&info);
+    return (status);
+}
+Status compiler_SelfCWriteExternDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl) {
+    struct SelfCTokenFile* file=&program->tokenFiles[decl->fileIndex];
+    struct Token open=file->tokens[decl->bodyStart-1];
+    struct Token close=file->tokens[decl->bodyEnd];
+    usize start=open.offset+open.length;
+    usize end=close.offset;
+    if (end<start) {
+        return (Status_Ok);
+    }
+    struct String sourceText=file->sourceText;
+    Status status=StringBuilder_WriteCString(out,"#if defined(__GNUC__) || defined(__clang__)\n#pragma GCC diagnostic push\n#pragma GCC diagnostic ignored ");
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,34);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"-Wunused-function");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,34);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"\n#endif\n");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteString(out,String_Slice(&sourceText,start,end-start));
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"\n#if defined(__GNUC__) || defined(__clang__)\n#pragma GCC diagnostic pop\n#endif");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,'\n');
+    }
+    return (status);
+}
+Status compiler_SelfCWriteTypeDeclarations(struct SelfCProgram* program,struct StringBuilder* out) {
+    for (usize i=0;i<program->declCount;i++) {
+        struct SelfCDecl* decl=&program->decls[i];
+        Status status=Status_Ok;
+        if (decl->kind==SelfCDeclKind_ExternC) {
+            status=compiler_SelfCWriteExternDecl(program,out,decl);
+        } else {
+            if (decl->kind==SelfCDeclKind_Alias) {
+                status=compiler_SelfCWriteAliasDecl(program,out,decl);
+            } else {
+                if (decl->kind==SelfCDeclKind_Struct&&!decl->isGeneric) {
+                    status=compiler_SelfCWriteStructDecl(program,out,decl,std_StringFromCString(""));
+                } else {
+                    if (decl->kind==SelfCDeclKind_Union) {
+                        status=compiler_SelfCWriteUnionDecl(program,out,decl);
+                    } else {
+                        if (decl->kind==SelfCDeclKind_Enum) {
+                            status=compiler_SelfCWriteEnumDecl(program,out,decl);
+                        }
+                    }
+                }
+            }
+        }
+        if (status!=Status_Ok) {
+            return (status);
+        }
+    }
+    for (usize i=0;i<program->typeUseCount;i++) {
+        struct SelfCTypeUse* use=&program->typeUses[i];
+        struct SelfCDecl* decl=compiler_SelfCFindTypeDecl(program,std_OwnedStringView(&use->baseName));
+        if (decl!=0&&decl->kind==SelfCDeclKind_Struct) {
+            Status status=StringBuilder_WriteCString(out,"struct ");
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteString(out,std_OwnedStringView(&use->key));
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out," {\n");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteFieldsSubst(program,out,decl,use);
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out,"};\n");
+            }
+            if (status!=Status_Ok) {
+                return (status);
+            }
+        }
+    }
+    return (Status_Ok);
+}
+Status compiler_SelfCEnvInit(struct SelfCProgram* program,struct SelfCEnv* env) {
+    env->localCount=0;
+    env->hasThis=0;
+    env->deferCounter=0;
+    env->eachCounter=0;
+    Status status=compiler_SelfCMakeOwnedEmpty(program,&env->returnTypeKey);
+    if (status==Status_Ok) {
+        status=compiler_SelfCMakeOwnedEmpty(program,&env->returnCType);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCMakeOwnedEmpty(program,&env->thisTypeKey);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCMakeOwnedEmpty(program,&env->thisCType);
+    }
+    return (status);
+}
+Status compiler_SelfCEnvDestroy(struct SelfCEnv* env) {
+    for (usize i=0;i<env->localCount;i++) {
+        std_DestroyOwnedString(&env->locals[i].name);
+        std_DestroyOwnedString(&env->locals[i].typeKey);
+        std_DestroyOwnedString(&env->locals[i].cType);
+        std_DestroyOwnedString(&env->locals[i].arrayLen);
+    }
+    std_DestroyOwnedString(&env->returnTypeKey);
+    std_DestroyOwnedString(&env->returnCType);
+    std_DestroyOwnedString(&env->thisTypeKey);
+    std_DestroyOwnedString(&env->thisCType);
+    return (Status_Ok);
+}
+struct SelfCLocal* compiler_SelfCEnvFind(struct SelfCEnv* env,struct String name) {
+    for (usize i=env->localCount;i>0;i--) {
+        struct SelfCLocal* local=&env->locals[i-1];
+        struct String localName=std_OwnedStringView(&local->name);
+        if (String_Equals(&localName,name)) {
+            return (local);
+        }
+    }
+    return (0);
+}
+Status compiler_SelfCEnvAdd(struct SelfCProgram* program,struct SelfCEnv* env,struct String name,struct String typeKey,struct String cType,bool isArray,struct String arrayLen,bool isPointer) {
+    if (env->localCount>=(sizeof(env->locals)/sizeof((env->locals)[0]))) {
+        return (compiler_SelfCAddDiagnostic(program,"too many locals"));
+    }
+    struct SelfCLocal* local=&env->locals[env->localCount];
+    Status status=compiler_SelfCCloneString(program,name,&local->name);
+    if (status==Status_Ok) {
+        status=compiler_SelfCCloneString(program,typeKey,&local->typeKey);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCCloneString(program,cType,&local->cType);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCCloneString(program,arrayLen,&local->arrayLen);
+    }
+    local->isArray=isArray;
+    local->isPointer=isPointer;
+    if (status==Status_Ok) {
+        env->localCount+=1;
+    }
+    return (status);
+}
+Status compiler_SelfCExprInitEmpty(struct SelfCProgram* program,struct SelfCExpr* expr) {
+    Status status=compiler_SelfCMakeOwnedEmpty(program,&expr->text);
+    if (status==Status_Ok) {
+        status=compiler_SelfCMakeOwnedEmpty(program,&expr->typeKey);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCMakeOwnedEmpty(program,&expr->cType);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCMakeOwnedEmpty(program,&expr->arrayLen);
+    }
+    expr->isArray=0;
+    expr->isLvalue=0;
+    expr->isPointer=0;
+    return (status);
+}
+Status compiler_SelfCExprDestroy(struct SelfCExpr* expr) {
+    std_DestroyOwnedString(&expr->text);
+    std_DestroyOwnedString(&expr->typeKey);
+    std_DestroyOwnedString(&expr->cType);
+    std_DestroyOwnedString(&expr->arrayLen);
+    return (Status_Ok);
+}
+Status compiler_SelfCExprSetText(struct SelfCProgram* program,struct SelfCExpr* expr,struct String text) {
+    struct OwnedString owned={0};
+    Status status=compiler_SelfCCloneString(program,text,&owned);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    return (compiler_SelfCReplaceOwned(&expr->text,owned));
+}
+Status compiler_SelfCExprSetCString(struct SelfCProgram* program,struct SelfCExpr* expr,str text) {
+    struct OwnedString owned={0};
+    Status status=compiler_SelfCCloneCString(program,text,&owned);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    return (compiler_SelfCReplaceOwned(&expr->text,owned));
+}
+Status compiler_SelfCExprSetType(struct SelfCProgram* program,struct SelfCExpr* expr,struct String key,struct String cType,bool isPointer) {
+    struct OwnedString keyOwned={0};
+    Status status=compiler_SelfCCloneString(program,key,&keyOwned);
+    if (status==Status_Ok) {
+        status=compiler_SelfCReplaceOwned(&expr->typeKey,keyOwned);
+    }
+    struct OwnedString cOwned={0};
+    if (status==Status_Ok) {
+        status=compiler_SelfCCloneString(program,cType,&cOwned);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCReplaceOwned(&expr->cType,cOwned);
+    }
+    expr->isPointer=isPointer;
+    return (status);
+}
+Status compiler_SelfCExprFromBuilder(struct SelfCExpr* expr,struct StringBuilder* builder) {
+    struct OwnedString owned={0};
+    Status status=compiler_SelfCDetachBuilder(builder,&owned);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    return (compiler_SelfCReplaceOwned(&expr->text,owned));
+}
+u8 compiler_SelfCOperatorPrecedence(struct SelfCProgram* program,usize fileIndex,usize index) {
+    if (compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_Assign)||compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_PlusAssign)||compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_MinusAssign)) {
+        return (1);
+    }
+    if (compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_LogicalOr)) {
+        return (2);
+    }
+    if (compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_LogicalAnd)) {
+        return (3);
+    }
+    if (compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_Equal)||compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_NotEqual)||compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_Less)||compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_LessEqual)||compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_Greater)||compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_GreaterEqual)) {
+        return (4);
+    }
+    if (compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_Plus)||compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_Minus)) {
+        return (5);
+    }
+    if (compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_Multiply)||compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_Divide)||compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_Modulo)) {
+        return (6);
+    }
+    return (0);
+}
+bool compiler_SelfCOperatorRightAssociative(struct SelfCProgram* program,usize fileIndex,usize index) {
+    return (compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_Assign)||compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_PlusAssign)||compiler_SelfCIsOperator(program,fileIndex,index,OperatorKind_MinusAssign));
+}
+Status compiler_SelfCWriteNumberToken(struct SelfCProgram* program,struct StringBuilder* out,usize fileIndex,usize index) {
+    struct String text=compiler_SelfCTokenText(program,fileIndex,index);
+    if (text.len>2&&text.data[0]=='0'&&(text.data[1]=='b'||text.data[1]=='B')) {
+        u64 value=0;
+        for (usize i=2;i<text.len;i++) {
+            if (text.data[i]=='_') {
+                continue;
+            }
+            if (text.data[i]=='0'||text.data[i]=='1') {
+                value=value*2+((u64)(text.data[i]-'0'));
+            }
+        }
+        Status status=StringBuilder_WriteCString(out,"0x");
+        if (status==Status_Ok) {
+            status=std_FormatU64ToBuilder(out,value,16);
+        }
+        return (status);
+    }
+    for (usize i=0;i<text.len;i++) {
+        if (text.data[i]!='_') {
+            Status status=StringBuilder_WriteByte(out,text.data[i]);
+            if (status!=Status_Ok) {
+                return (status);
+            }
+        }
+    }
+    return (Status_Ok);
+}
+struct SelfCDecl* compiler_SelfCFindFieldDecl(struct SelfCProgram* program,struct String typeKey) {
+    for (usize i=0;i<program->declCount;i++) {
+        struct SelfCDecl* decl=&program->decls[i];
+        if ((decl->kind==SelfCDeclKind_Struct||decl->kind==SelfCDeclKind_Union)&&compiler_SelfCDeclNameMatches(program,decl,typeKey)) {
+            return (decl);
+        }
+    }
+    for (usize i=0;i<program->typeUseCount;i++) {
+        struct String useKey=std_OwnedStringView(&program->typeUses[i].key);
+        if (String_Equals(&useKey,typeKey)) {
+            return (compiler_SelfCFindTypeDecl(program,std_OwnedStringView(&program->typeUses[i].baseName)));
+        }
+    }
+    return (0);
+}
+Status compiler_SelfCFieldType(struct SelfCProgram* program,struct String typeKey,struct String fieldName,struct SelfCTypeInfo* outInfo) {
+    compiler_SelfCTypeInfoInitEmpty(program,outInfo);
+    struct SelfCDecl* decl=compiler_SelfCFindFieldDecl(program,typeKey);
+    if (decl==0) {
+        return (Status_Ok);
+    }
+    for (usize i=0;i<decl->fieldCount;i++) {
+        struct SelfCField* field=&program->fields[decl->firstField+i];
+        struct String fieldToken=compiler_SelfCTokenText(program,field->fileIndex,field->nameIndex);
+        if (String_Equals(&fieldToken,fieldName)) {
+            compiler_SelfCTypeInfoDestroy(outInfo);
+            return (compiler_SelfCRenderTypeInfo(program,field->fileIndex,field->typeStart,field->typeEnd,outInfo));
+        }
+    }
+    return (Status_Ok);
+}
+struct SelfCDecl* compiler_SelfCFindMethod(struct SelfCProgram* program,struct String receiverType,struct String name,bool isOperator,u8 operatorCode,usize argCount) {
+    for (usize i=0;i<program->declCount;i++) {
+        struct SelfCDecl* decl=&program->decls[i];
+        if (decl->kind!=SelfCDeclKind_Function||!decl->hasReceiver) {
+            continue;
+        }
+        struct StringBuilder receiver=std_StringBuilderNew(program->allocator);
+        Status status=compiler_SelfCWriteTypeSuffixFromRange(program,&receiver,decl->fileIndex,decl->receiverStart,decl->receiverEnd);
+        if (status!=Status_Ok) {
+            StringBuilder_Destroy(&receiver);
+            continue;
+        }
+        struct String receiverView=StringBuilder_View(&receiver);
+        bool receiverMatches=String_Equals(&receiverView,receiverType);
+        StringBuilder_Destroy(&receiver);
+        if (!receiverMatches) {
+            continue;
+        }
+        if (isOperator) {
+            if (decl->isOperator&&decl->operatorCode==operatorCode&&decl->paramCount==argCount) {
+                return (decl);
+            }
+        } else {
+            struct String methodName=compiler_SelfCTokenText(program,decl->fileIndex,decl->nameIndex);
+            if (!decl->isOperator&&String_Equals(&methodName,name)) {
+                return (decl);
+            }
+        }
+    }
+    return (0);
+}
+Status compiler_SelfCParserInit(struct SelfCProgram* program,struct SelfCEnv* env,usize fileIndex,usize start,usize end,struct String expectedKey,struct String expectedCType,bool expectedIsArray,struct SelfCExprParser* parser) {
+    parser->program=program;
+    parser->env=env;
+    parser->fileIndex=fileIndex;
+    parser->pos=start;
+    parser->end=end;
+    parser->expectedIsArray=expectedIsArray;
+    Status status=compiler_SelfCCloneString(program,expectedKey,&parser->expectedTypeKey);
+    if (status==Status_Ok) {
+        status=compiler_SelfCCloneString(program,expectedCType,&parser->expectedCType);
+    }
+    return (status);
+}
+Status compiler_SelfCParserDestroy(struct SelfCExprParser* parser) {
+    std_DestroyOwnedString(&parser->expectedTypeKey);
+    std_DestroyOwnedString(&parser->expectedCType);
+    return (Status_Ok);
+}
+Status compiler_SelfCCompileExpressionRange(struct SelfCProgram* program,struct SelfCEnv* env,usize fileIndex,usize start,usize end,struct String expectedKey,struct String expectedCType,bool expectedIsArray,struct SelfCExpr* out) {
+    struct SelfCExprParser parser={0};
+    Status status=compiler_SelfCParserInit(program,env,fileIndex,start,end,expectedKey,expectedCType,expectedIsArray,&parser);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    status=compiler_SelfCCompileExpression(&parser,1,out);
+    compiler_SelfCParserDestroy(&parser);
+    return (status);
+}
+Status compiler_SelfCWriteInitializerList(struct SelfCExprParser* parser,usize start,usize end,struct StringBuilder* out) {
+    Status status=StringBuilder_WriteByte(out,'{');
+    usize itemStart=start;
+    while (itemStart<end) {
+        if (compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,itemStart,PunctuationKind_Comma)) {
+            itemStart+=1;
+            continue;
+        }
+        usize itemEnd=compiler_SelfCFindTokenAtDepthZero(parser->program,parser->fileIndex,itemStart,end,PunctuationKind_Comma);
+        if (itemStart+1<itemEnd&&compiler_SelfCIsOperator(parser->program,parser->fileIndex,itemStart+1,OperatorKind_Assign)&&compiler_SelfCIsTokenKind(parser->program,parser->fileIndex,itemStart,TokenKind_Identifier)) {
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteByte(out,'.');
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteToken(parser->program,out,parser->fileIndex,itemStart);
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteByte(out,'=');
+            }
+            struct SelfCExpr value={0};
+            if (status==Status_Ok) {
+                status=compiler_SelfCCompileExpressionRange(parser->program,parser->env,parser->fileIndex,itemStart+2,itemEnd,std_StringFromCString(""),std_StringFromCString(""),0,&value);
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteString(out,std_OwnedStringView(&value.text));
+            }
+            if (status==Status_Ok) {
+                compiler_SelfCExprDestroy(&value);
+            }
+        } else {
+            struct SelfCExpr value={0};
+            if (status==Status_Ok) {
+                status=compiler_SelfCCompileExpressionRange(parser->program,parser->env,parser->fileIndex,itemStart,itemEnd,std_StringFromCString(""),std_StringFromCString(""),0,&value);
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteString(out,std_OwnedStringView(&value.text));
+            }
+            if (status==Status_Ok) {
+                compiler_SelfCExprDestroy(&value);
+            }
+        }
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        if (itemEnd>=end) {
             break;
         }
-        case KEK_DECL_VARIABLE:
+        status=StringBuilder_WriteByte(out,',');
+        itemStart=itemEnd+1;
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,'}');
+    }
+    return (status);
+}
+Status compiler_SelfCExprFromLiteralBlock(struct SelfCExprParser* parser,usize blockStart,usize blockEnd,struct SelfCExpr* out) {
+    Status status=compiler_SelfCExprInitEmpty(parser->program,out);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    struct StringBuilder builder=std_StringBuilderNew(parser->program[0].allocator);
+    struct String expectedKey=std_OwnedStringView(&parser->expectedTypeKey);
+    struct String expectedCType=std_OwnedStringView(&parser->expectedCType);
+    if (expectedCType.len>0&&!parser->expectedIsArray) {
+        status=StringBuilder_WriteByte(&builder,'(');
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(&builder,expectedCType);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(&builder,')');
+        }
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteInitializerList(parser,blockStart+1,blockEnd,&builder);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCExprFromBuilder(out,&builder);
+    }
+    StringBuilder_Destroy(&builder);
+    if (status==Status_Ok&&expectedKey.len>0) {
+        status=compiler_SelfCExprSetType(parser->program,out,expectedKey,expectedCType,0);
+    }
+    return (status);
+}
+Status compiler_SelfCCompilePrimary(struct SelfCExprParser* parser,struct SelfCExpr* out) {
+    Status status=compiler_SelfCExprInitEmpty(parser->program,out);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    if (parser->pos>=parser->end) {
+        return (Status_Ok);
+    }
+    usize index=parser->pos;
+    struct Token token=parser->program[0].tokenFiles[parser->fileIndex].tokens[index];
+    if (token.kind==TokenKind_Number) {
+        struct StringBuilder builder=std_StringBuilderNew(parser->program[0].allocator);
+        status=compiler_SelfCWriteNumberToken(parser->program,&builder,parser->fileIndex,index);
+        if (status==Status_Ok) {
+            status=compiler_SelfCExprFromBuilder(out,&builder);
+        }
+        StringBuilder_Destroy(&builder);
+        if (status==Status_Ok) {
+            status=compiler_SelfCExprSetType(parser->program,out,std_StringFromCString("int"),std_StringFromCString("int"),0);
+        }
+        parser->pos+=1;
+        return (status);
+    }
+    if (token.kind==TokenKind_String||token.kind==TokenKind_Char) {
+        status=compiler_SelfCExprSetText(parser->program,out,compiler_SelfCTokenText(parser->program,parser->fileIndex,index));
+        if (status==Status_Ok) {
+            if (token.kind==TokenKind_String) {
+                status=compiler_SelfCExprSetType(parser->program,out,std_StringFromCString("str"),std_StringFromCString("str"),1);
+            } else {
+                status=compiler_SelfCExprSetType(parser->program,out,std_StringFromCString("int"),std_StringFromCString("int"),0);
+            }
+        }
+        parser->pos+=1;
+        return (status);
+    }
+    if (compiler_SelfCIsKeyword(parser->program,parser->fileIndex,index,KeywordKind_True)||compiler_SelfCIsKeyword(parser->program,parser->fileIndex,index,KeywordKind_False)) {
+        if (compiler_SelfCIsKeyword(parser->program,parser->fileIndex,index,KeywordKind_True)) {
+            status=compiler_SelfCExprSetCString(parser->program,out,"1");
+        } else {
+            status=compiler_SelfCExprSetCString(parser->program,out,"0");
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCExprSetType(parser->program,out,std_StringFromCString("bool"),std_StringFromCString("bool"),0);
+        }
+        parser->pos+=1;
+        return (status);
+    }
+    if (compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,index,PunctuationKind_LeftParen)) {
+        usize match=compiler_SelfCFindMatching(parser->program,parser->fileIndex,index);
+        struct SelfCExpr inner={0};
+        status=compiler_SelfCCompileExpressionRange(parser->program,parser->env,parser->fileIndex,index+1,match,std_StringFromCString(""),std_StringFromCString(""),0,&inner);
+        struct StringBuilder builder=std_StringBuilderNew(parser->program[0].allocator);
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(&builder,'(');
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(&builder,std_OwnedStringView(&inner.text));
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(&builder,')');
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCExprFromBuilder(out,&builder);
+        }
+        StringBuilder_Destroy(&builder);
+        if (status==Status_Ok) {
+            status=compiler_SelfCExprSetType(parser->program,out,std_OwnedStringView(&inner.typeKey),std_OwnedStringView(&inner.cType),inner.isPointer);
+            out->isArray=inner.isArray;
+            out->isLvalue=inner.isLvalue;
+            out->isPointer=inner.isPointer;
+        }
+        compiler_SelfCExprDestroy(&inner);
+        parser->pos=match+1;
+        return (status);
+    }
+    if (compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,index,PunctuationKind_LeftBrace)) {
+        usize match=compiler_SelfCFindMatching(parser->program,parser->fileIndex,index);
+        status=compiler_SelfCExprFromLiteralBlock(parser,index,match,out);
+        parser->pos=match+1;
+        return (status);
+    }
+    if (compiler_SelfCIsOperator(parser->program,parser->fileIndex,index,OperatorKind_Scope)) {
+        if (index+1<parser->end) {
+            status=compiler_SelfCExprSetText(parser->program,out,compiler_SelfCTokenText(parser->program,parser->fileIndex,index+1));
+            parser->pos=index+2;
+            return (status);
+        }
+    }
+    if (token.kind==TokenKind_Identifier||token.kind==TokenKind_Keyword) {
+        if (index+2<parser->end&&compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,index+1,PunctuationKind_Colon)&&compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,index+2,PunctuationKind_LeftBrace)) {
+            usize blockEnd=compiler_SelfCFindMatching(parser->program,parser->fileIndex,index+2);
+            struct SelfCTypeInfo typeInfo={0};
+            status=compiler_SelfCRenderTypeInfo(parser->program,parser->fileIndex,index,index+1,&typeInfo);
+            struct StringBuilder builder=std_StringBuilderNew(parser->program[0].allocator);
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteByte(&builder,'(');
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteString(&builder,std_OwnedStringView(&typeInfo.cType));
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteByte(&builder,')');
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteInitializerList(parser,index+3,blockEnd,&builder);
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCExprFromBuilder(out,&builder);
+            }
+            StringBuilder_Destroy(&builder);
+            if (status==Status_Ok) {
+                status=compiler_SelfCExprSetType(parser->program,out,std_OwnedStringView(&typeInfo.key),std_OwnedStringView(&typeInfo.cType),typeInfo.isPointer);
+            }
+            compiler_SelfCTypeInfoDestroy(&typeInfo);
+            parser->pos=blockEnd+1;
+            return (status);
+        }
+        if (compiler_SelfCIsIdentifierText(parser->program,parser->fileIndex,index,"cast")&&index+1<parser->end&&compiler_SelfCIsOperator(parser->program,parser->fileIndex,index+1,OperatorKind_Less)) {
+            usize genericEnd=compiler_SelfCFindMatching(parser->program,parser->fileIndex,index+1);
+            usize groupStart=genericEnd+1;
+            usize groupEnd=compiler_SelfCFindMatching(parser->program,parser->fileIndex,groupStart);
+            struct SelfCTypeInfo typeInfo={0};
+            status=compiler_SelfCRenderTypeInfo(parser->program,parser->fileIndex,index+2,genericEnd,&typeInfo);
+            struct SelfCExpr value={0};
+            if (status==Status_Ok) {
+                status=compiler_SelfCCompileExpressionRange(parser->program,parser->env,parser->fileIndex,groupStart+1,groupEnd,std_StringFromCString(""),std_StringFromCString(""),0,&value);
+            }
+            struct StringBuilder builder=std_StringBuilderNew(parser->program[0].allocator);
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(&builder,"((");
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteString(&builder,std_OwnedStringView(&typeInfo.cType));
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(&builder,")(");
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteString(&builder,std_OwnedStringView(&value.text));
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(&builder,"))");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCExprFromBuilder(out,&builder);
+            }
+            StringBuilder_Destroy(&builder);
+            if (status==Status_Ok) {
+                status=compiler_SelfCExprSetType(parser->program,out,std_OwnedStringView(&typeInfo.key),std_OwnedStringView(&typeInfo.cType),typeInfo.isPointer);
+            }
+            compiler_SelfCExprDestroy(&value);
+            compiler_SelfCTypeInfoDestroy(&typeInfo);
+            parser->pos=groupEnd+1;
+            return (status);
+        }
+        if ((compiler_SelfCIsIdentifierText(parser->program,parser->fileIndex,index,"sizeof")||compiler_SelfCIsIdentifierText(parser->program,parser->fileIndex,index,"alignof"))&&index+1<parser->end&&compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,index+1,PunctuationKind_LeftParen)) {
+            usize groupEnd=compiler_SelfCFindMatching(parser->program,parser->fileIndex,index+1);
+            struct StringBuilder builder=std_StringBuilderNew(parser->program[0].allocator);
+            bool isAlign=compiler_SelfCIsIdentifierText(parser->program,parser->fileIndex,index,"alignof");
+            if (isAlign) {
+                status=StringBuilder_WriteCString(&builder,"_Alignof(");
+            } else {
+                status=StringBuilder_WriteCString(&builder,"sizeof(");
+            }
+            struct SelfCTypeInfo typeInfo={0};
+            if (status==Status_Ok) {
+                status=compiler_SelfCRenderTypeInfo(parser->program,parser->fileIndex,index+2,groupEnd,&typeInfo);
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteString(&builder,std_OwnedStringView(&typeInfo.cType));
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteByte(&builder,')');
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCExprFromBuilder(out,&builder);
+            }
+            StringBuilder_Destroy(&builder);
+            compiler_SelfCTypeInfoDestroy(&typeInfo);
+            if (status==Status_Ok) {
+                status=compiler_SelfCExprSetType(parser->program,out,std_StringFromCString("usize"),std_StringFromCString("usize"),0);
+            }
+            parser->pos=groupEnd+1;
+            return (status);
+        }
+        if (compiler_SelfCIsIdentifierText(parser->program,parser->fileIndex,index,"offsetof")&&index+1<parser->end&&compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,index+1,PunctuationKind_LeftParen)) {
+            usize groupEnd=compiler_SelfCFindMatching(parser->program,parser->fileIndex,index+1);
+            usize comma=compiler_SelfCFindTokenAtDepthZero(parser->program,parser->fileIndex,index+2,groupEnd,PunctuationKind_Comma);
+            struct SelfCTypeInfo typeInfo={0};
+            status=compiler_SelfCRenderTypeInfo(parser->program,parser->fileIndex,index+2,comma,&typeInfo);
+            struct StringBuilder builder=std_StringBuilderNew(parser->program[0].allocator);
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(&builder,"offsetof(");
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteString(&builder,std_OwnedStringView(&typeInfo.cType));
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteByte(&builder,',');
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteTokenRangeRaw(parser->program,&builder,parser->fileIndex,comma+1,groupEnd);
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteByte(&builder,')');
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCExprFromBuilder(out,&builder);
+            }
+            StringBuilder_Destroy(&builder);
+            compiler_SelfCTypeInfoDestroy(&typeInfo);
+            if (status==Status_Ok) {
+                status=compiler_SelfCExprSetType(parser->program,out,std_StringFromCString("usize"),std_StringFromCString("usize"),0);
+            }
+            parser->pos=groupEnd+1;
+            return (status);
+        }
+        struct StringBuilder builder=std_StringBuilderNew(parser->program[0].allocator);
+        if (index+2<parser->end&&compiler_SelfCIsOperator(parser->program,parser->fileIndex,index+1,OperatorKind_Scope)) {
+            struct String scopeName=compiler_SelfCTokenText(parser->program,parser->fileIndex,index);
+            if (String_EqualsCString(&scopeName,"std")) {
+                status=StringBuilder_WriteCString(&builder,"std_");
+            } else {
+                status=compiler_SelfCWriteToken(parser->program,&builder,parser->fileIndex,index);
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteByte(&builder,'_');
+                }
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteToken(parser->program,&builder,parser->fileIndex,index+2);
+            }
+            parser->pos=index+3;
+            if (parser->pos<parser->end&&compiler_SelfCIsOperator(parser->program,parser->fileIndex,parser->pos,OperatorKind_Less)) {
+                usize gEnd=compiler_SelfCFindMatching(parser->program,parser->fileIndex,parser->pos);
+                if (gEnd+1<parser->end&&compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,gEnd+1,PunctuationKind_LeftParen)) {
+                    usize argStart=parser->pos+1;
+                    while (argStart<gEnd) {
+                        usize argEnd=compiler_SelfCFindTokenAtDepthZero(parser->program,parser->fileIndex,argStart,gEnd,PunctuationKind_Comma);
+                        if (status==Status_Ok) {
+                            status=StringBuilder_WriteCString(&builder,"__");
+                        }
+                        if (status==Status_Ok) {
+                            status=compiler_SelfCWriteTypeSuffixFromRange(parser->program,&builder,parser->fileIndex,argStart,argEnd);
+                        }
+                        if (argEnd>=gEnd) {
+                            break;
+                        }
+                        argStart=argEnd+1;
+                    }
+                    parser->pos=gEnd+1;
+                }
+            }
+        } else {
+            status=compiler_SelfCWriteToken(parser->program,&builder,parser->fileIndex,index);
+            parser->pos=index+1;
+            if (parser->pos<parser->end&&compiler_SelfCIsOperator(parser->program,parser->fileIndex,parser->pos,OperatorKind_Less)) {
+                usize gEnd=compiler_SelfCFindMatching(parser->program,parser->fileIndex,parser->pos);
+                if (gEnd+1<parser->end&&compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,gEnd+1,PunctuationKind_LeftParen)) {
+                    usize argStart=parser->pos+1;
+                    while (argStart<gEnd) {
+                        usize argEnd=compiler_SelfCFindTokenAtDepthZero(parser->program,parser->fileIndex,argStart,gEnd,PunctuationKind_Comma);
+                        if (status==Status_Ok) {
+                            status=StringBuilder_WriteCString(&builder,"__");
+                        }
+                        if (status==Status_Ok) {
+                            status=compiler_SelfCWriteTypeSuffixFromRange(parser->program,&builder,parser->fileIndex,argStart,argEnd);
+                        }
+                        if (argEnd>=gEnd) {
+                            break;
+                        }
+                        argStart=argEnd+1;
+                    }
+                    parser->pos=gEnd+1;
+                }
+            }
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCExprFromBuilder(out,&builder);
+        }
+        StringBuilder_Destroy(&builder);
+        struct SelfCLocal* local=compiler_SelfCEnvFind(parser->env,compiler_SelfCTokenText(parser->program,parser->fileIndex,index));
+        if (status==Status_Ok&&local!=0) {
+            status=compiler_SelfCExprSetType(parser->program,out,std_OwnedStringView(&local->typeKey),std_OwnedStringView(&local->cType),local->isPointer);
+            out->isArray=local->isArray;
+            out->isPointer=local->isPointer;
+            out->isLvalue=1;
+            struct OwnedString arrLen={0};
+            if (status==Status_Ok) {
+                status=compiler_SelfCCloneString(parser->program,std_OwnedStringView(&local->arrayLen),&arrLen);
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCReplaceOwned(&out->arrayLen,arrLen);
+            }
+        } else {
+            if (status==Status_Ok) {
+                struct SelfCDecl* functionDecl=compiler_SelfCFindFunctionDeclByName(parser->program,compiler_SelfCTokenText(parser->program,parser->fileIndex,index),std_StringFromCString(""));
+                if (functionDecl!=0) {
+                    struct StringBuilder functionName=std_StringBuilderNew(parser->program[0].allocator);
+                    status=compiler_SelfCWriteDeclCName(parser->program,&functionName,functionDecl);
+                    struct String currentName=std_OwnedStringView(&out->text);
+                    struct Result__usize suffixStart=String_FindByte(&currentName,'_');
+                    if (status==Status_Ok&&suffixStart.status==Status_Ok&&suffixStart.value+1<currentName.len&&currentName.data[suffixStart.value+1]=='_') {
+                        status=StringBuilder_WriteString(&functionName,String_Slice(&currentName,suffixStart.value,currentName.len-suffixStart.value));
+                    }
+                    if (status==Status_Ok) {
+                        status=compiler_SelfCExprFromBuilder(out,&functionName);
+                    }
+                    StringBuilder_Destroy(&functionName);
+                }
+            }
+        }
+        return (status);
+    }
+    parser->pos+=1;
+    return (Status_Ok);
+}
+Status compiler_SelfCWriteCallArgs(struct SelfCExprParser* parser,usize start,usize end,struct StringBuilder* out) {
+    usize itemStart=start;
+    bool first=1;
+    Status status=Status_Ok;
+    while (itemStart<end) {
+        if (compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,itemStart,PunctuationKind_Comma)) {
+            itemStart+=1;
+            continue;
+        }
+        usize itemEnd=compiler_SelfCFindTokenAtDepthZero(parser->program,parser->fileIndex,itemStart,end,PunctuationKind_Comma);
+        usize exprStart=itemStart;
+        usize assign=compiler_SelfCFindTokenAtDepthZero(parser->program,parser->fileIndex,itemStart,itemEnd,PunctuationKind_Colon);
+        if (assign<itemEnd) {
+            exprStart=assign+1;
+        } else {
+            for (usize i=itemStart;i<itemEnd;i++) {
+                if (compiler_SelfCIsOperator(parser->program,parser->fileIndex,i,OperatorKind_Assign)) {
+                    exprStart=i+1;
+                    break;
+                }
+            }
+        }
+        struct SelfCExpr arg={0};
+        if (status==Status_Ok) {
+            status=compiler_SelfCCompileExpressionRange(parser->program,parser->env,parser->fileIndex,exprStart,itemEnd,std_StringFromCString(""),std_StringFromCString(""),0,&arg);
+        }
+        if (status==Status_Ok&&!first) {
+            status=StringBuilder_WriteByte(out,',');
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(out,std_OwnedStringView(&arg.text));
+        }
+        if (status==Status_Ok) {
+            compiler_SelfCExprDestroy(&arg);
+        }
+        first=0;
+        if (status!=Status_Ok||itemEnd>=end) {
             break;
-        case KEK_DECL_UNKNOWN:
-        case KEK_DECL_COUNT:
-            break;
-    }
-}
-
-static void CollectGenericTypeUse(struct CWriter* writer, struct KekModule* modules, size_t count, struct KekType* type) {
-    for (struct KekType* current = type; current; current = current->element) {
-        if (current->name && current->genericArgs) {
-            char baseName[128];
-            CopyTypedNodeText(writer, current->name, baseName, sizeof(baseName));
-            struct SourceFile* declFile = NULL;
-            struct KekDecl* structDecl = FindGenericDecl(modules, count, KEK_DECL_STRUCT, baseName, &declFile);
-            if (structDecl) {
-                AddGenericStructInstance(writer, structDecl, declFile, current->genericArgs, writer->file);
-            }
         }
-        if (current->kind != KEK_TYPE_ARRAY && current->kind != KEK_TYPE_POINTER) {
+        itemStart=itemEnd+1;
+    }
+    return (status);
+}
+usize compiler_SelfCCountCallArgs(struct SelfCProgram* program,usize fileIndex,usize start,usize end) {
+    if (start>=end) {
+        return (0);
+    }
+    usize count=1;
+    usize i=start;
+    while (i<end) {
+        usize comma=compiler_SelfCFindTokenAtDepthZero(program,fileIndex,i,end,PunctuationKind_Comma);
+        if (comma>=end) {
             break;
         }
+        count+=1;
+        i=comma+1;
     }
+    return (count);
 }
-
-static void CollectGenericExprUses(struct CWriter* writer, struct KekModule* modules, size_t count, struct KekExpr* expr) {
-    if (!expr) {
-        return;
+Status compiler_SelfCApplyPostfix(struct SelfCExprParser* parser,struct SelfCExpr* expr) {
+    while (parser->pos<parser->end) {
+        if (compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,parser->pos,PunctuationKind_LeftParen)) {
+            usize groupStart=parser->pos;
+            usize groupEnd=compiler_SelfCFindMatching(parser->program,parser->fileIndex,groupStart);
+            struct String funcText=std_OwnedStringView(&expr->text);
+            if (String_EqualsCString(&funcText,"len")) {
+                struct SelfCExpr arg={0};
+                Status status=compiler_SelfCCompileExpressionRange(parser->program,parser->env,parser->fileIndex,groupStart+1,groupEnd,std_StringFromCString(""),std_StringFromCString(""),0,&arg);
+                struct StringBuilder lenBuilder=std_StringBuilderNew(parser->program[0].allocator);
+                if (status==Status_Ok) {
+                    if (arg.isArray) {
+                        status=StringBuilder_WriteCString(&lenBuilder,"((void)(");
+                        if (status==Status_Ok) {
+                            status=StringBuilder_WriteString(&lenBuilder,std_OwnedStringView(&arg.text));
+                        }
+                        if (status==Status_Ok) {
+                            status=StringBuilder_WriteCString(&lenBuilder,"),");
+                        }
+                        if (status==Status_Ok) {
+                            status=StringBuilder_WriteString(&lenBuilder,std_OwnedStringView(&arg.arrayLen));
+                        }
+                        if (status==Status_Ok) {
+                            status=StringBuilder_WriteByte(&lenBuilder,')');
+                        }
+                    } else {
+                        status=StringBuilder_WriteCString(&lenBuilder,"(sizeof(");
+                        if (status==Status_Ok) {
+                            status=StringBuilder_WriteString(&lenBuilder,std_OwnedStringView(&arg.text));
+                        }
+                        if (status==Status_Ok) {
+                            status=StringBuilder_WriteCString(&lenBuilder,")/sizeof((");
+                        }
+                        if (status==Status_Ok) {
+                            status=StringBuilder_WriteString(&lenBuilder,std_OwnedStringView(&arg.text));
+                        }
+                        if (status==Status_Ok) {
+                            status=StringBuilder_WriteCString(&lenBuilder,")[0]))");
+                        }
+                    }
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCExprFromBuilder(expr,&lenBuilder);
+                }
+                StringBuilder_Destroy(&lenBuilder);
+                compiler_SelfCExprDestroy(&arg);
+                if (status==Status_Ok) {
+                    status=compiler_SelfCExprSetType(parser->program,expr,std_StringFromCString("usize"),std_StringFromCString("usize"),0);
+                }
+                parser->pos=groupEnd+1;
+                if (status!=Status_Ok) {
+                    return (status);
+                }
+                continue;
+            }
+            struct StringBuilder builder=std_StringBuilderNew(parser->program[0].allocator);
+            Status status=StringBuilder_WriteString(&builder,funcText);
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteByte(&builder,'(');
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteCallArgs(parser,groupStart+1,groupEnd,&builder);
+            }
+            usize argCount=compiler_SelfCCountCallArgs(parser->program,parser->fileIndex,groupStart+1,groupEnd);
+            if (status==Status_Ok&&String_EqualsCString(&funcText,"add")&&argCount==1) {
+                status=StringBuilder_WriteCString(&builder,",0");
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteByte(&builder,')');
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCExprFromBuilder(expr,&builder);
+            }
+            StringBuilder_Destroy(&builder);
+            expr->isLvalue=0;
+            parser->pos=groupEnd+1;
+            if (status!=Status_Ok) {
+                return (status);
+            }
+            continue;
+        }
+        if (compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,parser->pos,PunctuationKind_LeftBracket)) {
+            usize indexStart=parser->pos;
+            usize indexEnd=compiler_SelfCFindMatching(parser->program,parser->fileIndex,indexStart);
+            struct SelfCExpr indexExpr={0};
+            Status status=compiler_SelfCCompileExpressionRange(parser->program,parser->env,parser->fileIndex,indexStart+1,indexEnd,std_StringFromCString(""),std_StringFromCString(""),0,&indexExpr);
+            struct StringBuilder builder=std_StringBuilderNew(parser->program[0].allocator);
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteString(&builder,std_OwnedStringView(&expr->text));
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteByte(&builder,'[');
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteString(&builder,std_OwnedStringView(&indexExpr.text));
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteByte(&builder,']');
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCExprFromBuilder(expr,&builder);
+            }
+            StringBuilder_Destroy(&builder);
+            compiler_SelfCExprDestroy(&indexExpr);
+            expr->isLvalue=1;
+            expr->isArray=0;
+            struct String indexedKey=std_OwnedStringView(&expr->typeKey);
+            if (indexedKey.len>0&&indexedKey.data[indexedKey.len-1]=='*') {
+                struct OwnedString newKey={0};
+                status=compiler_SelfCCloneString(parser->program,String_Slice(&indexedKey,0,indexedKey.len-1),&newKey);
+                if (status==Status_Ok) {
+                    status=compiler_SelfCReplaceOwned(&expr->typeKey,newKey);
+                }
+                struct OwnedString newCType={0};
+                if (status==Status_Ok) {
+                    status=compiler_SelfCMakeCTypeFromKey(parser->program,std_OwnedStringView(&expr->typeKey),&newCType);
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCReplaceOwned(&expr->cType,newCType);
+                }
+                expr->isPointer=0;
+            }
+            parser->pos=indexEnd+1;
+            if (status!=Status_Ok) {
+                return (status);
+            }
+            continue;
+        }
+        if (compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,parser->pos,PunctuationKind_Dot)) {
+            usize nameIndex=parser->pos+1;
+            struct String fieldName=compiler_SelfCTokenText(parser->program,parser->fileIndex,nameIndex);
+            if (nameIndex+1<parser->end&&compiler_SelfCIsPunctuation(parser->program,parser->fileIndex,nameIndex+1,PunctuationKind_LeftParen)) {
+                usize groupStart=nameIndex+1;
+                usize groupEnd=compiler_SelfCFindMatching(parser->program,parser->fileIndex,groupStart);
+                struct String receiverKey=std_OwnedStringView(&expr->typeKey);
+                struct String methodReceiverKey=receiverKey;
+                if (expr->isPointer&&receiverKey.len>0&&receiverKey.data[receiverKey.len-1]=='*') {
+                    methodReceiverKey=String_Slice(&receiverKey,0,receiverKey.len-1);
+                }
+                struct SelfCDecl* method=compiler_SelfCFindMethod(parser->program,methodReceiverKey,fieldName,0,0,0);
+                struct StringBuilder builder=std_StringBuilderNew(parser->program[0].allocator);
+                Status status=Status_Ok;
+                if (method!=0) {
+                    status=compiler_SelfCWriteDeclCName(parser->program,&builder,method);
+                } else {
+                    status=StringBuilder_WriteString(&builder,methodReceiverKey);
+                    if (status==Status_Ok) {
+                        status=StringBuilder_WriteByte(&builder,'_');
+                    }
+                    if (status==Status_Ok) {
+                        status=StringBuilder_WriteString(&builder,fieldName);
+                    }
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteByte(&builder,'(');
+                }
+                if (status==Status_Ok&&!expr->isPointer) {
+                    status=StringBuilder_WriteByte(&builder,'&');
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteString(&builder,std_OwnedStringView(&expr->text));
+                }
+                if (groupStart+1<groupEnd) {
+                    if (status==Status_Ok) {
+                        status=StringBuilder_WriteByte(&builder,',');
+                    }
+                    if (status==Status_Ok) {
+                        status=compiler_SelfCWriteCallArgs(parser,groupStart+1,groupEnd,&builder);
+                    }
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteByte(&builder,')');
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCExprFromBuilder(expr,&builder);
+                }
+                StringBuilder_Destroy(&builder);
+                expr->isLvalue=0;
+                if (method!=0) {
+                    struct SelfCTypeInfo returnInfo={0};
+                    if (status==Status_Ok) {
+                        status=compiler_SelfCRenderTypeInfo(parser->program,method->fileIndex,method->returnStart,method->returnEnd,&returnInfo);
+                    }
+                    if (status==Status_Ok) {
+                        status=compiler_SelfCExprSetType(parser->program,expr,std_OwnedStringView(&returnInfo.key),std_OwnedStringView(&returnInfo.cType),returnInfo.isPointer);
+                    }
+                    if (status==Status_Ok) {
+                        compiler_SelfCTypeInfoDestroy(&returnInfo);
+                    }
+                }
+                parser->pos=groupEnd+1;
+                if (status!=Status_Ok) {
+                    return (status);
+                }
+                continue;
+            }
+            struct StringBuilder builder=std_StringBuilderNew(parser->program[0].allocator);
+            Status status=StringBuilder_WriteString(&builder,std_OwnedStringView(&expr->text));
+            if (status==Status_Ok) {
+                struct String exprText=std_OwnedStringView(&expr->text);
+                if (expr->isPointer||String_EqualsCString(&exprText,"this")) {
+                    status=StringBuilder_WriteCString(&builder,"->");
+                } else {
+                    status=StringBuilder_WriteByte(&builder,'.');
+                }
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteString(&builder,fieldName);
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCExprFromBuilder(expr,&builder);
+            }
+            StringBuilder_Destroy(&builder);
+            struct SelfCTypeInfo fieldType={0};
+            if (status==Status_Ok) {
+                status=compiler_SelfCFieldType(parser->program,std_OwnedStringView(&expr->typeKey),fieldName,&fieldType);
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCExprSetType(parser->program,expr,std_OwnedStringView(&fieldType.key),std_OwnedStringView(&fieldType.cType),fieldType.isPointer);
+            }
+            if (status==Status_Ok) {
+                compiler_SelfCTypeInfoDestroy(&fieldType);
+            }
+            expr->isLvalue=1;
+            parser->pos=nameIndex+1;
+            if (status!=Status_Ok) {
+                return (status);
+            }
+            continue;
+        }
+        break;
     }
-    if (expr->kind == KEK_EXPR_CALL
-        && expr->callee
-        && expr->callee->genericArgs
-        && (expr->callee->kind == KEK_EXPR_NAME || expr->callee->kind == KEK_EXPR_SCOPE)) {
-        char baseName[128];
-        if (expr->callee->kind == KEK_EXPR_NAME) {
-            CopyTypedNodeText(writer, expr->callee->token, baseName, sizeof(baseName));
-        } else if (expr->callee->right && expr->callee->right->token) {
-            CopyTypedNodeText(writer, expr->callee->right->token, baseName, sizeof(baseName));
+    return (Status_Ok);
+}
+Status compiler_SelfCCompileUnary(struct SelfCExprParser* parser,struct SelfCExpr* out) {
+    if (parser->pos<parser->end&&(compiler_SelfCIsOperator(parser->program,parser->fileIndex,parser->pos,OperatorKind_Minus)||compiler_SelfCIsOperator(parser->program,parser->fileIndex,parser->pos,OperatorKind_LogicalNot)||compiler_SelfCIsOperator(parser->program,parser->fileIndex,parser->pos,OperatorKind_BitwiseNot)||compiler_SelfCIsOperator(parser->program,parser->fileIndex,parser->pos,OperatorKind_BitwiseAnd)||compiler_SelfCIsOperator(parser->program,parser->fileIndex,parser->pos,OperatorKind_Multiply))) {
+        usize op=parser->pos;
+        parser->pos+=1;
+        struct SelfCExpr inner={0};
+        Status status=compiler_SelfCCompileUnary(parser,&inner);
+        struct StringBuilder builder=std_StringBuilderNew(parser->program[0].allocator);
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteToken(parser->program,&builder,parser->fileIndex,op);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(&builder,std_OwnedStringView(&inner.text));
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCExprInitEmpty(parser->program,out);
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCExprFromBuilder(out,&builder);
+        }
+        StringBuilder_Destroy(&builder);
+        if (status==Status_Ok) {
+            struct SelfCDecl* unaryMethod=0;
+            if (compiler_SelfCIsOperator(parser->program,parser->fileIndex,op,OperatorKind_Minus)) {
+                unaryMethod=compiler_SelfCFindMethod(parser->program,std_OwnedStringView(&inner.typeKey),std_StringFromCString(""),1,compiler_SelfCOperatorCode(parser->program,parser->fileIndex,op),0);
+            }
+            if (unaryMethod!=0) {
+                struct StringBuilder call=std_StringBuilderNew(parser->program[0].allocator);
+                status=compiler_SelfCWriteDeclCName(parser->program,&call,unaryMethod);
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteCString(&call,"(&");
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteString(&call,std_OwnedStringView(&inner.text));
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteByte(&call,')');
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCExprFromBuilder(out,&call);
+                }
+                StringBuilder_Destroy(&call);
+            } else {
+                if (compiler_SelfCIsOperator(parser->program,parser->fileIndex,op,OperatorKind_BitwiseAnd)) {
+                    struct StringBuilder key=std_StringBuilderNew(parser->program[0].allocator);
+                    status=StringBuilder_WriteString(&key,std_OwnedStringView(&inner.typeKey));
+                    if (status==Status_Ok) {
+                        status=StringBuilder_WriteByte(&key,'*');
+                    }
+                    struct OwnedString keyOwned={0};
+                    if (status==Status_Ok) {
+                        status=compiler_SelfCDetachBuilder(&key,&keyOwned);
+                    }
+                    StringBuilder_Destroy(&key);
+                    struct OwnedString cOwned={0};
+                    if (status==Status_Ok) {
+                        struct StringBuilder ct=std_StringBuilderNew(parser->program[0].allocator);
+                        status=StringBuilder_WriteString(&ct,std_OwnedStringView(&inner.cType));
+                        if (status==Status_Ok) {
+                            status=StringBuilder_WriteByte(&ct,'*');
+                        }
+                        if (status==Status_Ok) {
+                            status=compiler_SelfCDetachBuilder(&ct,&cOwned);
+                        }
+                        StringBuilder_Destroy(&ct);
+                    }
+                    if (status==Status_Ok) {
+                        status=compiler_SelfCExprSetType(parser->program,out,std_OwnedStringView(&keyOwned),std_OwnedStringView(&cOwned),1);
+                        std_DestroyOwnedString(&keyOwned);
+                        std_DestroyOwnedString(&cOwned);
+                    }
+                } else {
+                    status=compiler_SelfCExprSetType(parser->program,out,std_OwnedStringView(&inner.typeKey),std_OwnedStringView(&inner.cType),inner.isPointer);
+                }
+            }
+        }
+        compiler_SelfCExprDestroy(&inner);
+        return (status);
+    }
+    Status status=compiler_SelfCCompilePrimary(parser,out);
+    if (status==Status_Ok) {
+        status=compiler_SelfCApplyPostfix(parser,out);
+    }
+    return (status);
+}
+Status compiler_SelfCCompileBinaryOperation(struct SelfCExprParser* parser,struct SelfCExpr* left,usize operatorIndex,struct SelfCExpr* right,struct SelfCExpr* out) {
+    Status status=compiler_SelfCExprInitEmpty(parser->program,out);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    u8 opCode=compiler_SelfCOperatorCode(parser->program,parser->fileIndex,operatorIndex);
+    struct SelfCDecl* method=0;
+    usize operatorArgCount=1;
+    if (compiler_SelfCIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_PlusAssign)||compiler_SelfCIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_MinusAssign)) {
+        operatorArgCount=1;
+    }
+    if (opCode!=0&&std_OwnedStringView(&left->typeKey).len>0) {
+        method=compiler_SelfCFindMethod(parser->program,std_OwnedStringView(&left->typeKey),std_StringFromCString(""),1,opCode,operatorArgCount);
+    }
+    if (method!=0) {
+        struct StringBuilder builder=std_StringBuilderNew(parser->program[0].allocator);
+        status=compiler_SelfCWriteDeclCName(parser->program,&builder,method);
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(&builder,"(&");
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(&builder,std_OwnedStringView(&left->text));
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(&builder,',');
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(&builder,std_OwnedStringView(&right->text));
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(&builder,')');
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCExprFromBuilder(out,&builder);
+        }
+        StringBuilder_Destroy(&builder);
+        if (status==Status_Ok) {
+            struct SelfCTypeInfo returnInfo={0};
+            status=compiler_SelfCRenderTypeInfo(parser->program,method->fileIndex,method->returnStart,method->returnEnd,&returnInfo);
+            if (status==Status_Ok) {
+                status=compiler_SelfCExprSetType(parser->program,out,std_OwnedStringView(&returnInfo.key),std_OwnedStringView(&returnInfo.cType),returnInfo.isPointer);
+            }
+            if (status==Status_Ok) {
+                compiler_SelfCTypeInfoDestroy(&returnInfo);
+            }
+        }
+        return (status);
+    }
+    struct StringBuilder builder=std_StringBuilderNew(parser->program[0].allocator);
+    status=StringBuilder_WriteString(&builder,std_OwnedStringView(&left->text));
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteToken(parser->program,&builder,parser->fileIndex,operatorIndex);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteString(&builder,std_OwnedStringView(&right->text));
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCExprFromBuilder(out,&builder);
+    }
+    StringBuilder_Destroy(&builder);
+    if (status==Status_Ok) {
+        if (compiler_SelfCIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_Equal)||compiler_SelfCIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_NotEqual)||compiler_SelfCIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_Less)||compiler_SelfCIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_LessEqual)||compiler_SelfCIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_Greater)||compiler_SelfCIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_GreaterEqual)||compiler_SelfCIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_LogicalAnd)||compiler_SelfCIsOperator(parser->program,parser->fileIndex,operatorIndex,OperatorKind_LogicalOr)) {
+            status=compiler_SelfCExprSetType(parser->program,out,std_StringFromCString("bool"),std_StringFromCString("bool"),0);
         } else {
-            baseName[0] = '\0';
-        }
-        struct SourceFile* declFile = NULL;
-        struct KekDecl* functionDecl = FindGenericDecl(modules, count, KEK_DECL_FUNCTION, baseName, &declFile);
-        if (functionDecl) {
-            AddGenericFunctionInstance(writer, functionDecl, declFile, expr->callee->genericArgs, writer->file);
+            status=compiler_SelfCExprSetType(parser->program,out,std_OwnedStringView(&left->typeKey),std_OwnedStringView(&left->cType),left->isPointer);
         }
     }
-    CollectGenericTypeUse(writer, modules, count, expr->type);
-    CollectGenericExprUses(writer, modules, count, expr->left);
-    CollectGenericExprUses(writer, modules, count, expr->right);
-    CollectGenericExprUses(writer, modules, count, expr->callee);
-    for (struct KekExpr* arg = expr->firstArg; arg; arg = arg->next) {
-        CollectGenericExprUses(writer, modules, count, arg);
-    }
+    return (status);
 }
-
-static void CollectGenericStmtUses(struct CWriter* writer, struct KekModule* modules, size_t count, struct KekStmt* stmt) {
-    for (; stmt; stmt = stmt->next) {
-        CollectGenericTypeUse(writer, modules, count, stmt->declType);
-        CollectGenericExprUses(writer, modules, count, stmt->expr);
-        CollectGenericExprUses(writer, modules, count, stmt->condition);
-        CollectGenericExprUses(writer, modules, count, stmt->step);
-        CollectGenericStmtUses(writer, modules, count, stmt->initStmt);
-        CollectGenericStmtUses(writer, modules, count, stmt->firstChild);
+Status compiler_SelfCCompileExpression(struct SelfCExprParser* parser,u8 minPrecedence,struct SelfCExpr* out) {
+    struct SelfCExpr left={0};
+    Status status=compiler_SelfCCompileUnary(parser,&left);
+    if (status!=Status_Ok) {
+        return (status);
     }
+    while (parser->pos<parser->end) {
+        u8 precedence=compiler_SelfCOperatorPrecedence(parser->program,parser->fileIndex,parser->pos);
+        if (precedence==0||precedence<minPrecedence) {
+            break;
+        }
+        usize op=parser->pos;
+        parser->pos+=1;
+        u8 nextMin=precedence+1;
+        if (compiler_SelfCOperatorRightAssociative(parser->program,parser->fileIndex,op)) {
+            nextMin=precedence;
+        }
+        struct SelfCExpr right={0};
+        status=compiler_SelfCCompileExpression(parser,nextMin,&right);
+        if (status!=Status_Ok) {
+            compiler_SelfCExprDestroy(&left);
+            return (status);
+        }
+        struct SelfCExpr combined={0};
+        status=compiler_SelfCCompileBinaryOperation(parser,&left,op,&right,&combined);
+        compiler_SelfCExprDestroy(&left);
+        compiler_SelfCExprDestroy(&right);
+        if (status!=Status_Ok) {
+            return (status);
+        }
+        left=combined;
+    }
+    out[0]=left;
+    return (Status_Ok);
 }
-
-static void CollectGenericDeclUses(struct CWriter* writer, struct KekModule* modules, size_t count, struct KekDecl* decl) {
-    if (decl->genericParams) {
-        return;
+Status compiler_SelfCWriteIndent(struct StringBuilder* out,usize indent) {
+    for (usize i=0;i<indent;i++) {
+        Status status=StringBuilder_WriteCString(out,"    ");
+        if (status!=Status_Ok) {
+            return (status);
+        }
     }
-    CollectGenericTypeUse(writer, modules, count, decl->parsedType);
-    for (struct KekParam* param = decl->firstParam; param; param = param->next) {
-        CollectGenericTypeUse(writer, modules, count, param->type);
-        CollectGenericExprUses(writer, modules, count, param->defaultValue);
-    }
-    for (struct KekField* field = decl->firstField; field; field = field->next) {
-        CollectGenericTypeUse(writer, modules, count, field->type);
-        CollectGenericExprUses(writer, modules, count, field->defaultValue);
-    }
-    CollectGenericStmtUses(writer, modules, count, decl->firstStmt);
+    return (Status_Ok);
 }
-
-static int IsTypedTypeDecl(struct KekDecl* decl) {
-    return decl
-        && (decl->kind == KEK_DECL_ALIAS
-            || decl->kind == KEK_DECL_ENUM
-            || decl->kind == KEK_DECL_STRUCT
-            || decl->kind == KEK_DECL_UNION
-            || decl->kind == KEK_DECL_EXTERN_C);
-}
-
-int WriteTypedCFileForModules(const char* path, struct KekModule* modules, size_t count) {
-    FILE* out = fopen(path, "w");
-    if (!out) {
-        return -1;
+usize compiler_SelfCFindStatementSemicolon(struct SelfCProgram* program,usize fileIndex,usize start,usize end) {
+    usize i=start;
+    while (i<end) {
+        if (compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftParen)||compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBrace)||compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_LeftBracket)) {
+            i=compiler_SelfCSkipDelimited(program,fileIndex,i);
+            continue;
+        }
+        if (compiler_SelfCIsPunctuation(program,fileIndex,i,PunctuationKind_Semicolon)) {
+            return (i);
+        }
+        i+=1;
     }
-
-    struct CWriter writer = {0};
-    writer.out = out;
-
-    WritePrelude(out);
-    for (size_t i = 0; i < count; i++) {
-        writer.file = modules[i].file;
-        if (modules[i].file && i + 1 < count) {
-            PackagePrefixFromPath(modules[i].file->path, writer.namespacePrefix, sizeof(writer.namespacePrefix));
+    return (end);
+}
+Status compiler_SelfCArrayLenString(struct SelfCProgram* program,usize fileIndex,usize start,usize end,struct OwnedString* out) {
+    struct StringBuilder builder=std_StringBuilderNew(program->allocator);
+    Status status=compiler_SelfCWriteTokenRangeRaw(program,&builder,fileIndex,start,end);
+    if (status==Status_Ok) {
+        status=compiler_SelfCDetachBuilder(&builder,out);
+    }
+    StringBuilder_Destroy(&builder);
+    return (status);
+}
+bool compiler_SelfCFieldDefaultIsZero(struct SelfCProgram* program,struct SelfCField* field) {
+    if (!field->hasDefault) {
+        return (1);
+    }
+    if (field->defaultEnd!=field->defaultStart+1) {
+        return (0);
+    }
+    if (compiler_SelfCIsTokenKind(program,field->fileIndex,field->defaultStart,TokenKind_Number)&&compiler_SelfCTokenEquals(program,field->fileIndex,field->defaultStart,"0")) {
+        return (1);
+    }
+    if (compiler_SelfCIsIdentifierText(program,field->fileIndex,field->defaultStart,"false")) {
+        return (1);
+    }
+    return (0);
+}
+Status compiler_SelfCWriteDefaultInitializer(struct SelfCProgram* program,struct StringBuilder* out,struct String typeKey) {
+    struct SelfCDecl* decl=compiler_SelfCFindFieldDecl(program,typeKey);
+    if (decl!=0&&decl->kind==SelfCDeclKind_Union) {
+        return (StringBuilder_WriteCString(out,"{0}"));
+    }
+    if (decl==0||decl->kind!=SelfCDeclKind_Struct) {
+        return (StringBuilder_WriteCString(out,"0"));
+    }
+    bool hasNonZeroDefault=0;
+    for (usize i=0;i<decl->fieldCount;i++) {
+        struct SelfCField* field=&program->fields[decl->firstField+i];
+        if (field->hasDefault&&!compiler_SelfCFieldDefaultIsZero(program,field)) {
+            hasNonZeroDefault=1;
+            break;
+        }
+    }
+    if (!hasNonZeroDefault) {
+        return (StringBuilder_WriteCString(out,"{0}"));
+    }
+    Status status=StringBuilder_WriteByte(out,'{');
+    bool first=1;
+    for (usize i=0;i<decl->fieldCount;i++) {
+        struct SelfCField* field=&program->fields[decl->firstField+i];
+        if (!field->hasDefault||compiler_SelfCFieldDefaultIsZero(program,field)) {
+            continue;
+        }
+        if (!first&&status==Status_Ok) {
+            status=StringBuilder_WriteByte(out,',');
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(out,'.');
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteToken(program,out,field->fileIndex,field->nameIndex);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(out,'=');
+        }
+        struct SelfCExpr defaultExpr={0};
+        struct SelfCEnv emptyEnv={0};
+        compiler_SelfCEnvInit(program,&emptyEnv);
+        if (status==Status_Ok) {
+            status=compiler_SelfCCompileExpressionRange(program,&emptyEnv,field->fileIndex,field->defaultStart,field->defaultEnd,std_StringFromCString(""),std_StringFromCString(""),0,&defaultExpr);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(out,std_OwnedStringView(&defaultExpr.text));
+        }
+        if (status==Status_Ok) {
+            compiler_SelfCExprDestroy(&defaultExpr);
+        }
+        compiler_SelfCEnvDestroy(&emptyEnv);
+        first=0;
+        if (status!=Status_Ok) {
+            return (status);
+        }
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,'}');
+    }
+    return (status);
+}
+Status compiler_SelfCWriteVarDecl(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize semicolon,usize indent) {
+    usize colon=compiler_SelfCFindTopLevelColon(program,fileIndex,start,semicolon);
+    if (colon>=semicolon) {
+        return (Status_Invalid);
+    }
+    usize nameIndex=colon+1;
+    usize afterName=nameIndex+1;
+    bool isArray=0;
+    usize arrayStart=semicolon;
+    usize arrayEnd=semicolon;
+    if (afterName<semicolon&&compiler_SelfCIsPunctuation(program,fileIndex,afterName,PunctuationKind_LeftBracket)) {
+        isArray=1;
+        arrayStart=afterName+1;
+        arrayEnd=compiler_SelfCFindMatching(program,fileIndex,afterName);
+        afterName=arrayEnd+1;
+        while (afterName<semicolon&&compiler_SelfCIsPunctuation(program,fileIndex,afterName,PunctuationKind_LeftBracket)) {
+            afterName=compiler_SelfCFindMatching(program,fileIndex,afterName)+1;
+        }
+    }
+    usize arraySuffixStart=nameIndex+1;
+    usize arraySuffixEnd=afterName;
+    usize initStart=semicolon;
+    bool hasInit=0;
+    for (usize i=afterName;i<semicolon;i++) {
+        if (compiler_SelfCIsOperator(program,fileIndex,i,OperatorKind_Assign)) {
+            initStart=i+1;
+            hasInit=1;
+            break;
+        }
+    }
+    struct SelfCTypeInfo typeInfo={0};
+    Status status=compiler_SelfCRenderTypeInfo(program,fileIndex,start,colon,&typeInfo);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    status=compiler_SelfCWriteIndent(out,indent);
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteString(out,std_OwnedStringView(&typeInfo.cType));
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,' ');
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteToken(program,out,fileIndex,nameIndex);
+    }
+    struct OwnedString arrayLen={0};
+    if (isArray) {
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteTokenRangeRaw(program,out,fileIndex,arraySuffixStart,arraySuffixEnd);
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCArrayLenString(program,fileIndex,arrayStart,arrayEnd,&arrayLen);
+        }
+    } else {
+        if (status==Status_Ok) {
+            status=compiler_SelfCMakeOwnedEmpty(program,&arrayLen);
+        }
+    }
+    if (hasInit) {
+        struct SelfCExpr init={0};
+        if (status==Status_Ok) {
+            status=compiler_SelfCCompileExpressionRange(program,env,fileIndex,initStart,semicolon,std_OwnedStringView(&typeInfo.key),std_OwnedStringView(&typeInfo.cType),isArray,&init);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(out,'=');
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(out,std_OwnedStringView(&init.text));
+        }
+        if (status==Status_Ok) {
+            compiler_SelfCExprDestroy(&init);
+        }
+    } else {
+        if (!isArray) {
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteByte(out,'=');
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteDefaultInitializer(program,out,std_OwnedStringView(&typeInfo.key));
+            }
+        }
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,";\n");
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCEnvAdd(program,env,compiler_SelfCTokenText(program,fileIndex,nameIndex),std_OwnedStringView(&typeInfo.key),std_OwnedStringView(&typeInfo.cType),isArray,std_OwnedStringView(&arrayLen),typeInfo.isPointer);
+    }
+    std_DestroyOwnedString(&arrayLen);
+    compiler_SelfCTypeInfoDestroy(&typeInfo);
+    return (status);
+}
+Status compiler_SelfCWriteExprStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize semicolon,usize indent) {
+    if (start>=semicolon) {
+        return (Status_Ok);
+    }
+    if (start+2==semicolon&&compiler_SelfCIsOperator(program,fileIndex,start+1,OperatorKind_Plus)&&compiler_SelfCIsOperator(program,fileIndex,start+2,OperatorKind_Plus)) {
+    }
+    struct SelfCExpr expr={0};
+    Status status=compiler_SelfCCompileExpressionRange(program,env,fileIndex,start,semicolon,std_StringFromCString(""),std_StringFromCString(""),0,&expr);
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteIndent(out,indent);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteString(out,std_OwnedStringView(&expr.text));
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,";\n");
+    }
+    compiler_SelfCExprDestroy(&expr);
+    return (status);
+}
+Status compiler_SelfCWriteIfStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent) {
+    usize groupStart=compiler_SelfCFindNextGroup(program,fileIndex,start,compiler_SelfCFileTokenCount(program,fileIndex));
+    usize groupEnd=compiler_SelfCFindMatching(program,fileIndex,groupStart);
+    usize blockStart=groupEnd+1;
+    usize blockEnd=blockStart;
+    struct SelfCExpr cond={0};
+    Status status=compiler_SelfCCompileExpressionRange(program,env,fileIndex,groupStart+1,groupEnd,std_StringFromCString(""),std_StringFromCString(""),0,&cond);
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteIndent(out,indent);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"if (");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteString(out,std_OwnedStringView(&cond.text));
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,") ");
+    }
+    compiler_SelfCExprDestroy(&cond);
+    if (blockStart<compiler_SelfCFileTokenCount(program,fileIndex)&&compiler_SelfCIsPunctuation(program,fileIndex,blockStart,PunctuationKind_LeftBrace)) {
+        blockEnd=compiler_SelfCFindMatching(program,fileIndex,blockStart);
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,"{\n");
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteBlock(program,out,env,fileIndex,blockStart+1,blockEnd,indent+1);
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteIndent(out,indent);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,"}");
+        }
+        outNext[0]=blockEnd+1;
+    } else {
+        usize semicolon=compiler_SelfCFindStatementSemicolon(program,fileIndex,blockStart,compiler_SelfCFileTokenCount(program,fileIndex));
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,"{\n");
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteExprStatement(program,out,env,fileIndex,blockStart,semicolon,indent+1);
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteIndent(out,indent);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,"}");
+        }
+        outNext[0]=semicolon+1;
+    }
+    if (outNext[0]<compiler_SelfCFileTokenCount(program,fileIndex)&&compiler_SelfCIsKeyword(program,fileIndex,outNext[0],KeywordKind_Else)) {
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out," else ");
+        }
+        usize elseStart=outNext[0]+1;
+        if (elseStart<compiler_SelfCFileTokenCount(program,fileIndex)&&compiler_SelfCIsPunctuation(program,fileIndex,elseStart,PunctuationKind_LeftBrace)) {
+            usize elseEnd=compiler_SelfCFindMatching(program,fileIndex,elseStart);
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out,"{\n");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteBlock(program,out,env,fileIndex,elseStart+1,elseEnd,indent+1);
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteIndent(out,indent);
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out,"}");
+            }
+            outNext[0]=elseEnd+1;
         } else {
-            writer.namespacePrefix[0] = '\0';
-        }
-
-        for (struct KekDecl* decl = modules[i].firstDecl; decl; decl = decl->next) {
-            RegisterTypedDeclForCodegen(&writer, decl);
-        }
-        for (struct KekDecl* decl = modules[i].firstDecl; decl; decl = decl->next) {
-            CollectGenericDeclUses(&writer, modules, count, decl);
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out,"{\n");
+            }
+            usize semicolon=compiler_SelfCFindStatementSemicolon(program,fileIndex,elseStart,compiler_SelfCFileTokenCount(program,fileIndex));
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteExprStatement(program,out,env,fileIndex,elseStart,semicolon,indent+1);
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteIndent(out,indent);
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out,"}");
+            }
+            outNext[0]=semicolon+1;
         }
     }
-
-    AddGenericMethodInstancesForStructs(&writer, modules, count);
-
-    for (size_t i = 0; i < count; i++) {
-        writer.file = modules[i].file;
-        if (modules[i].file && i + 1 < count) {
-            PackagePrefixFromPath(modules[i].file->path, writer.namespacePrefix, sizeof(writer.namespacePrefix));
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,'\n');
+    }
+    return (status);
+}
+Status compiler_SelfCWriteWhileStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent) {
+    usize groupStart=compiler_SelfCFindNextGroup(program,fileIndex,start,compiler_SelfCFileTokenCount(program,fileIndex));
+    usize groupEnd=compiler_SelfCFindMatching(program,fileIndex,groupStart);
+    usize blockStart=groupEnd+1;
+    usize blockEnd=compiler_SelfCFindMatching(program,fileIndex,blockStart);
+    struct SelfCExpr cond={0};
+    Status status=compiler_SelfCCompileExpressionRange(program,env,fileIndex,groupStart+1,groupEnd,std_StringFromCString(""),std_StringFromCString(""),0,&cond);
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteIndent(out,indent);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"while (");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteString(out,std_OwnedStringView(&cond.text));
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,") {\n");
+    }
+    compiler_SelfCExprDestroy(&cond);
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteBlock(program,out,env,fileIndex,blockStart+1,blockEnd,indent+1);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteIndent(out,indent);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"}\n");
+    }
+    outNext[0]=blockEnd+1;
+    return (status);
+}
+Status compiler_SelfCWriteDoStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent) {
+    usize blockStart=start+1;
+    usize blockEnd=compiler_SelfCFindMatching(program,fileIndex,blockStart);
+    usize whileIndex=blockEnd+1;
+    usize groupStart=compiler_SelfCFindNextGroup(program,fileIndex,whileIndex,compiler_SelfCFileTokenCount(program,fileIndex));
+    usize groupEnd=compiler_SelfCFindMatching(program,fileIndex,groupStart);
+    struct SelfCExpr cond={0};
+    Status status=compiler_SelfCCompileExpressionRange(program,env,fileIndex,groupStart+1,groupEnd,std_StringFromCString(""),std_StringFromCString(""),0,&cond);
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteIndent(out,indent);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"do {\n");
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteBlock(program,out,env,fileIndex,blockStart+1,blockEnd,indent+1);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteIndent(out,indent);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"} while (");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteString(out,std_OwnedStringView(&cond.text));
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,");\n");
+    }
+    compiler_SelfCExprDestroy(&cond);
+    outNext[0]=groupEnd+2;
+    return (status);
+}
+Status compiler_SelfCWriteForStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent) {
+    usize groupStart=compiler_SelfCFindNextGroup(program,fileIndex,start,compiler_SelfCFileTokenCount(program,fileIndex));
+    usize groupEnd=compiler_SelfCFindMatching(program,fileIndex,groupStart);
+    usize firstSemi=compiler_SelfCFindTokenAtDepthZero(program,fileIndex,groupStart+1,groupEnd,PunctuationKind_Semicolon);
+    usize secondSemi=compiler_SelfCFindTokenAtDepthZero(program,fileIndex,firstSemi+1,groupEnd,PunctuationKind_Semicolon);
+    usize blockStart=groupEnd+1;
+    usize blockEnd=compiler_SelfCFindMatching(program,fileIndex,blockStart);
+    Status status=compiler_SelfCWriteIndent(out,indent);
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"for (");
+    }
+    usize colon=compiler_SelfCFindTopLevelColon(program,fileIndex,groupStart+1,firstSemi);
+    if (colon<firstSemi) {
+        struct SelfCTypeInfo typeInfo={0};
+        if (status==Status_Ok) {
+            status=compiler_SelfCRenderTypeInfo(program,fileIndex,groupStart+1,colon,&typeInfo);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(out,std_OwnedStringView(&typeInfo.cType));
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(out,' ');
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteToken(program,out,fileIndex,colon+1);
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCEnvAdd(program,env,compiler_SelfCTokenText(program,fileIndex,colon+1),std_OwnedStringView(&typeInfo.key),std_OwnedStringView(&typeInfo.cType),0,std_StringFromCString(""),typeInfo.isPointer);
+        }
+        usize eq=colon+2;
+        while (eq<firstSemi&&!compiler_SelfCIsOperator(program,fileIndex,eq,OperatorKind_Assign)) {
+            eq+=1;
+        }
+        if (eq<firstSemi) {
+            struct SelfCExpr init={0};
+            if (status==Status_Ok) {
+                status=compiler_SelfCCompileExpressionRange(program,env,fileIndex,eq+1,firstSemi,std_OwnedStringView(&typeInfo.key),std_OwnedStringView(&typeInfo.cType),0,&init);
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteByte(out,'=');
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteString(out,std_OwnedStringView(&init.text));
+            }
+            if (status==Status_Ok) {
+                compiler_SelfCExprDestroy(&init);
+            }
+        }
+        compiler_SelfCTypeInfoDestroy(&typeInfo);
+    } else {
+        struct SelfCExpr initExpr={0};
+        if (status==Status_Ok) {
+            status=compiler_SelfCCompileExpressionRange(program,env,fileIndex,groupStart+1,firstSemi,std_StringFromCString(""),std_StringFromCString(""),0,&initExpr);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(out,std_OwnedStringView(&initExpr.text));
+        }
+        if (status==Status_Ok) {
+            compiler_SelfCExprDestroy(&initExpr);
+        }
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,';');
+    }
+    struct SelfCExpr cond={0};
+    if (status==Status_Ok) {
+        status=compiler_SelfCCompileExpressionRange(program,env,fileIndex,firstSemi+1,secondSemi,std_StringFromCString(""),std_StringFromCString(""),0,&cond);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteString(out,std_OwnedStringView(&cond.text));
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,';');
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteTokenRangeRaw(program,out,fileIndex,secondSemi+1,groupEnd);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,") {\n");
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteBlock(program,out,env,fileIndex,blockStart+1,blockEnd,indent+1);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteIndent(out,indent);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"}\n");
+    }
+    compiler_SelfCExprDestroy(&cond);
+    outNext[0]=blockEnd+1;
+    return (status);
+}
+Status compiler_SelfCWriteEachStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent) {
+    usize genericStart=start+1;
+    usize genericEnd=compiler_SelfCFindMatching(program,fileIndex,genericStart);
+    usize groupStart=genericEnd+1;
+    usize groupEnd=compiler_SelfCFindMatching(program,fileIndex,groupStart);
+    usize blockStart=groupEnd+1;
+    usize blockEnd=compiler_SelfCFindMatching(program,fileIndex,blockStart);
+    usize comma=compiler_SelfCFindTokenAtDepthZero(program,fileIndex,genericStart+1,genericEnd,PunctuationKind_Comma);
+    usize valueTypeStart=genericStart+1;
+    usize valueTypeEnd=genericEnd;
+    usize valueNameIndex=genericStart+1;
+    bool hasIndex=0;
+    usize indexTypeStart=genericStart+1;
+    usize indexTypeEnd=genericStart+1;
+    usize indexNameIndex=genericStart+1;
+    if (comma<genericEnd) {
+        hasIndex=1;
+        usize indexColon=compiler_SelfCFindTopLevelColon(program,fileIndex,genericStart+1,comma);
+        indexTypeStart=genericStart+1;
+        indexTypeEnd=indexColon;
+        indexNameIndex=indexColon+1;
+        usize valueColon=compiler_SelfCFindTopLevelColon(program,fileIndex,comma+1,genericEnd);
+        valueTypeStart=comma+1;
+        valueTypeEnd=valueColon;
+        valueNameIndex=valueColon+1;
+    } else {
+        usize valueColon=compiler_SelfCFindTopLevelColon(program,fileIndex,genericStart+1,genericEnd);
+        valueTypeStart=genericStart+1;
+        valueTypeEnd=valueColon;
+        valueNameIndex=valueColon+1;
+    }
+    struct SelfCTypeInfo valueType={0};
+    Status status=compiler_SelfCRenderTypeInfo(program,fileIndex,valueTypeStart,valueTypeEnd,&valueType);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    if (groupStart+2<groupEnd&&compiler_SelfCIsIdentifierText(program,fileIndex,groupStart+1,"range")) {
+        usize rangeGroup=groupStart+4;
+        while (rangeGroup<groupEnd&&!compiler_SelfCIsPunctuation(program,fileIndex,rangeGroup,PunctuationKind_LeftParen)) {
+            rangeGroup+=1;
+        }
+        usize rangeEnd=compiler_SelfCFindMatching(program,fileIndex,rangeGroup);
+        usize firstComma=compiler_SelfCFindTokenAtDepthZero(program,fileIndex,rangeGroup+1,rangeEnd,PunctuationKind_Comma);
+        usize secondComma=compiler_SelfCFindTokenAtDepthZero(program,fileIndex,firstComma+1,rangeEnd,PunctuationKind_Comma);
+        struct SelfCExpr beginExpr={0};
+        struct SelfCExpr endExpr={0};
+        struct SelfCExpr stepExpr={0};
+        status=compiler_SelfCCompileExpressionRange(program,env,fileIndex,rangeGroup+1,firstComma,std_StringFromCString(""),std_StringFromCString(""),0,&beginExpr);
+        usize rangeValueEnd=rangeEnd;
+        if (secondComma<rangeEnd) {
+            rangeValueEnd=secondComma;
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCCompileExpressionRange(program,env,fileIndex,firstComma+1,rangeValueEnd,std_StringFromCString(""),std_StringFromCString(""),0,&endExpr);
+        }
+        if (secondComma<rangeEnd) {
+            if (status==Status_Ok) {
+                status=compiler_SelfCCompileExpressionRange(program,env,fileIndex,secondComma+1,rangeEnd,std_StringFromCString(""),std_StringFromCString(""),0,&stepExpr);
+            }
         } else {
-            writer.namespacePrefix[0] = '\0';
-        }
-
-        for (struct KekDecl* decl = modules[i].firstDecl; decl; decl = decl->next) {
-            if (IsTypedTypeDecl(decl)) {
-                WriteTypedDecl(&writer, decl);
-                fputc('\n', writer.out);
+            if (status==Status_Ok) {
+                compiler_SelfCExprInitEmpty(program,&stepExpr);
+                status=compiler_SelfCExprSetCString(program,&stepExpr,"1");
             }
         }
-    }
-
-    for (size_t i = 0; i < writer.genericFunctionCount; i++) {
-        writer.file = writer.genericFunctions[i].declFile ? writer.genericFunctions[i].declFile : writer.file;
-        RegisterTypedFunctionWithName(&writer, writer.genericFunctions[i].name, writer.genericFunctions[i].decl, TypedDeclIsMethod(writer.genericFunctions[i].decl));
-    }
-
-    for (size_t i = 0; i < writer.genericStructCount; i++) {
-        WriteTypedGenericStructInstance(&writer, &writer.genericStructs[i]);
-        fputc('\n', writer.out);
-    }
-
-    for (size_t i = 0; i < count; i++) {
-        writer.file = modules[i].file;
-        if (modules[i].file && i + 1 < count) {
-            PackagePrefixFromPath(modules[i].file->path, writer.namespacePrefix, sizeof(writer.namespacePrefix));
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteIndent(out,indent);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,"for (");
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(out,std_OwnedStringView(&valueType.cType));
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(out,' ');
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteToken(program,out,fileIndex,valueNameIndex);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(out,'=');
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(out,std_OwnedStringView(&beginExpr.text));
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(out,';');
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteToken(program,out,fileIndex,valueNameIndex);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(out,'<');
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(out,std_OwnedStringView(&endExpr.text));
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(out,';');
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteToken(program,out,fileIndex,valueNameIndex);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,"+=");
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(out,std_OwnedStringView(&stepExpr.text));
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,") {\n");
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCEnvAdd(program,env,compiler_SelfCTokenText(program,fileIndex,valueNameIndex),std_OwnedStringView(&valueType.key),std_OwnedStringView(&valueType.cType),0,std_StringFromCString(""),valueType.isPointer);
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteBlock(program,out,env,fileIndex,blockStart+1,blockEnd,indent+1);
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteIndent(out,indent);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,"}\n");
+        }
+        compiler_SelfCExprDestroy(&beginExpr);
+        compiler_SelfCExprDestroy(&endExpr);
+        compiler_SelfCExprDestroy(&stepExpr);
+    } else {
+        struct SelfCExpr arrayExpr={0};
+        status=compiler_SelfCCompileExpressionRange(program,env,fileIndex,groupStart+1,groupEnd,std_StringFromCString(""),std_StringFromCString(""),0,&arrayExpr);
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteIndent(out,indent);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,"for (");
+        }
+        if (hasIndex) {
+            struct SelfCTypeInfo indexType={0};
+            if (status==Status_Ok) {
+                status=compiler_SelfCRenderTypeInfo(program,fileIndex,indexTypeStart,indexTypeEnd,&indexType);
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteString(out,std_OwnedStringView(&indexType.cType));
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteByte(out,' ');
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteToken(program,out,fileIndex,indexNameIndex);
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out,"=0;");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteToken(program,out,fileIndex,indexNameIndex);
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteByte(out,'<');
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteString(out,std_OwnedStringView(&arrayExpr.arrayLen));
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteByte(out,';');
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteToken(program,out,fileIndex,indexNameIndex);
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out,"++) {\n");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCEnvAdd(program,env,compiler_SelfCTokenText(program,fileIndex,indexNameIndex),std_OwnedStringView(&indexType.key),std_OwnedStringView(&indexType.cType),0,std_StringFromCString(""),indexType.isPointer);
+            }
+            compiler_SelfCTypeInfoDestroy(&indexType);
         } else {
-            writer.namespacePrefix[0] = '\0';
-        }
-
-        for (struct KekDecl* decl = modules[i].firstDecl; decl; decl = decl->next) {
-            if (decl->kind == KEK_DECL_FUNCTION && !decl->genericParams) {
-                char functionName[128];
-                TypedFunctionName(&writer, decl, functionName, sizeof(functionName));
-                WriteTypedFunctionSignature(&writer, decl, functionName);
-                fputs(";\n", writer.out);
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out,"usize __kek_each_idx=0;__kek_each_idx<");
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteString(out,std_OwnedStringView(&arrayExpr.arrayLen));
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out,";__kek_each_idx++) {\n");
             }
         }
-    }
-
-    for (size_t i = 0; i < writer.genericFunctionCount; i++) {
-        WriteTypedGenericFunctionSignature(&writer, &writer.genericFunctions[i]);
-        fputs(";\n", writer.out);
-    }
-
-    for (size_t i = 0; i < writer.genericFunctionCount; i++) {
-        WriteTypedGenericFunctionInstance(&writer, &writer.genericFunctions[i]);
-        fputc('\n', writer.out);
-    }
-
-    for (size_t i = 0; i < count; i++) {
-        writer.file = modules[i].file;
-        if (modules[i].file && i + 1 < count) {
-            PackagePrefixFromPath(modules[i].file->path, writer.namespacePrefix, sizeof(writer.namespacePrefix));
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteIndent(out,indent+1);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(out,std_OwnedStringView(&valueType.cType));
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(out,' ');
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteToken(program,out,fileIndex,valueNameIndex);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(out,'=');
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(out,std_OwnedStringView(&arrayExpr.text));
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(out,'[');
+        }
+        if (hasIndex) {
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteToken(program,out,fileIndex,indexNameIndex);
+            }
         } else {
-            writer.namespacePrefix[0] = '\0';
-        }
-
-        for (struct KekDecl* decl = modules[i].firstDecl; decl; decl = decl->next) {
-            if (decl->kind == KEK_DECL_FUNCTION) {
-                WriteTypedDecl(&writer, decl);
-                fputc('\n', writer.out);
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out,"__kek_each_idx");
             }
         }
-    }
-
-    fclose(out);
-    return 0;
-}
-#undef IsTypedTypeDecl
-#undef CollectGenericDeclUses
-#undef CollectGenericStmtUses
-#undef CollectGenericExprUses
-#undef CollectGenericTypeUse
-#undef WriteTypedDecl
-#undef WriteTypedGenericFunctionInstance
-#undef WriteTypedGenericFunctionSignature
-#undef WriteTypedGenericStructInstance
-#undef WriteTypedFunctionSignature
-#undef WriteTypedParams
-#undef TypedDeclGetAlignedValue
-#undef TypedDeclHasAttribute
-#undef GetAlignedValue
-#undef AttributeListContains
-#undef RegisterTypedDeclForCodegen
-#undef TypedFunctionName
-#undef RegisterTypedFunctionWithName
-#undef RegisterTypedFunction
-#undef RegisterTypedStruct
-#undef WriteTypedDeclStatement
-#undef WriteAllActiveDefers
-#undef WriteDeferredRange
-#undef WriteDeferredStatement
-#undef FirstTypedBlockChild
-#undef WriteTypedBlock
-#undef WriteTypedStatement
-#undef TryWriteTypedBinaryOperatorCall
-#undef TryWriteTypedUnaryOperatorCall
-#undef ExprOperatorMangle
-#undef TypedExprLocalType
-#undef WriteTypedStructLiteral
-#undef WriteTypedCall
-#undef WriteTypedKnownCallArgs
-#undef ExprIsThisName
-#undef FindParameterIndex
-#undef TypedNamedArgument
-#undef TypedCalleeName
-#undef ExprCalleeNameEquals
-#undef WriteTypedExprList
-#undef WriteTypedTypeAndName
-#undef WriteTypedTypeAndNameWithGenericContext
-#undef WriteTypedArraySuffix
-#undef WriteTypedBaseType
-#undef WriteTypedBaseTypeWithGenericContext
-#undef WriteTypedNonArrayTypeWithGenericContext
-#undef AddGenericMethodInstancesForStructs
-#undef GenericStructInstanceName
-#undef AddGenericFunctionInstance
-#undef AddGenericStructInstance
-#undef FindGenericInstanceByName
-#undef FindGenericInstance
-#undef TypedDeclReceiverName
-#undef TypedDeclIsMethod
-#undef FindGenericDecl
-#undef WriteTypedExpr
-#undef CopyTypedFieldDefault
-#undef CopyTypedFieldDefaultWithContext
-#undef TypeDefaultsToAggregate
-#undef GenericParamIndex
-#undef CopyExprSource
-#undef WriteSourceSlice
-#undef MangleGenericName
-#undef AppendGenericArgsToNameWithWriter
-#undef MangleGenericNameWithFiles
-#undef GenericArgMangleText
-#undef GenericArgText
-#undef GenericArgTextFromFile
-#undef AppendSanitized
-#undef FindGenericSubstitution
-#undef GenericParamName
-#undef GenericArgNode
-#undef TypedTokenTextEquals
-#undef IsGenericNode
-#undef CopyTypedNodeText
-#undef TypedNodeText
-#undef PackagePrefixFromPath
-#undef WritePrelude
-#undef WriteIndent
-#undef FindLocalIsPointer
-#undef FindLocalType
-#undef AddLocalTypeEx
-#undef RegisterExternCStructs
-#undef IsCIdentifierPart
-#undef IsCIdentifierStart
-#undef AddStructInfo
-#undef FindStructInfo
-#undef IsKnownStruct
-#undef AddFunctionInfo
-#undef FindFunctionInfo
-#undef TypedDeclBaseName
-#undef IsOperatorDeclName
-#undef OperatorMangleName
-#undef CopyTokenText
-#undef TokenTextEquals
-#undef CTokenText
-#undef DecodeCharLiteral
-#undef NextSibling
-#undef IsTokenNode
-#undef IsKeywordToken
-#undef IsOperatorToken
-#undef IsPunctuationToken
-/* END codegen_c.c */
-
-/* BEGIN main.c */
-#define ArgEquals main_ArgEquals
-#define CliPrintUsage main_CliPrintUsage
-#define CliCopyDefaultPath main_CliCopyDefaultPath
-#define CliSetOutDirDefaults main_CliSetOutDirDefaults
-#define CliEnsureOutDir main_CliEnsureOutDir
-#define CliReadValue main_CliReadValue
-#define ParseKekBuildCli main_ParseKekBuildCli
-#define ParseKekCli main_ParseKekCli
-#define RunKekBuild main_RunKekBuild
-
-
-static const char* SMOKE_SOURCE_PATH = "tmp.kek";
-static const char* DEFAULT_OUT_DIR = "out";
-
-enum KekCliCommand {
-    KEK_CLI_COMMAND_BUILD,
-    KEK_CLI_COMMAND_HELP,
-    KEK_CLI_COMMAND_VERSION,
-};
-
-struct KekCliOptions {
-    enum KekCliCommand command;
-    const char* inputPath;
-    const char* cPath;
-    const char* astJsonPath;
-    const char* summaryPath;
-    const char* outDir;
-    char cPathStorage[MAX_PATH_LENGTH];
-    char astJsonPathStorage[MAX_PATH_LENGTH];
-    char summaryPathStorage[MAX_PATH_LENGTH];
-};
-
-static int ArgEquals(const char* arg, const char* text) {
-    return arg && text && strcmp(arg, text) == 0;
-}
-
-static void CliPrintUsage(FILE* out) {
-    fprintf(out,
-        "Usage:\n"
-        "  kek build <input.kek> [options]\n"
-        "  kek --help\n"
-        "  kek --version\n"
-        "\n"
-        "Options:\n"
-        "  -o <path>              Write generated C to path\n"
-        "  --ast-json <path>      Write structural AST JSON to path\n"
-        "  --summary <path>       Write typed module summary to path\n"
-        "  --out-dir <dir>        Write default outputs under dir\n");
-}
-
-static int CliCopyDefaultPath(char* out, size_t outSize, const char* outDir, const char* fileName) {
-    int written = snprintf(out, outSize, "%s/%s", outDir, fileName);
-    return written >= 0 && (size_t)written < outSize ? 0 : -1;
-}
-
-static int CliSetOutDirDefaults(struct KekCliOptions* options) {
-    const char* outDir = options->outDir ? options->outDir : DEFAULT_OUT_DIR;
-    if (!options->cPath) {
-        if (CliCopyDefaultPath(options->cPathStorage, sizeof(options->cPathStorage), outDir, "out.c") != 0) {
-            fprintf(stderr, "kek: C output path is too long\n");
-            return -1;
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,"];\n");
         }
-        options->cPath = options->cPathStorage;
-    }
-    if (!options->astJsonPath) {
-        if (CliCopyDefaultPath(options->astJsonPathStorage, sizeof(options->astJsonPathStorage), outDir, "ast.json") != 0) {
-            fprintf(stderr, "kek: AST JSON output path is too long\n");
-            return -1;
+        if (status==Status_Ok) {
+            status=compiler_SelfCEnvAdd(program,env,compiler_SelfCTokenText(program,fileIndex,valueNameIndex),std_OwnedStringView(&valueType.key),std_OwnedStringView(&valueType.cType),0,std_StringFromCString(""),valueType.isPointer);
         }
-        options->astJsonPath = options->astJsonPathStorage;
-    }
-    if (!options->summaryPath) {
-        if (CliCopyDefaultPath(options->summaryPathStorage, sizeof(options->summaryPathStorage), outDir, "module.txt") != 0) {
-            fprintf(stderr, "kek: module summary output path is too long\n");
-            return -1;
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteBlock(program,out,env,fileIndex,blockStart+1,blockEnd,indent+1);
         }
-        options->summaryPath = options->summaryPathStorage;
-    }
-    return 0;
-}
-
-static int CliEnsureOutDir(const char* path) {
-    if (mkdir(path, 0755) != 0 && errno != EEXIST) {
-        fprintf(stderr, "kek: could not create output directory %s: %s\n", path, strerror(errno));
-        return -1;
-    }
-    return 0;
-}
-
-static int CliReadValue(int argc, char** argv, int* index, const char* flag, const char** out) {
-    if (*index + 1 >= argc) {
-        fprintf(stderr, "kek: missing value for %s\n", flag);
-        return -1;
-    }
-    *index += 1;
-    *out = argv[*index];
-    return 0;
-}
-
-static int ParseKekBuildCli(int argc, char** argv, struct KekCliOptions* options) {
-    if (argc < 3) {
-        fprintf(stderr, "kek: missing input path\n");
-        return -1;
-    }
-
-    for (int i = 2; i < argc; i++) {
-        const char* arg = argv[i];
-        if (ArgEquals(arg, "--help") || ArgEquals(arg, "-h")) {
-            options->command = KEK_CLI_COMMAND_HELP;
-            return 0;
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteIndent(out,indent);
         }
-        if (ArgEquals(arg, "-o")) {
-            if (CliReadValue(argc, argv, &i, arg, &options->cPath) != 0) {
-                return -1;
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,"}\n");
+        }
+        compiler_SelfCExprDestroy(&arrayExpr);
+    }
+    compiler_SelfCTypeInfoDestroy(&valueType);
+    outNext[0]=blockEnd+1;
+    return (status);
+}
+Status compiler_SelfCWriteSwitchStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent) {
+    usize groupStart=compiler_SelfCFindNextGroup(program,fileIndex,start,compiler_SelfCFileTokenCount(program,fileIndex));
+    usize groupEnd=compiler_SelfCFindMatching(program,fileIndex,groupStart);
+    usize blockStart=groupEnd+1;
+    usize blockEnd=compiler_SelfCFindMatching(program,fileIndex,blockStart);
+    struct SelfCExpr value={0};
+    Status status=compiler_SelfCCompileExpressionRange(program,env,fileIndex,groupStart+1,groupEnd,std_StringFromCString(""),std_StringFromCString(""),0,&value);
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteIndent(out,indent);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"switch (");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteString(out,std_OwnedStringView(&value.text));
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,") {\n");
+    }
+    compiler_SelfCExprDestroy(&value);
+    usize i=blockStart+1;
+    while (i<blockEnd&&status==Status_Ok) {
+        if (compiler_SelfCIsKeyword(program,fileIndex,i,KeywordKind_Case)) {
+            usize caseGroup=i+1;
+            usize caseGroupEnd=compiler_SelfCFindMatching(program,fileIndex,caseGroup);
+            struct SelfCExpr caseExpr={0};
+            status=compiler_SelfCCompileExpressionRange(program,env,fileIndex,caseGroup+1,caseGroupEnd,std_StringFromCString(""),std_StringFromCString(""),0,&caseExpr);
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteIndent(out,indent+1);
             }
-        } else if (ArgEquals(arg, "--ast-json")) {
-            if (CliReadValue(argc, argv, &i, arg, &options->astJsonPath) != 0) {
-                return -1;
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out,"case ");
             }
-        } else if (ArgEquals(arg, "--summary")) {
-            if (CliReadValue(argc, argv, &i, arg, &options->summaryPath) != 0) {
-                return -1;
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteString(out,std_OwnedStringView(&caseExpr.text));
             }
-        } else if (ArgEquals(arg, "--out-dir")) {
-            if (CliReadValue(argc, argv, &i, arg, &options->outDir) != 0) {
-                return -1;
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out,": ");
             }
-        } else if (arg[0] == '-') {
-            fprintf(stderr, "kek: unknown flag: %s\n", arg);
-            return -1;
-        } else if (!options->inputPath) {
-            options->inputPath = arg;
+            compiler_SelfCExprDestroy(&caseExpr);
+            usize caseBlock=caseGroupEnd+1;
+            if (caseBlock<blockEnd&&compiler_SelfCIsPunctuation(program,fileIndex,caseBlock,PunctuationKind_Colon)) {
+                caseBlock+=1;
+            }
+            if (caseBlock<blockEnd&&compiler_SelfCIsPunctuation(program,fileIndex,caseBlock,PunctuationKind_LeftBrace)) {
+                usize caseBlockEnd=compiler_SelfCFindMatching(program,fileIndex,caseBlock);
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteCString(out,"{\n");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteBlock(program,out,env,fileIndex,caseBlock+1,caseBlockEnd,indent+2);
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteIndent(out,indent+1);
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteCString(out,"}\n");
+                }
+                i=caseBlockEnd+1;
+            } else {
+                usize semicolon=compiler_SelfCFindStatementSemicolon(program,fileIndex,caseBlock,blockEnd);
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteCString(out,"{\n");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteExprStatement(program,out,env,fileIndex,caseBlock,semicolon,indent+2);
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteIndent(out,indent+1);
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteCString(out,"}\n");
+                }
+                i=semicolon+1;
+            }
+            continue;
+        }
+        if (compiler_SelfCIsKeyword(program,fileIndex,i,KeywordKind_Default)) {
+            status=compiler_SelfCWriteIndent(out,indent+1);
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out,"default: ");
+            }
+            usize bodyStart=i+1;
+            if (bodyStart<blockEnd&&compiler_SelfCIsPunctuation(program,fileIndex,bodyStart,PunctuationKind_Colon)) {
+                bodyStart+=1;
+            }
+            if (bodyStart<blockEnd&&compiler_SelfCIsPunctuation(program,fileIndex,bodyStart,PunctuationKind_LeftBrace)) {
+                usize bodyEnd=compiler_SelfCFindMatching(program,fileIndex,bodyStart);
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteCString(out,"{\n");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteBlock(program,out,env,fileIndex,bodyStart+1,bodyEnd,indent+2);
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteIndent(out,indent+1);
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteCString(out,"}\n");
+                }
+                i=bodyEnd+1;
+            } else {
+                usize semicolon=compiler_SelfCFindStatementSemicolon(program,fileIndex,bodyStart,blockEnd);
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteCString(out,"{\n");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteExprStatement(program,out,env,fileIndex,bodyStart,semicolon,indent+2);
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteIndent(out,indent+1);
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteCString(out,"}\n");
+                }
+                i=semicolon+1;
+            }
+            continue;
+        }
+        i+=1;
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteIndent(out,indent);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"}\n");
+    }
+    outNext[0]=blockEnd+1;
+    return (status);
+}
+Status compiler_SelfCWriteReturnStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize semicolon,usize indent) {
+    Status status=compiler_SelfCWriteIndent(out,indent);
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"return");
+    }
+    if (start+1<semicolon) {
+        struct SelfCExpr value={0};
+        if (status==Status_Ok) {
+            status=compiler_SelfCCompileExpressionRange(program,env,fileIndex,start+1,semicolon,std_OwnedStringView(&env->returnTypeKey),std_OwnedStringView(&env->returnCType),0,&value);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(out,' ');
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(out,std_OwnedStringView(&value.text));
+        }
+        if (status==Status_Ok) {
+            compiler_SelfCExprDestroy(&value);
+        }
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,";\n");
+    }
+    return (status);
+}
+Status compiler_SelfCWriteSingleStatement(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize* outNext,usize indent) {
+    if (compiler_SelfCIsPunctuation(program,fileIndex,start,PunctuationKind_LeftBrace)) {
+        usize blockEnd=compiler_SelfCFindMatching(program,fileIndex,start);
+        Status status=compiler_SelfCWriteIndent(out,indent);
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,"{\n");
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteBlock(program,out,env,fileIndex,start+1,blockEnd,indent+1);
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteIndent(out,indent);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,"}\n");
+        }
+        outNext[0]=blockEnd+1;
+        return (status);
+    }
+    if (compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_If)) {
+        return (compiler_SelfCWriteIfStatement(program,out,env,fileIndex,start,outNext,indent));
+    }
+    if (compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_While)) {
+        return (compiler_SelfCWriteWhileStatement(program,out,env,fileIndex,start,outNext,indent));
+    }
+    if (compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_Do)) {
+        return (compiler_SelfCWriteDoStatement(program,out,env,fileIndex,start,outNext,indent));
+    }
+    if (compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_For)) {
+        return (compiler_SelfCWriteForStatement(program,out,env,fileIndex,start,outNext,indent));
+    }
+    if (compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_Each)) {
+        return (compiler_SelfCWriteEachStatement(program,out,env,fileIndex,start,outNext,indent));
+    }
+    if (compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_Switch)) {
+        return (compiler_SelfCWriteSwitchStatement(program,out,env,fileIndex,start,outNext,indent));
+    }
+    usize semicolon=compiler_SelfCFindStatementSemicolon(program,fileIndex,start,compiler_SelfCFileTokenCount(program,fileIndex));
+    if (compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_Return)) {
+        outNext[0]=semicolon+1;
+        return (compiler_SelfCWriteReturnStatement(program,out,env,fileIndex,start,semicolon,indent));
+    }
+    if (compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_Break)) {
+        outNext[0]=semicolon+1;
+        Status status=compiler_SelfCWriteIndent(out,indent);
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,"break;\n");
+        }
+        return (status);
+    }
+    if (compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_Continue)) {
+        outNext[0]=semicolon+1;
+        Status status=compiler_SelfCWriteIndent(out,indent);
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,"continue;\n");
+        }
+        return (status);
+    }
+    if (compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_Unreachable)) {
+        outNext[0]=semicolon+1;
+        Status status=compiler_SelfCWriteIndent(out,indent);
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,"__builtin_unreachable();\n");
+        }
+        return (status);
+    }
+    if (compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_Panic)) {
+        outNext[0]=semicolon+1;
+        usize groupStart=start+1;
+        usize groupEnd=compiler_SelfCFindMatching(program,fileIndex,groupStart);
+        struct SelfCExpr message={0};
+        Status status=compiler_SelfCCompileExpressionRange(program,env,fileIndex,groupStart+1,groupEnd,std_StringFromCString(""),std_StringFromCString(""),0,&message);
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteIndent(out,indent);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,"do { fprintf(stderr, \"panic: %s\\n\", ");
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(out,std_OwnedStringView(&message.text));
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,"); abort(); } while(0);\n");
+        }
+        compiler_SelfCExprDestroy(&message);
+        return (status);
+    }
+    if (compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_Defer)) {
+        outNext[0]=semicolon+1;
+        return (Status_Ok);
+    }
+    usize colon=compiler_SelfCFindTopLevelColon(program,fileIndex,start,semicolon);
+    if (colon<semicolon) {
+        outNext[0]=semicolon+1;
+        return (compiler_SelfCWriteVarDecl(program,out,env,fileIndex,start,semicolon,indent));
+    }
+    outNext[0]=semicolon+1;
+    return (compiler_SelfCWriteExprStatement(program,out,env,fileIndex,start,semicolon,indent));
+}
+Status compiler_SelfCWriteDeferred(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize end,usize indent) {
+    if (start>=end||!compiler_SelfCIsKeyword(program,fileIndex,start,KeywordKind_Defer)) {
+        return (Status_Ok);
+    }
+    usize body=start+1;
+    if (body<end&&compiler_SelfCIsPunctuation(program,fileIndex,body,PunctuationKind_LeftBrace)) {
+        usize blockEnd=compiler_SelfCFindMatching(program,fileIndex,body);
+        return (compiler_SelfCWriteBlock(program,out,env,fileIndex,body+1,blockEnd,indent));
+    }
+    usize semicolon=compiler_SelfCFindStatementSemicolon(program,fileIndex,body,end);
+    return (compiler_SelfCWriteExprStatement(program,out,env,fileIndex,body,semicolon,indent));
+}
+Status compiler_SelfCWriteBlock(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCEnv* env,usize fileIndex,usize start,usize end,usize indent) {
+    usize deferStarts[64]={0};
+    usize deferEnds[64]={0};
+    usize deferCount=0;
+    usize index=start;
+    Status status=Status_Ok;
+    while (index<end&&status==Status_Ok) {
+        if (compiler_SelfCIsKeyword(program,fileIndex,index,KeywordKind_Defer)) {
+            usize deferEnd=index+1;
+            if (deferEnd<end&&compiler_SelfCIsPunctuation(program,fileIndex,deferEnd,PunctuationKind_LeftBrace)) {
+                deferEnd=compiler_SelfCFindMatching(program,fileIndex,deferEnd)+1;
+            } else {
+                deferEnd=compiler_SelfCFindStatementSemicolon(program,fileIndex,deferEnd,end)+1;
+            }
+            if (deferCount<((void)(deferStarts),64)) {
+                deferStarts[deferCount]=index;
+                deferEnds[deferCount]=deferEnd;
+                deferCount+=1;
+            }
+            index=deferEnd;
+            continue;
+        }
+        usize next=index+1;
+        status=compiler_SelfCWriteSingleStatement(program,out,env,fileIndex,index,&next,indent);
+        if (next<=index) {
+            next=index+1;
+        }
+        index=next;
+    }
+    while (deferCount>0&&status==Status_Ok) {
+        deferCount-=1;
+        status=compiler_SelfCWriteDeferred(program,out,env,fileIndex,deferStarts[deferCount],deferEnds[deferCount],indent);
+    }
+    return (status);
+}
+Status compiler_SelfCFuncUseTempTypeUse(struct SelfCFuncUse* funcUse,struct SelfCTypeUse* out) {
+    out->key=funcUse->key;
+    out->cName=funcUse->cName;
+    out->baseName=funcUse->key;
+    out->arg0=funcUse->arg0;
+    out->arg1=funcUse->arg1;
+    out->arg2=funcUse->arg2;
+    out->argCount=funcUse->argCount;
+    out->emitted=0;
+    return (Status_Ok);
+}
+Status compiler_SelfCWriteSubstTypeForFunc(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCFuncUse* funcUse,usize fileIndex,usize start,usize end) {
+    struct SelfCTypeUse temp={0};
+    compiler_SelfCFuncUseTempTypeUse(funcUse,&temp);
+    struct String firstTypeToken=compiler_SelfCTokenText(program,fileIndex,start);
+    if (start<end&&String_EqualsCString(&firstTypeToken,"ptr")&&start+1<end&&compiler_SelfCIsOperator(program,fileIndex,start+1,OperatorKind_Less)) {
+        usize genericEnd=compiler_SelfCFindMatching(program,fileIndex,start+1);
+        struct OwnedString innerKey={0};
+        Status innerStatus=compiler_SelfCMakeSubstTypeKey(program,decl,&temp,fileIndex,start+2,genericEnd,&innerKey);
+        if (innerStatus==Status_Ok) {
+            innerStatus=compiler_SelfCWriteCTypeFromKey(program,out,std_OwnedStringView(&innerKey));
+        }
+        if (innerStatus==Status_Ok) {
+            innerStatus=StringBuilder_WriteByte(out,'*');
+        }
+        std_DestroyOwnedString(&innerKey);
+        return (innerStatus);
+    }
+    struct OwnedString key={0};
+    Status status=compiler_SelfCMakeSubstTypeKey(program,decl,&temp,fileIndex,start,end,&key);
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteCTypeFromKey(program,out,std_OwnedStringView(&key));
+    }
+    if (status==Status_Ok) {
+        std_DestroyOwnedString(&key);
+    }
+    return (status);
+}
+Status compiler_SelfCWriteFunctionSignature(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct String nameOverride,struct SelfCFuncUse* funcUse) {
+    struct String functionName=compiler_SelfCTokenText(program,decl->fileIndex,decl->nameIndex);
+    bool isMain=!decl->hasReceiver&&String_EqualsCString(&functionName,"main")&&compiler_SelfCDeclPackageIsRoot(decl);
+    Status status=Status_Ok;
+    if (isMain) {
+        status=StringBuilder_WriteCString(out,"int");
+    } else {
+        if (funcUse!=0) {
+            status=compiler_SelfCWriteSubstTypeForFunc(program,out,decl,funcUse,decl->fileIndex,decl->returnStart,decl->returnEnd);
         } else {
-            fprintf(stderr, "kek: unexpected argument: %s\n", arg);
-            return -1;
+            struct SelfCTypeInfo returnInfo={0};
+            status=compiler_SelfCRenderTypeInfo(program,decl->fileIndex,decl->returnStart,decl->returnEnd,&returnInfo);
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteString(out,std_OwnedStringView(&returnInfo.cType));
+            }
+            if (status==Status_Ok) {
+                compiler_SelfCTypeInfoDestroy(&returnInfo);
+            }
         }
     }
-
-    if (!options->inputPath) {
-        fprintf(stderr, "kek: missing input path\n");
-        return -1;
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,' ');
     }
-    return CliSetOutDirDefaults(options);
+    if (status==Status_Ok) {
+        if (nameOverride.len>0) {
+            status=StringBuilder_WriteString(out,nameOverride);
+        } else {
+            status=compiler_SelfCWriteDeclCName(program,out,decl);
+        }
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,'(');
+    }
+    bool first=1;
+    if (decl->hasReceiver) {
+        if (funcUse!=0) {
+            status=compiler_SelfCWriteSubstTypeForFunc(program,out,decl,funcUse,decl->fileIndex,decl->receiverStart,decl->receiverEnd);
+        } else {
+            struct SelfCTypeInfo receiverInfo={0};
+            if (status==Status_Ok) {
+                status=compiler_SelfCRenderTypeInfo(program,decl->fileIndex,decl->receiverStart,decl->receiverEnd,&receiverInfo);
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteString(out,std_OwnedStringView(&receiverInfo.cType));
+            }
+            if (status==Status_Ok) {
+                compiler_SelfCTypeInfoDestroy(&receiverInfo);
+            }
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,"* this");
+        }
+        first=0;
+    }
+    for (usize i=0;i<decl->paramCount;i++) {
+        struct SelfCParam* param=&program->params[decl->firstParam+i];
+        if (!first&&status==Status_Ok) {
+            status=StringBuilder_WriteByte(out,',');
+        }
+        if (funcUse!=0) {
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteSubstTypeForFunc(program,out,decl,funcUse,param->fileIndex,param->typeStart,param->typeEnd);
+            }
+        } else {
+            struct SelfCTypeInfo paramInfo={0};
+            if (status==Status_Ok) {
+                status=compiler_SelfCRenderTypeInfo(program,param->fileIndex,param->typeStart,param->typeEnd,&paramInfo);
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteString(out,std_OwnedStringView(&paramInfo.cType));
+            }
+            if (status==Status_Ok) {
+                compiler_SelfCTypeInfoDestroy(&paramInfo);
+            }
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteByte(out,' ');
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteToken(program,out,param->fileIndex,param->nameIndex);
+        }
+        first=0;
+    }
+    if (first&&status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"void");
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,')');
+    }
+    return (status);
 }
-
-static int ParseKekCli(int argc, char** argv, struct KekCliOptions* options) {
-    memset(options, 0, sizeof(*options));
-    options->command = KEK_CLI_COMMAND_BUILD;
-    options->outDir = DEFAULT_OUT_DIR;
-
-    if (argc == 1) {
-        options->inputPath = SMOKE_SOURCE_PATH;
-        return CliSetOutDirDefaults(options);
+Status compiler_SelfCWriteFunctionPrototype(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl) {
+    Status status=compiler_SelfCWriteFunctionSignature(program,out,decl,std_StringFromCString(""),0);
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,";\n");
     }
-    if (ArgEquals(argv[1], "--help") || ArgEquals(argv[1], "-h")) {
-        options->command = KEK_CLI_COMMAND_HELP;
-        return 0;
-    }
-    if (ArgEquals(argv[1], "--version")) {
-        options->command = KEK_CLI_COMMAND_VERSION;
-        return 0;
-    }
-    if (ArgEquals(argv[1], "build")) {
-        return ParseKekBuildCli(argc, argv, options);
-    }
-
-    fprintf(stderr, "kek: unknown command: %s\n", argv[1]);
-    return -1;
+    return (status);
 }
-
-static int RunKekBuild(struct KekCliOptions* options) {
-    const char* outDir = options->outDir ? options->outDir : DEFAULT_OUT_DIR;
-    if (CliEnsureOutDir(outDir) != 0) {
-        return 1;
+Status compiler_SelfCWriteFunctionBody(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl) {
+    Status status=compiler_SelfCWriteFunctionSignature(program,out,decl,std_StringFromCString(""),0);
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out," {\n");
     }
-
-    struct KekDiagnostic diagnostics[256];
-    struct KekCompilation compilation;
-    InitKekCompilation(&compilation, diagnostics, sizeof(diagnostics) / sizeof(diagnostics[0]));
-
-    int result = CompileKekSmoke(options->inputPath, options->cPath, options->astJsonPath, options->summaryPath, &compilation);
-    PrintKekDiagnostics(stderr, &compilation.diagnostics, &compilation.fileTable);
-    FreeKekCompilation(&compilation);
-    return result;
+    struct SelfCEnv env={0};
+    if (status==Status_Ok) {
+        status=compiler_SelfCEnvInit(program,&env);
+    }
+    struct SelfCTypeInfo returnInfo={0};
+    if (status==Status_Ok) {
+        status=compiler_SelfCRenderTypeInfo(program,decl->fileIndex,decl->returnStart,decl->returnEnd,&returnInfo);
+    }
+    if (status==Status_Ok) {
+        compiler_SelfCReplaceOwned(&env.returnTypeKey,returnInfo.key);
+        compiler_SelfCReplaceOwned(&env.returnCType,returnInfo.cType);
+        returnInfo.key.data=0;
+        returnInfo.cType.data=0;
+    }
+    if (decl->hasReceiver&&status==Status_Ok) {
+        struct SelfCTypeInfo receiverInfo={0};
+        status=compiler_SelfCRenderTypeInfo(program,decl->fileIndex,decl->receiverStart,decl->receiverEnd,&receiverInfo);
+        if (status==Status_Ok) {
+            env.hasThis=1;
+            compiler_SelfCReplaceOwned(&env.thisTypeKey,receiverInfo.key);
+            compiler_SelfCReplaceOwned(&env.thisCType,receiverInfo.cType);
+            receiverInfo.key.data=0;
+            receiverInfo.cType.data=0;
+            status=compiler_SelfCEnvAdd(program,&env,std_StringFromCString("this"),std_OwnedStringView(&env.thisTypeKey),std_OwnedStringView(&env.thisCType),0,std_StringFromCString(""),1);
+        }
+        compiler_SelfCTypeInfoDestroy(&receiverInfo);
+    }
+    for (usize i=0;i<decl->paramCount&&status==Status_Ok;i++) {
+        struct SelfCParam* param=&program->params[decl->firstParam+i];
+        struct SelfCTypeInfo paramInfo={0};
+        status=compiler_SelfCRenderTypeInfo(program,param->fileIndex,param->typeStart,param->typeEnd,&paramInfo);
+        if (status==Status_Ok) {
+            status=compiler_SelfCEnvAdd(program,&env,compiler_SelfCTokenText(program,param->fileIndex,param->nameIndex),std_OwnedStringView(&paramInfo.key),std_OwnedStringView(&paramInfo.cType),0,std_StringFromCString(""),paramInfo.isPointer);
+        }
+        compiler_SelfCTypeInfoDestroy(&paramInfo);
+    }
+    compiler_SelfCTypeInfoDestroy(&returnInfo);
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteBlock(program,out,&env,decl->fileIndex,decl->bodyStart,decl->bodyEnd,1);
+    }
+    compiler_SelfCEnvDestroy(&env);
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"}\n");
+    }
+    return (status);
 }
-
-int main(int argc, char** argv) {
-    struct KekCliOptions options;
-    if (ParseKekCli(argc, argv, &options) != 0) {
-        CliPrintUsage(stderr);
-        return 1;
+Status compiler_SelfCWriteManualLine(struct StringBuilder* out,str text) {
+    Status status=StringBuilder_WriteCString(out,text);
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,'\n');
     }
-
-    if (options.command == KEK_CLI_COMMAND_HELP) {
-        CliPrintUsage(stdout);
-        return 0;
-    }
-    if (options.command == KEK_CLI_COMMAND_VERSION) {
-        printf("%s\n", VERSION);
-        return 0;
-    }
-
-    return RunKekBuild(&options);
+    return (status);
 }
-#undef RunKekBuild
-#undef ParseKekCli
-#undef ParseKekBuildCli
-#undef CliReadValue
-#undef CliEnsureOutDir
-#undef CliSetOutDirDefaults
-#undef CliCopyDefaultPath
-#undef CliPrintUsage
-#undef ArgEquals
-/* END main.c */
+Status compiler_SelfCWriteArrayMethodRef(struct StringBuilder* out,struct SelfCFuncUse* use,str name) {
+    Status status=StringBuilder_WriteCString(out,"Array__");
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteString(out,std_OwnedStringView(&use->arg0));
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,'_');
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,name);
+    }
+    return (status);
+}
+Status compiler_SelfCWriteLinkedListMethodRef(struct StringBuilder* out,struct SelfCFuncUse* use,str name) {
+    Status status=StringBuilder_WriteCString(out,"LinkedList__");
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteString(out,std_OwnedStringView(&use->arg0));
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,'_');
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,name);
+    }
+    return (status);
+}
+Status compiler_SelfCWriteResultTypeRef(struct StringBuilder* out,struct SelfCFuncUse* use) {
+    Status status=StringBuilder_WriteCString(out,"struct Result__");
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteString(out,std_OwnedStringView(&use->arg0));
+    }
+    return (status);
+}
+Status compiler_SelfCWriteListNodeTypeRef(struct StringBuilder* out,struct SelfCFuncUse* use) {
+    Status status=StringBuilder_WriteCString(out,"struct ListNode__");
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteString(out,std_OwnedStringView(&use->arg0));
+    }
+    return (status);
+}
+Status compiler_SelfCWriteManualArrayGenericBody(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCFuncUse* use,struct String argC) {
+    struct String name=compiler_SelfCTokenText(program,decl->fileIndex,decl->nameIndex);
+    Status status=Status_Ok;
+    if (String_EqualsCString(&name,"Destroy")) {
+        status=compiler_SelfCWriteManualLine(out,"    if(this->data!=0){");
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteManualLine(out,"        kek_std_free(this->data);");
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteManualLine(out,"    }");
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteManualLine(out,"    this->data=0;");
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteManualLine(out,"    this->len=0;");
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteManualLine(out,"    this->cap=0;");
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteManualLine(out,"    return Status_Ok;");
+        }
+    } else {
+        if (String_EqualsCString(&name,"Clear")) {
+            status=compiler_SelfCWriteManualLine(out,"    this->len=0;");
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"    return Status_Ok;");
+            }
+        } else {
+            if (String_EqualsCString(&name,"Reserve")) {
+                status=compiler_SelfCWriteManualLine(out,"    usize needed=this->len+additional;");
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    if(needed<=this->cap){return Status_Ok;}");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    usize newCap=this->cap;");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    if(newCap==0){newCap=8;}");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    while(newCap<needed){newCap=newCap*2;}");
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteCString(out,"    ");
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteString(out,argC);
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteCString(out,"* newData=(");
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteString(out,argC);
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteCString(out,"*)kek_std_resize(");
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteByte(out,'\n');
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteCString(out,"        this->data,newCap*sizeof(");
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteString(out,argC);
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"));");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    if(newData==0){return Status_NoMemory;}");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    this->data=newData;");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    this->cap=newCap;");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    return Status_Ok;");
+                }
+            } else {
+                if (String_EqualsCString(&name,"AppendSlice")) {
+                    status=StringBuilder_WriteCString(out,"    Status status=");
+                    if (status==Status_Ok) {
+                        status=compiler_SelfCWriteArrayMethodRef(out,use,"Reserve");
+                    }
+                    if (status==Status_Ok) {
+                        status=compiler_SelfCWriteManualLine(out,"(this,items.len);");
+                    }
+                    if (status==Status_Ok) {
+                        status=compiler_SelfCWriteManualLine(out,"    if(status!=Status_Ok){return status;}");
+                    }
+                    if (status==Status_Ok) {
+                        status=compiler_SelfCWriteManualLine(out,"    for(usize i=0;i<items.len;i++){");
+                    }
+                    if (status==Status_Ok) {
+                        status=compiler_SelfCWriteManualLine(out,"        this->data[this->len+i]=items.data[i];");
+                    }
+                    if (status==Status_Ok) {
+                        status=compiler_SelfCWriteManualLine(out,"    }");
+                    }
+                    if (status==Status_Ok) {
+                        status=compiler_SelfCWriteManualLine(out,"    this->len+=items.len;");
+                    }
+                    if (status==Status_Ok) {
+                        status=compiler_SelfCWriteManualLine(out,"    return Status_Ok;");
+                    }
+                } else {
+                    if (String_EqualsCString(&name,"Push")) {
+                        status=StringBuilder_WriteCString(out,"    Status status=");
+                        if (status==Status_Ok) {
+                            status=compiler_SelfCWriteArrayMethodRef(out,use,"Reserve");
+                        }
+                        if (status==Status_Ok) {
+                            status=compiler_SelfCWriteManualLine(out,"(this,1);");
+                        }
+                        if (status==Status_Ok) {
+                            status=compiler_SelfCWriteManualLine(out,"    if(status!=Status_Ok){return status;}");
+                        }
+                        if (status==Status_Ok) {
+                            status=compiler_SelfCWriteManualLine(out,"    this->data[this->len]=value;");
+                        }
+                        if (status==Status_Ok) {
+                            status=compiler_SelfCWriteManualLine(out,"    this->len+=1;");
+                        }
+                        if (status==Status_Ok) {
+                            status=compiler_SelfCWriteManualLine(out,"    return Status_Ok;");
+                        }
+                    } else {
+                        if (String_EqualsCString(&name,"PushZeroed")) {
+                            status=StringBuilder_WriteCString(out,"    Status status=");
+                            if (status==Status_Ok) {
+                                status=compiler_SelfCWriteArrayMethodRef(out,use,"Reserve");
+                            }
+                            if (status==Status_Ok) {
+                                status=compiler_SelfCWriteManualLine(out,"(this,1);");
+                            }
+                            if (status==Status_Ok) {
+                                status=compiler_SelfCWriteManualLine(out,"    if(status!=Status_Ok){return status;}");
+                            }
+                            if (status==Status_Ok) {
+                                status=StringBuilder_WriteCString(out,"    kek_std_mem_set((void*)(&this->data[this->len]),0,sizeof(");
+                            }
+                            if (status==Status_Ok) {
+                                status=StringBuilder_WriteString(out,argC);
+                            }
+                            if (status==Status_Ok) {
+                                status=compiler_SelfCWriteManualLine(out,"));");
+                            }
+                            if (status==Status_Ok) {
+                                status=compiler_SelfCWriteManualLine(out,"    this->len+=1;");
+                            }
+                            if (status==Status_Ok) {
+                                status=compiler_SelfCWriteManualLine(out,"    return Status_Ok;");
+                            }
+                        } else {
+                            if (String_EqualsCString(&name,"Pop")) {
+                                status=StringBuilder_WriteCString(out,"    ");
+                                if (status==Status_Ok) {
+                                    status=compiler_SelfCWriteResultTypeRef(out,use);
+                                }
+                                if (status==Status_Ok) {
+                                    status=compiler_SelfCWriteManualLine(out," result={0};");
+                                }
+                                if (status==Status_Ok) {
+                                    status=compiler_SelfCWriteManualLine(out,"    if(this->len==0){result.status=Status_End;return result;}");
+                                }
+                                if (status==Status_Ok) {
+                                    status=compiler_SelfCWriteManualLine(out,"    this->len-=1;");
+                                }
+                                if (status==Status_Ok) {
+                                    status=compiler_SelfCWriteManualLine(out,"    result.status=Status_Ok;");
+                                }
+                                if (status==Status_Ok) {
+                                    status=compiler_SelfCWriteManualLine(out,"    result.value=this->data[this->len];");
+                                }
+                                if (status==Status_Ok) {
+                                    status=compiler_SelfCWriteManualLine(out,"    return result;");
+                                }
+                            } else {
+                                if (String_EqualsCString(&name,"Get")) {
+                                    status=StringBuilder_WriteCString(out,"    ");
+                                    if (status==Status_Ok) {
+                                        status=compiler_SelfCWriteResultTypeRef(out,use);
+                                    }
+                                    if (status==Status_Ok) {
+                                        status=compiler_SelfCWriteManualLine(out," result={0};");
+                                    }
+                                    if (status==Status_Ok) {
+                                        status=compiler_SelfCWriteManualLine(out,"    if(index>=this->len){result.status=Status_Invalid;return result;}");
+                                    }
+                                    if (status==Status_Ok) {
+                                        status=compiler_SelfCWriteManualLine(out,"    result.status=Status_Ok;");
+                                    }
+                                    if (status==Status_Ok) {
+                                        status=compiler_SelfCWriteManualLine(out,"    result.value=this->data[index];");
+                                    }
+                                    if (status==Status_Ok) {
+                                        status=compiler_SelfCWriteManualLine(out,"    return result;");
+                                    }
+                                } else {
+                                    if (String_EqualsCString(&name,"Set")) {
+                                        status=compiler_SelfCWriteManualLine(out,"    if(index>=this->len){return Status_Invalid;}");
+                                        if (status==Status_Ok) {
+                                            status=compiler_SelfCWriteManualLine(out,"    this->data[index]=value;");
+                                        }
+                                        if (status==Status_Ok) {
+                                            status=compiler_SelfCWriteManualLine(out,"    return Status_Ok;");
+                                        }
+                                    } else {
+                                        if (String_EqualsCString(&name,"GetPtr")) {
+                                            status=compiler_SelfCWriteManualLine(out,"    if(index>=this->len){return 0;}");
+                                            if (status==Status_Ok) {
+                                                status=compiler_SelfCWriteManualLine(out,"    return &this->data[index];");
+                                            }
+                                        } else {
+                                            if (String_EqualsCString(&name,"LastPtr")) {
+                                                status=compiler_SelfCWriteManualLine(out,"    if(this->len==0){return 0;}");
+                                                if (status==Status_Ok) {
+                                                    status=compiler_SelfCWriteManualLine(out,"    return &this->data[this->len-1];");
+                                                }
+                                            } else {
+                                                if (String_EqualsCString(&name,"Span")) {
+                                                    status=StringBuilder_WriteCString(out,"    struct Span__");
+                                                    if (status==Status_Ok) {
+                                                        status=StringBuilder_WriteString(out,std_OwnedStringView(&use->arg0));
+                                                    }
+                                                    if (status==Status_Ok) {
+                                                        status=compiler_SelfCWriteManualLine(out," out={0};");
+                                                    }
+                                                    if (status==Status_Ok) {
+                                                        status=compiler_SelfCWriteManualLine(out,"    out.data=this->data;");
+                                                    }
+                                                    if (status==Status_Ok) {
+                                                        status=compiler_SelfCWriteManualLine(out,"    out.len=this->len;");
+                                                    }
+                                                    if (status==Status_Ok) {
+                                                        status=compiler_SelfCWriteManualLine(out,"    return out;");
+                                                    }
+                                                } else {
+                                                    if (String_EqualsCString(&name,"Slice")) {
+                                                        status=StringBuilder_WriteCString(out,"    struct Slice__");
+                                                        if (status==Status_Ok) {
+                                                            status=StringBuilder_WriteString(out,std_OwnedStringView(&use->arg0));
+                                                        }
+                                                        if (status==Status_Ok) {
+                                                            status=compiler_SelfCWriteManualLine(out," out={0};");
+                                                        }
+                                                        if (status==Status_Ok) {
+                                                            status=compiler_SelfCWriteManualLine(out,"    out.data=this->data;");
+                                                        }
+                                                        if (status==Status_Ok) {
+                                                            status=compiler_SelfCWriteManualLine(out,"    out.len=this->len;");
+                                                        }
+                                                        if (status==Status_Ok) {
+                                                            status=compiler_SelfCWriteManualLine(out,"    return out;");
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return (status);
+}
+Status compiler_SelfCWriteManualLinkedListGenericBody(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCFuncUse* use) {
+    struct String name=compiler_SelfCTokenText(program,decl->fileIndex,decl->nameIndex);
+    Status status=Status_Ok;
+    if (String_EqualsCString(&name,"PushBack")||String_EqualsCString(&name,"PushFront")) {
+        status=StringBuilder_WriteCString(out,"    ");
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteListNodeTypeRef(out,use);
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,"* node=(");
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteListNodeTypeRef(out,use);
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteManualLine(out,"*)kek_std_alloc(");
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,"        sizeof(");
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteListNodeTypeRef(out,use);
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteManualLine(out,"));");
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteManualLine(out,"    if(node==0){return Status_NoMemory;}");
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteManualLine(out,"    node->value=value;");
+        }
+        if (String_EqualsCString(&name,"PushBack")) {
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"    node->next=0;");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"    node->prev=this->last;");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"    if(this->last!=0){");
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out,"        ");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteListNodeTypeRef(out,use);
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"* last=this->last;");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"        last->next=node;");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"    }else{");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"        this->first=node;");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"    }");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"    this->last=node;");
+            }
+        } else {
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"    node->prev=0;");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"    node->next=this->first;");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"    if(this->first!=0){");
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out,"        ");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteListNodeTypeRef(out,use);
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"* first=this->first;");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"        first->prev=node;");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"    }else{");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"        this->last=node;");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"    }");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"    this->first=node;");
+            }
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteManualLine(out,"    this->len+=1;");
+        }
+        if (status==Status_Ok) {
+            status=compiler_SelfCWriteManualLine(out,"    return Status_Ok;");
+        }
+    } else {
+        if (String_EqualsCString(&name,"PopBack")||String_EqualsCString(&name,"PopFront")) {
+            status=StringBuilder_WriteCString(out,"    ");
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteResultTypeRef(out,use);
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out," result={0};");
+            }
+            if (String_EqualsCString(&name,"PopBack")) {
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    if(this->last==0){result.status=Status_End;return result;}");
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteCString(out,"    ");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteListNodeTypeRef(out,use);
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"* node=this->last;");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    result.value=node->value;");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    this->last=node->prev;");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    if(this->last!=0){");
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteCString(out,"        ");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteListNodeTypeRef(out,use);
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"* last=this->last;");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"        last->next=0;");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    }else{");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"        this->first=0;");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    }");
+                }
+            } else {
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    if(this->first==0){result.status=Status_End;return result;}");
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteCString(out,"    ");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteListNodeTypeRef(out,use);
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"* node=this->first;");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    result.value=node->value;");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    this->first=node->next;");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    if(this->first!=0){");
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteCString(out,"        ");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteListNodeTypeRef(out,use);
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"* first=this->first;");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"        first->prev=0;");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    }else{");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"        this->last=0;");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    }");
+                }
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"    this->len-=1;");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"    kek_std_free(node);");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"    result.status=Status_Ok;");
+            }
+            if (status==Status_Ok) {
+                status=compiler_SelfCWriteManualLine(out,"    return result;");
+            }
+        } else {
+            if (String_EqualsCString(&name,"Destroy")) {
+                status=compiler_SelfCWriteManualLine(out,"    while(this->len>0){");
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteCString(out,"        ");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteResultTypeRef(out,use);
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out," ignored={0};");
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteCString(out,"        ignored=");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteLinkedListMethodRef(out,use,"PopBack");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"(this);");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"        if(ignored.status!=Status_Ok){return ignored.status;}");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    }");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    return Status_Ok;");
+                }
+            }
+        }
+    }
+    return (status);
+}
+Status compiler_SelfCWriteManualGenericBody(struct SelfCProgram* program,struct StringBuilder* out,struct SelfCDecl* decl,struct SelfCFuncUse* use) {
+    struct String name=compiler_SelfCTokenText(program,decl->fileIndex,decl->nameIndex);
+    struct OwnedString argC={0};
+    Status status=compiler_SelfCMakeCTypeFromKey(program,std_OwnedStringView(&use->arg0),&argC);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    status=compiler_SelfCWriteFunctionSignature(program,out,decl,std_OwnedStringView(&use->cName),use);
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out," {\n");
+    }
+    bool handled=0;
+    if (decl->hasReceiver&&status==Status_Ok) {
+        struct String receiverBase=compiler_SelfCTokenText(program,decl->fileIndex,decl->receiverStart);
+        if (String_EqualsCString(&receiverBase,"Array")) {
+            status=compiler_SelfCWriteManualArrayGenericBody(program,out,decl,use,std_OwnedStringView(&argC));
+            handled=1;
+        } else {
+            if (String_EqualsCString(&receiverBase,"LinkedList")) {
+                status=compiler_SelfCWriteManualLinkedListGenericBody(program,out,decl,use);
+                handled=1;
+            }
+        }
+    }
+    if (!handled&&String_EqualsCString(&name,"FixedSlice")) {
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out,"    struct Slice__");
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteString(out,std_OwnedStringView(&use->arg0));
+        }
+        if (status==Status_Ok) {
+            status=StringBuilder_WriteCString(out," out={0};\n    out.data=data;\n    out.len=len;\n    return out;\n");
+        }
+    } else {
+        if (String_EqualsCString(&name,"FixedSpan")) {
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out,"    struct Span__");
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteString(out,std_OwnedStringView(&use->arg0));
+            }
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out," out={0};\n    out.data=data;\n    out.len=len;\n    return out;\n");
+            }
+        } else {
+            if (String_EqualsCString(&name,"ArrayNew")) {
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteCString(out,"    struct Array__");
+                }
+                if (status==Status_Ok) {
+                    status=StringBuilder_WriteString(out,std_OwnedStringView(&use->arg0));
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out," array={0};");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    array.allocator=allocator;");
+                }
+                if (status==Status_Ok) {
+                    status=compiler_SelfCWriteManualLine(out,"    return array;");
+                }
+            } else {
+                if (String_EqualsCString(&name,"LinkedListNew")) {
+                    if (status==Status_Ok) {
+                        status=StringBuilder_WriteCString(out,"    struct LinkedList__");
+                    }
+                    if (status==Status_Ok) {
+                        status=StringBuilder_WriteString(out,std_OwnedStringView(&use->arg0));
+                    }
+                    if (status==Status_Ok) {
+                        status=compiler_SelfCWriteManualLine(out," list={0};");
+                    }
+                    if (status==Status_Ok) {
+                        status=compiler_SelfCWriteManualLine(out,"    list.allocator=allocator;");
+                    }
+                    if (status==Status_Ok) {
+                        status=compiler_SelfCWriteManualLine(out,"    return list;");
+                    }
+                } else {
+                    if (String_EqualsCString(&name,"Alloc")) {
+                        if (status==Status_Ok) {
+                            status=StringBuilder_WriteCString(out,"    (void)allocator;\n");
+                        }
+                        if (status==Status_Ok) {
+                            status=StringBuilder_WriteCString(out,"    return (");
+                        }
+                        if (status==Status_Ok) {
+                            status=StringBuilder_WriteString(out,std_OwnedStringView(&argC));
+                        }
+                        if (status==Status_Ok) {
+                            status=StringBuilder_WriteCString(out,"*)kek_std_alloc(count*sizeof(");
+                        }
+                        if (status==Status_Ok) {
+                            status=StringBuilder_WriteString(out,std_OwnedStringView(&argC));
+                        }
+                        if (status==Status_Ok) {
+                            status=StringBuilder_WriteCString(out,"));\n");
+                        }
+                    } else {
+                        if (String_EqualsCString(&name,"Resize")) {
+                            if (status==Status_Ok) {
+                                status=StringBuilder_WriteCString(out,"    (void)allocator;\n    (void)oldCount;\n");
+                            }
+                            if (status==Status_Ok) {
+                                status=StringBuilder_WriteCString(out,"    return (");
+                            }
+                            if (status==Status_Ok) {
+                                status=StringBuilder_WriteString(out,std_OwnedStringView(&argC));
+                            }
+                            if (status==Status_Ok) {
+                                status=StringBuilder_WriteCString(out,"*)kek_std_resize(oldData,newCount*sizeof(");
+                            }
+                            if (status==Status_Ok) {
+                                status=StringBuilder_WriteString(out,std_OwnedStringView(&argC));
+                            }
+                            if (status==Status_Ok) {
+                                status=StringBuilder_WriteCString(out,"));\n");
+                            }
+                        } else {
+                            if (String_EqualsCString(&name,"Free")) {
+                                if (status==Status_Ok) {
+                                    status=StringBuilder_WriteCString(out,"    (void)allocator;\n    (void)count;\n    kek_std_free(data);\n");
+                                }
+                            } else {
+                                if (String_EqualsCString(&name,"Copy")) {
+                                    if (status==Status_Ok) {
+                                        status=StringBuilder_WriteCString(out,"    kek_std_mem_copy(dest,src,count*sizeof(");
+                                    }
+                                    if (status==Status_Ok) {
+                                        status=StringBuilder_WriteString(out,std_OwnedStringView(&argC));
+                                    }
+                                    if (status==Status_Ok) {
+                                        status=StringBuilder_WriteCString(out,"));\n");
+                                    }
+                                } else {
+                                    if (String_EqualsCString(&name,"GenericAdd")) {
+                                        if (status==Status_Ok) {
+                                            status=StringBuilder_WriteCString(out,"    return left+right;\n");
+                                        }
+                                    } else {
+                                        if (String_EqualsCString(&name,"PkgGenericEcho")) {
+                                            if (status==Status_Ok) {
+                                                status=StringBuilder_WriteCString(out,"    return value;\n");
+                                            }
+                                        } else {
+                                            if (String_EqualsCString(&name,"Ok")) {
+                                                if (status==Status_Ok) {
+                                                    status=StringBuilder_WriteCString(out,"    struct Result__");
+                                                }
+                                                if (status==Status_Ok) {
+                                                    status=StringBuilder_WriteString(out,std_OwnedStringView(&use->arg0));
+                                                }
+                                                if (status==Status_Ok) {
+                                                    status=StringBuilder_WriteCString(out," out={0};\n    out.status=Status_Ok;\n    out.value=value;\n    return out;\n");
+                                                }
+                                            } else {
+                                                if (String_EqualsCString(&name,"Err")) {
+                                                    if (status==Status_Ok) {
+                                                        status=StringBuilder_WriteCString(out,"    struct Result__");
+                                                    }
+                                                    if (status==Status_Ok) {
+                                                        status=StringBuilder_WriteString(out,std_OwnedStringView(&use->arg0));
+                                                    }
+                                                    if (status==Status_Ok) {
+                                                        status=StringBuilder_WriteCString(out," out={0};\n    out.status=status;\n    return out;\n");
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteCString(out,"}\n");
+    }
+    std_DestroyOwnedString(&argC);
+    return (status);
+}
+Status compiler_SelfCWriteFunctionDeclarations(struct SelfCProgram* program,struct StringBuilder* out) {
+    for (usize i=0;i<program->declCount;i++) {
+        struct SelfCDecl* decl=&program->decls[i];
+        if (decl->kind==SelfCDeclKind_Function&&!decl->isGeneric) {
+            Status status=compiler_SelfCWriteFunctionPrototype(program,out,decl);
+            if (status!=Status_Ok) {
+                return (status);
+            }
+        }
+    }
+    for (usize i=0;i<program->funcUseCount;i++) {
+        struct SelfCFuncUse* use=&program->funcUses[i];
+        if (use->declIndex<program->declCount) {
+            Status status=compiler_SelfCWriteFunctionSignature(program,out,&program->decls[use->declIndex],std_OwnedStringView(&use->cName),use);
+            if (status==Status_Ok) {
+                status=StringBuilder_WriteCString(out,";\n");
+            }
+            if (status!=Status_Ok) {
+                return (status);
+            }
+        }
+    }
+    return (Status_Ok);
+}
+Status compiler_SelfCWriteFunctionDefinitions(struct SelfCProgram* program,struct StringBuilder* out) {
+    for (usize i=0;i<program->funcUseCount;i++) {
+        struct SelfCFuncUse* use=&program->funcUses[i];
+        if (use->declIndex<program->declCount) {
+            Status status=compiler_SelfCWriteManualGenericBody(program,out,&program->decls[use->declIndex],use);
+            if (status!=Status_Ok) {
+                return (status);
+            }
+        }
+    }
+    for (usize i=0;i<program->declCount;i++) {
+        struct SelfCDecl* decl=&program->decls[i];
+        if (decl->kind==SelfCDeclKind_Function&&!decl->isGeneric&&decl->hasBody) {
+            Status status=compiler_SelfCWriteFunctionBody(program,out,decl);
+            if (status!=Status_Ok) {
+                return (status);
+            }
+        }
+    }
+    return (Status_Ok);
+}
+Status compiler_SelfCWriteProgram(struct SelfCProgram* program,struct StringBuilder* out) {
+    Status status=compiler_SelfCWritePrelude(out);
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteTypeDeclarations(program,out);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,'\n');
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteFunctionDeclarations(program,out);
+    }
+    if (status==Status_Ok) {
+        status=StringBuilder_WriteByte(out,'\n');
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteFunctionDefinitions(program,out);
+    }
+    return (status);
+}
+Status compiler_SelfCompileToCString(str inputPath,struct Allocator allocator,struct StringBuilder* out,struct SelfDiagnosticBag* diagnostics) {
+    struct SelfCProgram program={0};
+    Status status=compiler_SelfCProgramInit(&program,allocator);
+    if (status!=Status_Ok) {
+        return (status);
+    }
+    status=compiler_SelfCLoadAndTokenize(&program,inputPath);
+    if (status==Status_Ok) {
+        status=compiler_SelfCParseDeclarations(&program);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCCollectTypeUses(&program);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCCollectGenericFunctionUses(&program);
+    }
+    if (status==Status_Ok) {
+        status=compiler_SelfCWriteProgram(&program,out);
+    }
+    if (program.diagnostics.count>0) {
+        for (usize i=0;i<program.diagnostics.count&&diagnostics->count<(sizeof(diagnostics->items)/sizeof((diagnostics->items)[0]));i++) {
+            struct SelfDiagnostic* item=&program.diagnostics.items[i];
+            diagnostics_SelfDiagnosticAdd(diagnostics,item->severity,item->phase,item->fileIndex,item->location,std_OwnedStringView(&item->message));
+        }
+    }
+    compiler_SelfCProgramDestroy(&program);
+    return (status);
+}
+Status compiler_SelfCompileToC(str inputPath,str outputPath,struct Allocator allocator,struct SelfDiagnosticBag* diagnostics) {
+    struct StringBuilder generated=std_StringBuilderNew(allocator);
+    Status status=compiler_SelfCompileToCString(inputPath,allocator,&generated,diagnostics);
+    if (status==Status_Ok) {
+        struct String view=StringBuilder_View(&generated);
+        status=std_WriteFile(outputPath,view);
+    }
+    StringBuilder_Destroy(&generated);
+    return (status);
+}
+Status compiler_SelfCompileToCStringWithoutDiagnostics(str inputPath,struct Allocator allocator,struct StringBuilder* out) {
+    struct SelfDiagnosticBag diagnostics={0};
+    diagnostics_SelfDiagnosticBagInit(&diagnostics,allocator);
+    Status status=compiler_SelfCompileToCString(inputPath,allocator,out,&diagnostics);
+    diagnostics_SelfDiagnosticBagDestroy(&diagnostics);
+    return (status);
+}
+Status compiler_SelfWriteCompileDiagnostics(str inputPath,struct Allocator allocator,struct StringBuilder* out) {
+    struct StringBuilder generated=std_StringBuilderNew(allocator);
+    struct SelfDiagnosticBag diagnostics={0};
+    diagnostics_SelfDiagnosticBagInit(&diagnostics,allocator);
+    Status status=compiler_SelfCompileToCString(inputPath,allocator,&generated,&diagnostics);
+    Status writeStatus=Status_Ok;
+    if (diagnostics.count>0) {
+        writeStatus=diagnostics_SelfWriteDiagnosticDump(&diagnostics,out);
+    } else {
+        if (status!=Status_Ok) {
+            writeStatus=StringBuilder_WriteCString(out,"diag|2|4|-1|0|0|0|0|compile failed\n");
+        }
+    }
+    StringBuilder_Destroy(&generated);
+    diagnostics_SelfDiagnosticBagDestroy(&diagnostics);
+    if (writeStatus!=Status_Ok) {
+        return (writeStatus);
+    }
+    return (Status_Ok);
+}
+Status compiler_SelfCompilerRunBuild(str inputPath,str outputPath) {
+    struct Allocator allocator=std_DefaultAllocator();
+    struct SelfDiagnosticBag diagnostics={0};
+    diagnostics_SelfDiagnosticBagInit(&diagnostics,allocator);
+    Status status=compiler_SelfCompileToC(inputPath,outputPath,allocator,&diagnostics);
+    if (diagnostics.count>0) {
+        struct StringBuilder dump=std_StringBuilderNew(allocator);
+        diagnostics_SelfWriteDiagnosticDump(&diagnostics,&dump);
+        struct File stderr=std_Stderr();
+        struct String view=StringBuilder_View(&dump);
+        File_Write(&stderr,String_Bytes(&view));
+        StringBuilder_Destroy(&dump);
+    }
+    diagnostics_SelfDiagnosticBagDestroy(&diagnostics);
+    return (status);
+}
+int compiler_SelfCompilerMain(int argc,str* argv) {
+    if (argc<2) {
+        return (compiler_SelfCompilerFail("missing command\n"));
+    }
+    struct String command=std_StringFromCString(argv[1]);
+    if (String_EqualsCString(&command,"--help")) {
+        return (compiler_SelfCompilerPrintHelp());
+    }
+    if (String_EqualsCString(&command,"--version")) {
+        struct File stdout=std_Stdout();
+        std_WriteStringToFile(&stdout,std_StringFromCString("0.3.0-self\n"));
+        return (0);
+    }
+    if (!String_EqualsCString(&command,"build")) {
+        return (compiler_SelfCompilerFail("unknown command\n"));
+    }
+    if (argc<3) {
+        return (compiler_SelfCompilerFail("missing input\n"));
+    }
+    str inputPath=argv[2];
+    str outputPath="out.kek.c";
+    usize i=3;
+    while (i<((usize)(argc))) {
+        struct String arg=std_StringFromCString(argv[i]);
+        if (String_EqualsCString(&arg,"-o")) {
+            if (i+1>=((usize)(argc))) {
+                return (compiler_SelfCompilerFail("missing -o value\n"));
+            }
+            outputPath=argv[i+1];
+            i+=2;
+            continue;
+        }
+        return (compiler_SelfCompilerFail("unknown build option\n"));
+    }
+    Status status=compiler_SelfCompilerRunBuild(inputPath,outputPath);
+    if (status!=Status_Ok) {
+        return (compiler_SelfCompilerFail("build failed\n"));
+    }
+    return (0);
+}
