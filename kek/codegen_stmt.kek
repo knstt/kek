@@ -1,0 +1,1061 @@
+#import(kek/codegen_expr.kek);
+
+usize:FindStatementSemicolon(ptr<CompilerContext>:program, usize:fileIndex, usize:start, usize:end) {
+	usize:i = start;
+	while (i < end) {
+		if (IsPunctuation(program, fileIndex, i, PunctuationKind::LeftParen)
+			|| IsPunctuation(program, fileIndex, i, PunctuationKind::LeftBrace)
+			|| IsPunctuation(program, fileIndex, i, PunctuationKind::LeftBracket)) {
+			i = SkipDelimited(program, fileIndex, i);
+			continue;
+		}
+		if (IsPunctuation(program, fileIndex, i, PunctuationKind::Semicolon)) {
+			return(i);
+		}
+		i += 1;
+	}
+	return(end);
+}
+
+Status:ArrayLenString(ptr<CompilerContext>:program, usize:fileIndex, usize:start, usize:end, ptr<OwnedString>:out) {
+	StringBuilder:builder = std::StringBuilderNew(program.allocator);
+	Status:status = WriteTokenRangeRaw(program, &builder, fileIndex, start, end);
+	if (status == Status::Ok) {
+		status = DetachBuilder(&builder, out);
+	}
+	builder.Destroy();
+	return(status);
+}
+
+bool:ModuleFieldDefaultIsZero(ptr<CompilerContext>:program, ptr<ModuleField>:field) {
+	if (!field.hasDefault) {
+		return(true);
+	}
+	if (field.defaultEnd != field.defaultStart + 1) {
+		return(false);
+	}
+	if (IsTokenKind(program, field.fileIndex, field.defaultStart, TokenKind::Number)
+		&& TokenEquals(program, field.fileIndex, field.defaultStart, "0")) {
+		return(true);
+	}
+	if (IsIdentifierText(program, field.fileIndex, field.defaultStart, "false")) {
+		return(true);
+	}
+	return(false);
+}
+
+Status:WriteDefaultInitializer(ptr<CompilerContext>:program, ptr<StringBuilder>:out, String:typeKey) {
+	ptr<ModuleDecl>:decl = FindFieldDecl(program, typeKey);
+	if (decl != 0 && decl.kind == DeclKind::Union) {
+		return(out.WriteCString("{0}"));
+	}
+	if (decl == 0 || decl.kind != DeclKind::Struct) {
+		return(out.WriteCString("0"));
+	}
+	bool:hasNonZeroDefault = false;
+	for (usize:i = 0; i < decl.fieldCount; i++) {
+		ptr<ModuleField>:field = &program.fields.data[decl.firstField + i];
+		if (field.hasDefault && !ModuleFieldDefaultIsZero(program, field)) {
+			hasNonZeroDefault = true;
+			break;
+		}
+	}
+	if (!hasNonZeroDefault) {
+		return(out.WriteCString("{0}"));
+	}
+	Status:status = out.WriteByte('{');
+	bool:first = true;
+	for (usize:i = 0; i < decl.fieldCount; i++) {
+		ptr<ModuleField>:field = &program.fields.data[decl.firstField + i];
+		if (!field.hasDefault || ModuleFieldDefaultIsZero(program, field)) {
+			continue;
+		}
+		if (!first && status == Status::Ok) {
+			status = out.WriteByte(',');
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte('.');
+		}
+		if (status == Status::Ok) {
+			status = WriteToken(program, out, field.fileIndex, field.nameIndex);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte('=');
+		}
+		Expr:defaultExpr;
+		CodegenEnv:emptyEnv;
+		EnvInit(program, &emptyEnv);
+		if (status == Status::Ok) {
+			status = CompileExpressionRange(program, &emptyEnv, field.fileIndex, field.defaultStart, field.defaultEnd, std::StringFromCString(""), std::StringFromCString(""), false, &defaultExpr);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&defaultExpr.text));
+		}
+		if (status == Status::Ok) {
+			ExprDestroy(&defaultExpr);
+		}
+		EnvDestroy(&emptyEnv);
+		first = false;
+		if (status != Status::Ok) {
+			return(status);
+		}
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte('}');
+	}
+	return(status);
+}
+
+Status:WriteVarDecl(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, usize:semicolon, usize:indent) {
+	usize:colon = FindTopLevelColon(program, fileIndex, start, semicolon);
+	if (colon >= semicolon) {
+		return(Status::Invalid);
+	}
+	usize:nameIndex = colon + 1;
+	usize:afterName = nameIndex + 1;
+	bool:isArray = false;
+	usize:arrayStart = semicolon;
+	usize:arrayEnd = semicolon;
+	if (afterName < semicolon && IsPunctuation(program, fileIndex, afterName, PunctuationKind::LeftBracket)) {
+		isArray = true;
+		arrayStart = afterName + 1;
+		arrayEnd = FindMatching(program, fileIndex, afterName);
+		afterName = arrayEnd + 1;
+		while (afterName < semicolon && IsPunctuation(program, fileIndex, afterName, PunctuationKind::LeftBracket)) {
+			afterName = FindMatching(program, fileIndex, afterName) + 1;
+		}
+	}
+	usize:arraySuffixStart = nameIndex + 1;
+	usize:arraySuffixEnd = afterName;
+	usize:initStart = semicolon;
+	bool:hasInit = false;
+	for (usize:i = afterName; i < semicolon; i++) {
+		if (IsOperator(program, fileIndex, i, OperatorKind::Assign)) {
+			initStart = i + 1;
+			hasInit = true;
+			break;
+		}
+	}
+	TypeInfo:typeInfo;
+	Status:status = RenderEnvTypeInfo(program, env, fileIndex, start, colon, &typeInfo);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = WriteIndent(out, indent);
+	if (status == Status::Ok) {
+		status = out.WriteString(std::OwnedStringView(&typeInfo.cType));
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte(' ');
+	}
+	if (status == Status::Ok) {
+		status = WriteToken(program, out, fileIndex, nameIndex);
+	}
+	OwnedString:arrayLen;
+	if (isArray) {
+		if (status == Status::Ok) {
+			status = WriteTokenRangeRaw(program, out, fileIndex, arraySuffixStart, arraySuffixEnd);
+		}
+		if (status == Status::Ok) {
+			status = ArrayLenString(program, fileIndex, arrayStart, arrayEnd, &arrayLen);
+		}
+	} else {
+		if (status == Status::Ok) {
+			status = MakeOwnedEmpty(program, &arrayLen);
+		}
+	}
+	if (hasInit) {
+		Expr:init;
+		if (status == Status::Ok) {
+			status = CompileExpressionRange(program, env, fileIndex, initStart, semicolon, std::OwnedStringView(&typeInfo.key), std::OwnedStringView(&typeInfo.cType), isArray, &init);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte('=');
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&init.text));
+		}
+		if (status == Status::Ok) {
+			ExprDestroy(&init);
+		}
+	} else {
+		if (!isArray) {
+			if (status == Status::Ok) {
+				status = out.WriteByte('=');
+			}
+			if (status == Status::Ok) {
+				status = WriteDefaultInitializer(program, out, std::OwnedStringView(&typeInfo.key));
+			}
+		}
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(";\n");
+	}
+	if (status == Status::Ok) {
+		status = EnvAdd(program, env, TokenText(program, fileIndex, nameIndex), std::OwnedStringView(&typeInfo.key), std::OwnedStringView(&typeInfo.cType), isArray, std::OwnedStringView(&arrayLen), typeInfo.isPointer);
+	}
+	std::DestroyOwnedString(&arrayLen);
+	TypeInfoDestroy(&typeInfo);
+	return(status);
+}
+
+Status:WriteExprStatement(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, usize:semicolon, usize:indent) {
+	if (start >= semicolon) {
+		return(Status::Ok);
+	}
+	if (start + 2 == semicolon
+		&& IsOperator(program, fileIndex, start + 1, OperatorKind::Plus)
+		&& IsOperator(program, fileIndex, start + 2, OperatorKind::Plus)) {
+	}
+	Expr:expr;
+	Status:status = CompileExpressionRange(program, env, fileIndex, start, semicolon, std::StringFromCString(""), std::StringFromCString(""), false, &expr);
+	if (status == Status::Ok) {
+		status = WriteIndent(out, indent);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteString(std::OwnedStringView(&expr.text));
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(";\n");
+	}
+	ExprDestroy(&expr);
+	return(status);
+}
+
+Status:WriteIfStatement(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, ptr<usize>:outNext, usize:indent) {
+	usize:groupStart = FindNextGroup(program, fileIndex, start, FileTokenCount(program, fileIndex));
+	usize:groupEnd = FindMatching(program, fileIndex, groupStart);
+	usize:blockStart = groupEnd + 1;
+	usize:blockEnd = blockStart;
+	Expr:cond;
+	Status:status = CompileExpressionRange(program, env, fileIndex, groupStart + 1, groupEnd, std::StringFromCString(""), std::StringFromCString(""), false, &cond);
+	if (status == Status::Ok) {
+		status = WriteIndent(out, indent);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("if (");
+	}
+	if (status == Status::Ok) {
+		status = out.WriteString(std::OwnedStringView(&cond.text));
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(") ");
+	}
+	ExprDestroy(&cond);
+	if (blockStart < FileTokenCount(program, fileIndex) && IsPunctuation(program, fileIndex, blockStart, PunctuationKind::LeftBrace)) {
+		blockEnd = FindMatching(program, fileIndex, blockStart);
+		if (status == Status::Ok) {
+			status = out.WriteCString("{\n");
+		}
+		if (status == Status::Ok) {
+			status = WriteBlock(program, out, env, fileIndex, blockStart + 1, blockEnd, indent + 1);
+		}
+		if (status == Status::Ok) {
+			status = WriteIndent(out, indent);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("}");
+		}
+		outNext[0] = blockEnd + 1;
+	} else {
+		usize:semicolon = FindStatementSemicolon(program, fileIndex, blockStart, FileTokenCount(program, fileIndex));
+		if (status == Status::Ok) {
+			status = out.WriteCString("{\n");
+		}
+		if (status == Status::Ok) {
+			status = WriteExprStatement(program, out, env, fileIndex, blockStart, semicolon, indent + 1);
+		}
+		if (status == Status::Ok) {
+			status = WriteIndent(out, indent);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("}");
+		}
+		outNext[0] = semicolon + 1;
+	}
+	if (outNext[0] < FileTokenCount(program, fileIndex) && IsKeyword(program, fileIndex, outNext[0], KeywordKind::Else)) {
+		if (status == Status::Ok) {
+			status = out.WriteCString(" else ");
+		}
+		usize:elseStart = outNext[0] + 1;
+		if (elseStart < FileTokenCount(program, fileIndex) && IsPunctuation(program, fileIndex, elseStart, PunctuationKind::LeftBrace)) {
+			usize:elseEnd = FindMatching(program, fileIndex, elseStart);
+			if (status == Status::Ok) {
+				status = out.WriteCString("{\n");
+			}
+			if (status == Status::Ok) {
+				status = WriteBlock(program, out, env, fileIndex, elseStart + 1, elseEnd, indent + 1);
+			}
+			if (status == Status::Ok) {
+				status = WriteIndent(out, indent);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteCString("}");
+			}
+			outNext[0] = elseEnd + 1;
+		} else {
+			if (status == Status::Ok) {
+				status = out.WriteCString("{\n");
+			}
+			usize:semicolon = FindStatementSemicolon(program, fileIndex, elseStart, FileTokenCount(program, fileIndex));
+			if (status == Status::Ok) {
+				status = WriteExprStatement(program, out, env, fileIndex, elseStart, semicolon, indent + 1);
+			}
+			if (status == Status::Ok) {
+				status = WriteIndent(out, indent);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteCString("}");
+			}
+			outNext[0] = semicolon + 1;
+		}
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte('\n');
+	}
+	return(status);
+}
+
+Status:WriteWhileStatement(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, ptr<usize>:outNext, usize:indent) {
+	usize:groupStart = FindNextGroup(program, fileIndex, start, FileTokenCount(program, fileIndex));
+	usize:groupEnd = FindMatching(program, fileIndex, groupStart);
+	usize:blockStart = groupEnd + 1;
+	usize:blockEnd = FindMatching(program, fileIndex, blockStart);
+	Expr:cond;
+	Status:status = CompileExpressionRange(program, env, fileIndex, groupStart + 1, groupEnd, std::StringFromCString(""), std::StringFromCString(""), false, &cond);
+	if (status == Status::Ok) {
+		status = WriteIndent(out, indent);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("while (");
+	}
+	if (status == Status::Ok) {
+		status = out.WriteString(std::OwnedStringView(&cond.text));
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(") {\n");
+	}
+	ExprDestroy(&cond);
+	if (status == Status::Ok) {
+		status = WriteBlock(program, out, env, fileIndex, blockStart + 1, blockEnd, indent + 1);
+	}
+	if (status == Status::Ok) {
+		status = WriteIndent(out, indent);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("}\n");
+	}
+	outNext[0] = blockEnd + 1;
+	return(status);
+}
+
+Status:WriteDoStatement(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, ptr<usize>:outNext, usize:indent) {
+	usize:blockStart = start + 1;
+	usize:blockEnd = FindMatching(program, fileIndex, blockStart);
+	usize:whileIndex = blockEnd + 1;
+	usize:groupStart = FindNextGroup(program, fileIndex, whileIndex, FileTokenCount(program, fileIndex));
+	usize:groupEnd = FindMatching(program, fileIndex, groupStart);
+	Expr:cond;
+	Status:status = CompileExpressionRange(program, env, fileIndex, groupStart + 1, groupEnd, std::StringFromCString(""), std::StringFromCString(""), false, &cond);
+	if (status == Status::Ok) {
+		status = WriteIndent(out, indent);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("do {\n");
+	}
+	if (status == Status::Ok) {
+		status = WriteBlock(program, out, env, fileIndex, blockStart + 1, blockEnd, indent + 1);
+	}
+	if (status == Status::Ok) {
+		status = WriteIndent(out, indent);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("} while (");
+	}
+	if (status == Status::Ok) {
+		status = out.WriteString(std::OwnedStringView(&cond.text));
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(");\n");
+	}
+	ExprDestroy(&cond);
+	outNext[0] = groupEnd + 2;
+	return(status);
+}
+
+Status:WriteForStatement(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, ptr<usize>:outNext, usize:indent) {
+	usize:groupStart = FindNextGroup(program, fileIndex, start, FileTokenCount(program, fileIndex));
+	usize:groupEnd = FindMatching(program, fileIndex, groupStart);
+	usize:firstSemi = FindTokenAtDepthZero(program, fileIndex, groupStart + 1, groupEnd, PunctuationKind::Semicolon);
+	usize:secondSemi = FindTokenAtDepthZero(program, fileIndex, firstSemi + 1, groupEnd, PunctuationKind::Semicolon);
+	usize:blockStart = groupEnd + 1;
+	usize:blockEnd = FindMatching(program, fileIndex, blockStart);
+	Status:status = WriteIndent(out, indent);
+	if (status == Status::Ok) {
+		status = out.WriteCString("for (");
+	}
+	usize:colon = FindTopLevelColon(program, fileIndex, groupStart + 1, firstSemi);
+	if (colon < firstSemi) {
+		TypeInfo:typeInfo;
+		if (status == Status::Ok) {
+			status = RenderEnvTypeInfo(program, env, fileIndex, groupStart + 1, colon, &typeInfo);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&typeInfo.cType));
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte(' ');
+		}
+		if (status == Status::Ok) {
+			status = WriteToken(program, out, fileIndex, colon + 1);
+		}
+		if (status == Status::Ok) {
+			status = EnvAdd(program, env, TokenText(program, fileIndex, colon + 1), std::OwnedStringView(&typeInfo.key), std::OwnedStringView(&typeInfo.cType), false, std::StringFromCString(""), typeInfo.isPointer);
+		}
+		usize:eq = colon + 2;
+		while (eq < firstSemi && !IsOperator(program, fileIndex, eq, OperatorKind::Assign)) {
+			eq += 1;
+		}
+		if (eq < firstSemi) {
+			Expr:init;
+			if (status == Status::Ok) {
+				status = CompileExpressionRange(program, env, fileIndex, eq + 1, firstSemi, std::OwnedStringView(&typeInfo.key), std::OwnedStringView(&typeInfo.cType), false, &init);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteByte('=');
+			}
+			if (status == Status::Ok) {
+				status = out.WriteString(std::OwnedStringView(&init.text));
+			}
+			if (status == Status::Ok) {
+				ExprDestroy(&init);
+			}
+		}
+		TypeInfoDestroy(&typeInfo);
+	} else {
+		Expr:initExpr;
+		if (status == Status::Ok) {
+			status = CompileExpressionRange(program, env, fileIndex, groupStart + 1, firstSemi, std::StringFromCString(""), std::StringFromCString(""), false, &initExpr);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&initExpr.text));
+		}
+		if (status == Status::Ok) {
+			ExprDestroy(&initExpr);
+		}
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte(';');
+	}
+	Expr:cond;
+	if (status == Status::Ok) {
+		status = CompileExpressionRange(program, env, fileIndex, firstSemi + 1, secondSemi, std::StringFromCString(""), std::StringFromCString(""), false, &cond);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteString(std::OwnedStringView(&cond.text));
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte(';');
+	}
+	if (status == Status::Ok) {
+		status = WriteTokenRangeRaw(program, out, fileIndex, secondSemi + 1, groupEnd);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(") {\n");
+	}
+	if (status == Status::Ok) {
+		status = WriteBlock(program, out, env, fileIndex, blockStart + 1, blockEnd, indent + 1);
+	}
+	if (status == Status::Ok) {
+		status = WriteIndent(out, indent);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("}\n");
+	}
+	ExprDestroy(&cond);
+	outNext[0] = blockEnd + 1;
+	return(status);
+}
+
+Status:WriteEachStatement(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, ptr<usize>:outNext, usize:indent) {
+	usize:genericStart = start + 1;
+	usize:genericEnd = FindMatching(program, fileIndex, genericStart);
+	usize:groupStart = genericEnd + 1;
+	usize:groupEnd = FindMatching(program, fileIndex, groupStart);
+	usize:blockStart = groupEnd + 1;
+	usize:blockEnd = FindMatching(program, fileIndex, blockStart);
+	usize:comma = FindTokenAtDepthZero(program, fileIndex, genericStart + 1, genericEnd, PunctuationKind::Comma);
+	usize:valueTypeStart = genericStart + 1;
+	usize:valueTypeEnd = genericEnd;
+	usize:valueNameIndex = genericStart + 1;
+	bool:hasIndex = false;
+	usize:indexTypeStart = genericStart + 1;
+	usize:indexTypeEnd = genericStart + 1;
+	usize:indexNameIndex = genericStart + 1;
+	if (comma < genericEnd) {
+		hasIndex = true;
+		usize:indexColon = FindTopLevelColon(program, fileIndex, genericStart + 1, comma);
+		indexTypeStart = genericStart + 1;
+		indexTypeEnd = indexColon;
+		indexNameIndex = indexColon + 1;
+		usize:valueColon = FindTopLevelColon(program, fileIndex, comma + 1, genericEnd);
+		valueTypeStart = comma + 1;
+		valueTypeEnd = valueColon;
+		valueNameIndex = valueColon + 1;
+	} else {
+		usize:valueColon = FindTopLevelColon(program, fileIndex, genericStart + 1, genericEnd);
+		valueTypeStart = genericStart + 1;
+		valueTypeEnd = valueColon;
+		valueNameIndex = valueColon + 1;
+	}
+	TypeInfo:valueType;
+	Status:status = RenderEnvTypeInfo(program, env, fileIndex, valueTypeStart, valueTypeEnd, &valueType);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	if (groupStart + 2 < groupEnd && IsIdentifierText(program, fileIndex, groupStart + 1, "range")) {
+		usize:rangeGroup = groupStart + 4;
+		while (rangeGroup < groupEnd && !IsPunctuation(program, fileIndex, rangeGroup, PunctuationKind::LeftParen)) {
+			rangeGroup += 1;
+		}
+		usize:rangeEnd = FindMatching(program, fileIndex, rangeGroup);
+		usize:firstComma = FindTokenAtDepthZero(program, fileIndex, rangeGroup + 1, rangeEnd, PunctuationKind::Comma);
+		usize:secondComma = FindTokenAtDepthZero(program, fileIndex, firstComma + 1, rangeEnd, PunctuationKind::Comma);
+		Expr:beginExpr;
+		Expr:endExpr;
+		Expr:stepExpr;
+		status = CompileExpressionRange(program, env, fileIndex, rangeGroup + 1, firstComma, std::StringFromCString(""), std::StringFromCString(""), false, &beginExpr);
+		usize:rangeValueEnd = rangeEnd;
+		if (secondComma < rangeEnd) {
+			rangeValueEnd = secondComma;
+		}
+		if (status == Status::Ok) {
+			status = CompileExpressionRange(program, env, fileIndex, firstComma + 1, rangeValueEnd, std::StringFromCString(""), std::StringFromCString(""), false, &endExpr);
+		}
+		if (secondComma < rangeEnd) {
+			if (status == Status::Ok) {
+				status = CompileExpressionRange(program, env, fileIndex, secondComma + 1, rangeEnd, std::StringFromCString(""), std::StringFromCString(""), false, &stepExpr);
+			}
+		} else {
+			if (status == Status::Ok) {
+				ExprInitEmpty(program, &stepExpr);
+				status = ExprSetCString(program, &stepExpr, "1");
+			}
+		}
+		if (status == Status::Ok) {
+			status = WriteIndent(out, indent);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("for (");
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&valueType.cType));
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte(' ');
+		}
+		if (status == Status::Ok) {
+			status = WriteToken(program, out, fileIndex, valueNameIndex);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte('=');
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&beginExpr.text));
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte(';');
+		}
+		if (status == Status::Ok) {
+			status = WriteToken(program, out, fileIndex, valueNameIndex);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte('<');
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&endExpr.text));
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte(';');
+		}
+		if (status == Status::Ok) {
+			status = WriteToken(program, out, fileIndex, valueNameIndex);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("+=");
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&stepExpr.text));
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString(") {\n");
+		}
+		if (status == Status::Ok) {
+			status = EnvAdd(program, env, TokenText(program, fileIndex, valueNameIndex), std::OwnedStringView(&valueType.key), std::OwnedStringView(&valueType.cType), false, std::StringFromCString(""), valueType.isPointer);
+		}
+		if (status == Status::Ok) {
+			status = WriteBlock(program, out, env, fileIndex, blockStart + 1, blockEnd, indent + 1);
+		}
+		if (status == Status::Ok) {
+			status = WriteIndent(out, indent);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("}\n");
+		}
+		ExprDestroy(&beginExpr);
+		ExprDestroy(&endExpr);
+		ExprDestroy(&stepExpr);
+	} else {
+		Expr:arrayExpr;
+		status = CompileExpressionRange(program, env, fileIndex, groupStart + 1, groupEnd, std::StringFromCString(""), std::StringFromCString(""), false, &arrayExpr);
+		if (status == Status::Ok) {
+			status = WriteIndent(out, indent);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("for (");
+		}
+		if (hasIndex) {
+			TypeInfo:indexType;
+			if (status == Status::Ok) {
+				status = RenderEnvTypeInfo(program, env, fileIndex, indexTypeStart, indexTypeEnd, &indexType);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteString(std::OwnedStringView(&indexType.cType));
+			}
+			if (status == Status::Ok) {
+				status = out.WriteByte(' ');
+			}
+			if (status == Status::Ok) {
+				status = WriteToken(program, out, fileIndex, indexNameIndex);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteCString("=0;");
+			}
+			if (status == Status::Ok) {
+				status = WriteToken(program, out, fileIndex, indexNameIndex);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteByte('<');
+			}
+			if (status == Status::Ok) {
+				status = out.WriteString(std::OwnedStringView(&arrayExpr.arrayLen));
+			}
+			if (status == Status::Ok) {
+				status = out.WriteByte(';');
+			}
+			if (status == Status::Ok) {
+				status = WriteToken(program, out, fileIndex, indexNameIndex);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteCString("++) {\n");
+			}
+			if (status == Status::Ok) {
+				status = EnvAdd(program, env, TokenText(program, fileIndex, indexNameIndex), std::OwnedStringView(&indexType.key), std::OwnedStringView(&indexType.cType), false, std::StringFromCString(""), indexType.isPointer);
+			}
+			TypeInfoDestroy(&indexType);
+		} else {
+			if (status == Status::Ok) {
+				status = out.WriteCString("usize __kek_each_idx=0;__kek_each_idx<");
+			}
+			if (status == Status::Ok) {
+				status = out.WriteString(std::OwnedStringView(&arrayExpr.arrayLen));
+			}
+			if (status == Status::Ok) {
+				status = out.WriteCString(";__kek_each_idx++) {\n");
+			}
+		}
+		if (status == Status::Ok) {
+			status = WriteIndent(out, indent + 1);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&valueType.cType));
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte(' ');
+		}
+		if (status == Status::Ok) {
+			status = WriteToken(program, out, fileIndex, valueNameIndex);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte('=');
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&arrayExpr.text));
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte('[');
+		}
+		if (hasIndex) {
+			if (status == Status::Ok) {
+				status = WriteToken(program, out, fileIndex, indexNameIndex);
+			}
+		} else {
+			if (status == Status::Ok) {
+				status = out.WriteCString("__kek_each_idx");
+			}
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("];\n");
+		}
+		if (status == Status::Ok) {
+			status = EnvAdd(program, env, TokenText(program, fileIndex, valueNameIndex), std::OwnedStringView(&valueType.key), std::OwnedStringView(&valueType.cType), false, std::StringFromCString(""), valueType.isPointer);
+		}
+		if (status == Status::Ok) {
+			status = WriteBlock(program, out, env, fileIndex, blockStart + 1, blockEnd, indent + 1);
+		}
+		if (status == Status::Ok) {
+			status = WriteIndent(out, indent);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("}\n");
+		}
+		ExprDestroy(&arrayExpr);
+	}
+	TypeInfoDestroy(&valueType);
+	outNext[0] = blockEnd + 1;
+	return(status);
+}
+
+Status:WriteSwitchStatement(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, ptr<usize>:outNext, usize:indent) {
+	usize:groupStart = FindNextGroup(program, fileIndex, start, FileTokenCount(program, fileIndex));
+	usize:groupEnd = FindMatching(program, fileIndex, groupStart);
+	usize:blockStart = groupEnd + 1;
+	usize:blockEnd = FindMatching(program, fileIndex, blockStart);
+	Expr:value;
+	Status:status = CompileExpressionRange(program, env, fileIndex, groupStart + 1, groupEnd, std::StringFromCString(""), std::StringFromCString(""), false, &value);
+	if (status == Status::Ok) {
+		status = WriteIndent(out, indent);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("switch (");
+	}
+	if (status == Status::Ok) {
+		status = out.WriteString(std::OwnedStringView(&value.text));
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(") {\n");
+	}
+	ExprDestroy(&value);
+	usize:i = blockStart + 1;
+	while (i < blockEnd && status == Status::Ok) {
+		if (IsKeyword(program, fileIndex, i, KeywordKind::Case)) {
+			usize:caseGroup = i + 1;
+			usize:caseGroupEnd = FindMatching(program, fileIndex, caseGroup);
+			Expr:caseExpr;
+			status = CompileExpressionRange(program, env, fileIndex, caseGroup + 1, caseGroupEnd, std::StringFromCString(""), std::StringFromCString(""), false, &caseExpr);
+			if (status == Status::Ok) {
+				status = WriteIndent(out, indent + 1);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteCString("case ");
+			}
+			if (status == Status::Ok) {
+				status = out.WriteString(std::OwnedStringView(&caseExpr.text));
+			}
+			if (status == Status::Ok) {
+				status = out.WriteCString(": ");
+			}
+			ExprDestroy(&caseExpr);
+			usize:caseBlock = caseGroupEnd + 1;
+			if (caseBlock < blockEnd && IsPunctuation(program, fileIndex, caseBlock, PunctuationKind::Colon)) {
+				caseBlock += 1;
+			}
+			if (caseBlock < blockEnd && IsPunctuation(program, fileIndex, caseBlock, PunctuationKind::LeftBrace)) {
+				usize:caseBlockEnd = FindMatching(program, fileIndex, caseBlock);
+				if (status == Status::Ok) {
+					status = out.WriteCString("{\n");
+				}
+				if (status == Status::Ok) {
+					status = WriteBlock(program, out, env, fileIndex, caseBlock + 1, caseBlockEnd, indent + 2);
+				}
+				if (status == Status::Ok) {
+					status = WriteIndent(out, indent + 1);
+				}
+				if (status == Status::Ok) {
+					status = out.WriteCString("}\n");
+				}
+				i = caseBlockEnd + 1;
+			} else {
+				usize:semicolon = FindStatementSemicolon(program, fileIndex, caseBlock, blockEnd);
+				if (status == Status::Ok) {
+					status = out.WriteCString("{\n");
+				}
+				if (status == Status::Ok) {
+					status = WriteExprStatement(program, out, env, fileIndex, caseBlock, semicolon, indent + 2);
+				}
+				if (status == Status::Ok) {
+					status = WriteIndent(out, indent + 1);
+				}
+				if (status == Status::Ok) {
+					status = out.WriteCString("}\n");
+				}
+				i = semicolon + 1;
+			}
+			continue;
+		}
+		if (IsKeyword(program, fileIndex, i, KeywordKind::Default)) {
+			status = WriteIndent(out, indent + 1);
+			if (status == Status::Ok) {
+				status = out.WriteCString("default: ");
+			}
+			usize:bodyStart = i + 1;
+			if (bodyStart < blockEnd && IsPunctuation(program, fileIndex, bodyStart, PunctuationKind::Colon)) {
+				bodyStart += 1;
+			}
+			if (bodyStart < blockEnd && IsPunctuation(program, fileIndex, bodyStart, PunctuationKind::LeftBrace)) {
+				usize:bodyEnd = FindMatching(program, fileIndex, bodyStart);
+				if (status == Status::Ok) {
+					status = out.WriteCString("{\n");
+				}
+				if (status == Status::Ok) {
+					status = WriteBlock(program, out, env, fileIndex, bodyStart + 1, bodyEnd, indent + 2);
+				}
+				if (status == Status::Ok) {
+					status = WriteIndent(out, indent + 1);
+				}
+				if (status == Status::Ok) {
+					status = out.WriteCString("}\n");
+				}
+				i = bodyEnd + 1;
+			} else {
+				usize:semicolon = FindStatementSemicolon(program, fileIndex, bodyStart, blockEnd);
+				if (status == Status::Ok) {
+					status = out.WriteCString("{\n");
+				}
+				if (status == Status::Ok) {
+					status = WriteExprStatement(program, out, env, fileIndex, bodyStart, semicolon, indent + 2);
+				}
+				if (status == Status::Ok) {
+					status = WriteIndent(out, indent + 1);
+				}
+				if (status == Status::Ok) {
+					status = out.WriteCString("}\n");
+				}
+				i = semicolon + 1;
+			}
+			continue;
+		}
+		i += 1;
+	}
+	if (status == Status::Ok) {
+		status = WriteIndent(out, indent);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("}\n");
+	}
+	outNext[0] = blockEnd + 1;
+	return(status);
+}
+
+Status:WriteReturnStatement(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, usize:semicolon, usize:indent) {
+	Status:status = WriteIndent(out, indent);
+	if (status == Status::Ok) {
+		status = out.WriteCString("return");
+	}
+	if (start + 1 < semicolon) {
+		Expr:value;
+		if (status == Status::Ok) {
+			status = CompileExpressionRange(program, env, fileIndex, start + 1, semicolon, std::OwnedStringView(&env.returnTypeKey), std::OwnedStringView(&env.returnCType), false, &value);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte(' ');
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&value.text));
+		}
+		if (status == Status::Ok) {
+			ExprDestroy(&value);
+		}
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(";\n");
+	}
+	return(status);
+}
+
+Status:WriteSingleStatement(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, ptr<usize>:outNext, usize:indent) {
+	if (IsPunctuation(program, fileIndex, start, PunctuationKind::LeftBrace)) {
+		usize:blockEnd = FindMatching(program, fileIndex, start);
+		Status:status = WriteIndent(out, indent);
+		if (status == Status::Ok) {
+			status = out.WriteCString("{\n");
+		}
+		if (status == Status::Ok) {
+			status = WriteBlock(program, out, env, fileIndex, start + 1, blockEnd, indent + 1);
+		}
+		if (status == Status::Ok) {
+			status = WriteIndent(out, indent);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("}\n");
+		}
+		outNext[0] = blockEnd + 1;
+		return(status);
+	}
+	if (IsKeyword(program, fileIndex, start, KeywordKind::If)) {
+		return(WriteIfStatement(program, out, env, fileIndex, start, outNext, indent));
+	}
+	if (IsKeyword(program, fileIndex, start, KeywordKind::While)) {
+		return(WriteWhileStatement(program, out, env, fileIndex, start, outNext, indent));
+	}
+	if (IsKeyword(program, fileIndex, start, KeywordKind::Do)) {
+		return(WriteDoStatement(program, out, env, fileIndex, start, outNext, indent));
+	}
+	if (IsKeyword(program, fileIndex, start, KeywordKind::For)) {
+		return(WriteForStatement(program, out, env, fileIndex, start, outNext, indent));
+	}
+	if (IsKeyword(program, fileIndex, start, KeywordKind::Each)) {
+		return(WriteEachStatement(program, out, env, fileIndex, start, outNext, indent));
+	}
+	if (IsKeyword(program, fileIndex, start, KeywordKind::Switch)) {
+		return(WriteSwitchStatement(program, out, env, fileIndex, start, outNext, indent));
+	}
+	usize:semicolon = FindStatementSemicolon(program, fileIndex, start, FileTokenCount(program, fileIndex));
+	if (IsKeyword(program, fileIndex, start, KeywordKind::Return)) {
+		outNext[0] = semicolon + 1;
+		return(WriteReturnStatement(program, out, env, fileIndex, start, semicolon, indent));
+	}
+	if (IsKeyword(program, fileIndex, start, KeywordKind::Break)) {
+		outNext[0] = semicolon + 1;
+		Status:status = WriteIndent(out, indent);
+		if (status == Status::Ok) {
+			status = out.WriteCString("break;\n");
+		}
+		return(status);
+	}
+	if (IsKeyword(program, fileIndex, start, KeywordKind::Continue)) {
+		outNext[0] = semicolon + 1;
+		Status:status = WriteIndent(out, indent);
+		if (status == Status::Ok) {
+			status = out.WriteCString("continue;\n");
+		}
+		return(status);
+	}
+	if (IsKeyword(program, fileIndex, start, KeywordKind::Unreachable)) {
+		outNext[0] = semicolon + 1;
+		Status:status = WriteIndent(out, indent);
+		if (status == Status::Ok) {
+			status = out.WriteCString("__builtin_unreachable();\n");
+		}
+		return(status);
+	}
+	if (IsKeyword(program, fileIndex, start, KeywordKind::Panic)) {
+		outNext[0] = semicolon + 1;
+		usize:groupStart = start + 1;
+		usize:groupEnd = FindMatching(program, fileIndex, groupStart);
+		Expr:message;
+		Status:status = CompileExpressionRange(program, env, fileIndex, groupStart + 1, groupEnd, std::StringFromCString(""), std::StringFromCString(""), false, &message);
+		if (status == Status::Ok) {
+			status = WriteIndent(out, indent);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("do { fprintf(stderr, \"panic: %s\\n\", ");
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&message.text));
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("); abort(); } while(0);\n");
+		}
+		ExprDestroy(&message);
+		return(status);
+	}
+	if (IsKeyword(program, fileIndex, start, KeywordKind::Defer)) {
+		outNext[0] = semicolon + 1;
+		return(Status::Ok);
+	}
+	usize:colon = FindTopLevelColon(program, fileIndex, start, semicolon);
+	if (colon < semicolon) {
+		outNext[0] = semicolon + 1;
+		return(WriteVarDecl(program, out, env, fileIndex, start, semicolon, indent));
+	}
+	outNext[0] = semicolon + 1;
+	return(WriteExprStatement(program, out, env, fileIndex, start, semicolon, indent));
+}
+
+Status:WriteDeferred(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, usize:end, usize:indent) {
+	if (start >= end || !IsKeyword(program, fileIndex, start, KeywordKind::Defer)) {
+		return(Status::Ok);
+	}
+	usize:body = start + 1;
+	if (body < end && IsPunctuation(program, fileIndex, body, PunctuationKind::LeftBrace)) {
+		usize:blockEnd = FindMatching(program, fileIndex, body);
+		return(WriteBlock(program, out, env, fileIndex, body + 1, blockEnd, indent));
+	}
+	usize:semicolon = FindStatementSemicolon(program, fileIndex, body, end);
+	return(WriteExprStatement(program, out, env, fileIndex, body, semicolon, indent));
+}
+
+bool:IsBlockTransfer(ptr<CompilerContext>:program, usize:fileIndex, usize:index) {
+	return(IsKeyword(program, fileIndex, index, KeywordKind::Return)
+		|| IsKeyword(program, fileIndex, index, KeywordKind::Break)
+		|| IsKeyword(program, fileIndex, index, KeywordKind::Continue));
+}
+
+Status:WriteDeferredRanges(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, ptr<Array<DeferRange>>:defers, usize:indent) {
+	usize:count = defers.len;
+	while (count > 0) {
+		count -= 1;
+		ptr<DeferRange>:entry = &defers.data[count];
+		Status:status = WriteDeferred(program, out, env, fileIndex, entry.start, entry.end, indent);
+		if (status != Status::Ok) {
+			return(status);
+		}
+	}
+	return(Status::Ok);
+}
+
+Status:WriteBlock(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, usize:end, usize:indent) {
+	usize:localStart = env.locals.len;
+	Array<DeferRange>:defers = std::ArrayNew<DeferRange>(program.allocator);
+	usize:index = start;
+	Status:status = Status::Ok;
+	while (index < end && status == Status::Ok) {
+		if (IsKeyword(program, fileIndex, index, KeywordKind::Defer)) {
+			usize:deferEnd = index + 1;
+			if (deferEnd < end && IsPunctuation(program, fileIndex, deferEnd, PunctuationKind::LeftBrace)) {
+				deferEnd = FindMatching(program, fileIndex, deferEnd) + 1;
+			} else {
+				deferEnd = FindStatementSemicolon(program, fileIndex, deferEnd, end) + 1;
+			}
+			DeferRange:entry;
+			entry.start = index;
+			entry.end = deferEnd;
+			status = defers.Push(entry);
+			if (status != Status::Ok) {
+				break;
+			}
+			index = deferEnd;
+			continue;
+		}
+		usize:next = index + 1;
+		if (IsBlockTransfer(program, fileIndex, index)) {
+			status = WriteDeferredRanges(program, out, env, fileIndex, &defers, indent);
+		}
+		if (status != Status::Ok) {
+			break;
+		}
+		status = WriteSingleStatement(program, out, env, fileIndex, index, &next, indent);
+		if (next <= index) {
+			next = index + 1;
+		}
+		index = next;
+	}
+	while (defers.len > 0 && status == Status::Ok) {
+		Result<DeferRange>:popped = defers.Pop();
+		if (popped.status != Status::Ok) {
+			status = popped.status;
+			break;
+		}
+		status = WriteDeferred(program, out, env, fileIndex, popped.value.start, popped.value.end, indent);
+	}
+	Status:restoreStatus = EnvRestore(env, localStart);
+	if (status == Status::Ok && restoreStatus != Status::Ok) {
+		status = restoreStatus;
+	}
+	Status:destroyStatus = defers.Destroy();
+	if (status == Status::Ok && destroyStatus != Status::Ok) {
+		status = destroyStatus;
+	}
+	return(status);
+}

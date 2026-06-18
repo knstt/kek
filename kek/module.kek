@@ -384,6 +384,32 @@ bool:ModuleDeclNameMatches(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, S
 }
 
 ptr<ModuleDecl>:FindTypeDecl(ptr<CompilerContext>:program, String:name) {
+	if (program.typeDeclIndex.len > 0) {
+		usize:low = 0;
+		usize:high = program.typeDeclIndex.len;
+		while (low < high) {
+			usize:mid = low + (high - low) / 2;
+			String:midName = std::OwnedStringView(&program.typeDeclIndex.data[mid].name);
+			int:compare = midName.Compare(name);
+			if (compare < 0) {
+				low = mid + 1;
+				continue;
+			}
+			if (compare > 0) {
+				high = mid;
+				continue;
+			}
+			while (mid > 0) {
+				String:prevName = std::OwnedStringView(&program.typeDeclIndex.data[mid - 1].name);
+				if (!prevName.Equals(name)) {
+					break;
+				}
+				mid -= 1;
+			}
+			return(&program.decls.data[program.typeDeclIndex.data[mid].declIndex]);
+		}
+		return(0);
+	}
 	for (usize:i = 0; i < program.decls.len; i++) {
 		ptr<ModuleDecl>:decl = &program.decls.data[i];
 		if ((decl.kind == DeclKind::Struct || decl.kind == DeclKind::Union || decl.kind == DeclKind::Enum || decl.kind == DeclKind::Alias)

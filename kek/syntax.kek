@@ -61,10 +61,7 @@ struct:TypeUse {
 	OwnedString:key;
 	OwnedString:cName;
 	OwnedString:baseName;
-	OwnedString:arg0;
-	OwnedString:arg1;
-	OwnedString:arg2;
-	usize:argCount;
+	Array<OwnedString>:args;
 	bool:emitted;
 };
 
@@ -72,10 +69,7 @@ struct:FuncUse {
 	usize:declIndex;
 	OwnedString:key;
 	OwnedString:cName;
-	OwnedString:arg0;
-	OwnedString:arg1;
-	OwnedString:arg2;
-	usize:argCount;
+	Array<OwnedString>:args;
 	bool:emitted;
 };
 
@@ -139,47 +133,6 @@ struct:ModuleDecl {
 	bool:reachable;
 };
 
-struct:Local {
-	OwnedString:name;
-	OwnedString:typeKey;
-	OwnedString:cType;
-	OwnedString:arrayLen;
-	bool:isArray;
-	bool:isPointer;
-};
-
-struct:CodegenEnv {
-	Array<Local>:locals;
-	OwnedString:returnTypeKey;
-	OwnedString:returnCType;
-	OwnedString:thisTypeKey;
-	OwnedString:thisCType;
-	bool:hasThis;
-	usize:deferCounter;
-	usize:eachCounter;
-};
-
-struct:Expr {
-	OwnedString:text;
-	OwnedString:typeKey;
-	OwnedString:cType;
-	OwnedString:arrayLen;
-	bool:isArray;
-	bool:isLvalue;
-	bool:isPointer;
-};
-
-struct:ExprParser {
-	ptr<CompilerContext>:program;
-	ptr<CodegenEnv>:env;
-	usize:fileIndex;
-	usize:pos;
-	usize:end;
-	OwnedString:expectedTypeKey;
-	OwnedString:expectedCType;
-	bool:expectedIsArray;
-};
-
 struct:SyntaxPackage {
 	Allocator:allocator;
 	DiagnosticBag:diagnostics;
@@ -201,14 +154,26 @@ struct:CheckedModule {
 	Array<FuncUse>:funcUses;
 };
 
+struct:DeclNameIndexEntry {
+	OwnedString:name;
+	OwnedString:scope;
+	usize:declIndex;
+};
+
+struct:MethodDeclIndexEntry {
+	OwnedString:receiverKey;
+	OwnedString:name;
+	usize:declIndex;
+	u8:operatorCode;
+	usize:paramCount;
+	bool:isOperator;
+};
+
 struct:TypeInfo {
 	OwnedString:key;
 	OwnedString:cType;
 	OwnedString:baseName;
-	OwnedString:arg0;
-	OwnedString:arg1;
-	OwnedString:arg2;
-	usize:argCount;
+	Array<OwnedString>:args;
 	bool:isPointer;
 };
 
@@ -222,6 +187,9 @@ struct:CompilerContext {
 	Array<ModuleField>:fields;
 	Array<TypeUse>:typeUses;
 	Array<FuncUse>:funcUses;
+	Array<DeclNameIndexEntry>:typeDeclIndex;
+	Array<DeclNameIndexEntry>:functionDeclIndex;
+	Array<MethodDeclIndexEntry>:methodDeclIndex;
 };
 
 bool:IsOk(Status:status) {
@@ -459,6 +427,9 @@ Status:ProgramInit(ptr<CompilerContext>:program, Allocator:allocator) {
 	program.fields = std::ArrayNew<ModuleField>(allocator);
 	program.typeUses = std::ArrayNew<TypeUse>(allocator);
 	program.funcUses = std::ArrayNew<FuncUse>(allocator);
+	program.typeDeclIndex = std::ArrayNew<DeclNameIndexEntry>(allocator);
+	program.functionDeclIndex = std::ArrayNew<DeclNameIndexEntry>(allocator);
+	program.methodDeclIndex = std::ArrayNew<MethodDeclIndexEntry>(allocator);
 	return(Status::Ok);
 }
 
@@ -481,16 +452,34 @@ Status:ProgramDestroy(ptr<CompilerContext>:program) {
 		std::DestroyOwnedString(&program.typeUses.data[i].key);
 		std::DestroyOwnedString(&program.typeUses.data[i].cName);
 		std::DestroyOwnedString(&program.typeUses.data[i].baseName);
-		std::DestroyOwnedString(&program.typeUses.data[i].arg0);
-		std::DestroyOwnedString(&program.typeUses.data[i].arg1);
-		std::DestroyOwnedString(&program.typeUses.data[i].arg2);
+		for (usize:j = 0; j < program.typeUses.data[i].args.len; j++) {
+			std::DestroyOwnedString(&program.typeUses.data[i].args.data[j]);
+		}
+		Array<OwnedString>:args = program.typeUses.data[i].args;
+		args.Destroy();
+		program.typeUses.data[i].args = args;
 	}
 	for (usize:i = 0; i < program.funcUses.len; i++) {
 		std::DestroyOwnedString(&program.funcUses.data[i].key);
 		std::DestroyOwnedString(&program.funcUses.data[i].cName);
-		std::DestroyOwnedString(&program.funcUses.data[i].arg0);
-		std::DestroyOwnedString(&program.funcUses.data[i].arg1);
-		std::DestroyOwnedString(&program.funcUses.data[i].arg2);
+		for (usize:j = 0; j < program.funcUses.data[i].args.len; j++) {
+			std::DestroyOwnedString(&program.funcUses.data[i].args.data[j]);
+		}
+		Array<OwnedString>:args = program.funcUses.data[i].args;
+		args.Destroy();
+		program.funcUses.data[i].args = args;
+	}
+	for (usize:i = 0; i < program.typeDeclIndex.len; i++) {
+		std::DestroyOwnedString(&program.typeDeclIndex.data[i].name);
+		std::DestroyOwnedString(&program.typeDeclIndex.data[i].scope);
+	}
+	for (usize:i = 0; i < program.functionDeclIndex.len; i++) {
+		std::DestroyOwnedString(&program.functionDeclIndex.data[i].name);
+		std::DestroyOwnedString(&program.functionDeclIndex.data[i].scope);
+	}
+	for (usize:i = 0; i < program.methodDeclIndex.len; i++) {
+		std::DestroyOwnedString(&program.methodDeclIndex.data[i].receiverKey);
+		std::DestroyOwnedString(&program.methodDeclIndex.data[i].name);
 	}
 	Array<SyntaxFile>:tokenFiles = program.tokenFiles;
 	Status:status = tokenFiles.Destroy();
@@ -510,6 +499,15 @@ Status:ProgramDestroy(ptr<CompilerContext>:program) {
 	Array<FuncUse>:funcUses = program.funcUses;
 	if (status == Status::Ok) { status = funcUses.Destroy(); }
 	program.funcUses = funcUses;
+	Array<DeclNameIndexEntry>:typeDeclIndex = program.typeDeclIndex;
+	if (status == Status::Ok) { status = typeDeclIndex.Destroy(); }
+	program.typeDeclIndex = typeDeclIndex;
+	Array<DeclNameIndexEntry>:functionDeclIndex = program.functionDeclIndex;
+	if (status == Status::Ok) { status = functionDeclIndex.Destroy(); }
+	program.functionDeclIndex = functionDeclIndex;
+	Array<MethodDeclIndexEntry>:methodDeclIndex = program.methodDeclIndex;
+	if (status == Status::Ok) { status = methodDeclIndex.Destroy(); }
+	program.methodDeclIndex = methodDeclIndex;
 	if (status == Status::Ok) { status = source::FileTableDestroy(&program.files); }
 	if (status == Status::Ok) { status = diagnostics::DiagnosticBagDestroy(&program.diagnostics); }
 	return(status);
@@ -561,10 +559,24 @@ Status:ReserveFuncUses(ptr<CompilerContext>:program, usize:additional) {
 	return(status);
 }
 
-Status:ReserveLocals(ptr<CodegenEnv>:env, usize:additional) {
-	Array<Local>:locals = env.locals;
-	Status:status = locals.Reserve(additional);
-	env.locals = locals;
+Status:ReserveTypeDeclIndex(ptr<CompilerContext>:program, usize:additional) {
+	Array<DeclNameIndexEntry>:items = program.typeDeclIndex;
+	Status:status = items.Reserve(additional);
+	program.typeDeclIndex = items;
+	return(status);
+}
+
+Status:ReserveFunctionDeclIndex(ptr<CompilerContext>:program, usize:additional) {
+	Array<DeclNameIndexEntry>:items = program.functionDeclIndex;
+	Status:status = items.Reserve(additional);
+	program.functionDeclIndex = items;
+	return(status);
+}
+
+Status:ReserveMethodDeclIndex(ptr<CompilerContext>:program, usize:additional) {
+	Array<MethodDeclIndexEntry>:items = program.methodDeclIndex;
+	Status:status = items.Reserve(additional);
+	program.methodDeclIndex = items;
 	return(status);
 }
 

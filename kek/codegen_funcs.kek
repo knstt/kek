@@ -1,0 +1,749 @@
+#import(kek/codegen_stmt.kek);
+
+Status:WriteSubstTypeForFunc(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, ptr<FuncUse>:funcUse, usize:fileIndex, usize:start, usize:end) {
+	TypeUse:temp;
+	FuncUseTempTypeUse(funcUse, &temp);
+	String:firstTypeToken = TokenText(program, fileIndex, start);
+	if (start < end && firstTypeToken.EqualsCString("ptr") && start + 1 < end && IsOperator(program, fileIndex, start + 1, OperatorKind::Less)) {
+		usize:genericEnd = FindMatching(program, fileIndex, start + 1);
+		OwnedString:innerKey;
+		Status:innerStatus = MakeSubstTypeKey(program, decl, &temp, fileIndex, start + 2, genericEnd, &innerKey);
+		if (innerStatus == Status::Ok) {
+			innerStatus = WriteCTypeFromKey(program, out, std::OwnedStringView(&innerKey));
+		}
+		if (innerStatus == Status::Ok) {
+			innerStatus = out.WriteByte('*');
+		}
+		std::DestroyOwnedString(&innerKey);
+		return(innerStatus);
+	}
+	OwnedString:key;
+	Status:status = MakeSubstTypeKey(program, decl, &temp, fileIndex, start, end, &key);
+	if (status == Status::Ok) {
+		status = WriteCTypeFromKey(program, out, std::OwnedStringView(&key));
+	}
+	if (status == Status::Ok) {
+		std::DestroyOwnedString(&key);
+	}
+	return(status);
+}
+
+Status:WriteFunctionSignature(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, String:nameOverride, ptr<FuncUse>:funcUse) {
+	String:functionName = TokenText(program, decl.fileIndex, decl.nameIndex);
+	bool:isMain = !decl.hasReceiver && functionName.EqualsCString("main") && ModuleDeclPackageIsRoot(decl);
+	Status:status = Status::Ok;
+	if (isMain) {
+		status = out.WriteCString("int");
+	} else {
+		if (funcUse != 0) {
+			status = WriteSubstTypeForFunc(program, out, decl, funcUse, decl.fileIndex, decl.returnStart, decl.returnEnd);
+		} else {
+			TypeInfo:returnInfo;
+			status = RenderTypeInfo(program, decl.fileIndex, decl.returnStart, decl.returnEnd, &returnInfo);
+			if (status == Status::Ok) {
+				status = out.WriteString(std::OwnedStringView(&returnInfo.cType));
+			}
+			if (status == Status::Ok) {
+				TypeInfoDestroy(&returnInfo);
+			}
+		}
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte(' ');
+	}
+	if (status == Status::Ok) {
+		if (nameOverride.len > 0) {
+			status = out.WriteString(nameOverride);
+		} else {
+			status = WriteDeclCName(program, out, decl);
+		}
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte('(');
+	}
+	bool:first = true;
+	if (decl.hasReceiver) {
+		if (funcUse != 0) {
+			status = WriteSubstTypeForFunc(program, out, decl, funcUse, decl.fileIndex, decl.receiverStart, decl.receiverEnd);
+		} else {
+			TypeInfo:receiverInfo;
+			if (status == Status::Ok) {
+				status = RenderTypeInfo(program, decl.fileIndex, decl.receiverStart, decl.receiverEnd, &receiverInfo);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteString(std::OwnedStringView(&receiverInfo.cType));
+			}
+			if (status == Status::Ok) {
+				TypeInfoDestroy(&receiverInfo);
+			}
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("* this");
+		}
+		first = false;
+	}
+	for (usize:i = 0; i < decl.paramCount; i++) {
+		ptr<ModuleParam>:param = &program.params.data[decl.firstParam + i];
+		if (!first && status == Status::Ok) {
+			status = out.WriteByte(',');
+		}
+		if (funcUse != 0) {
+			if (status == Status::Ok) {
+				status = WriteSubstTypeForFunc(program, out, decl, funcUse, param.fileIndex, param.typeStart, param.typeEnd);
+			}
+		} else {
+			TypeInfo:paramInfo;
+			if (status == Status::Ok) {
+				status = RenderTypeInfo(program, param.fileIndex, param.typeStart, param.typeEnd, &paramInfo);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteString(std::OwnedStringView(&paramInfo.cType));
+			}
+			if (status == Status::Ok) {
+				TypeInfoDestroy(&paramInfo);
+			}
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte(' ');
+		}
+		if (status == Status::Ok) {
+			status = WriteToken(program, out, param.fileIndex, param.nameIndex);
+		}
+		first = false;
+	}
+	if (first && status == Status::Ok) {
+		status = out.WriteCString("void");
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte(')');
+	}
+	return(status);
+}
+
+Status:WriteFunctionPrototype(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl) {
+	Status:status = WriteFunctionSignature(program, out, decl, std::StringFromCString(""), 0);
+	if (status == Status::Ok) {
+		status = out.WriteCString(";\n");
+	}
+	return(status);
+}
+
+Status:WriteGenericFunctionBody(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, ptr<FuncUse>:use) {
+	Status:status = WriteFunctionSignature(program, out, decl, std::OwnedStringView(&use.cName), use);
+	if (status == Status::Ok) {
+		status = out.WriteCString(" {\n");
+	}
+	CodegenEnv:env;
+	if (status == Status::Ok) {
+		status = EnvInit(program, &env);
+	}
+	if (status == Status::Ok) {
+		env.genericDecl = decl;
+		env.genericFuncUse = use;
+	}
+	OwnedString:returnKey;
+	OwnedString:returnCType;
+	bool:returnIsPointer = false;
+	if (status == Status::Ok) {
+		status = MakeSubstTypeInfoForFunc(program, decl, use, decl.fileIndex, decl.returnStart, decl.returnEnd, &returnKey, &returnCType, &returnIsPointer);
+	}
+	if (status == Status::Ok) {
+		ReplaceOwned(&env.returnTypeKey, returnKey);
+		ReplaceOwned(&env.returnCType, returnCType);
+		returnKey.data = 0;
+		returnCType.data = 0;
+	}
+	if (decl.hasReceiver && status == Status::Ok) {
+		OwnedString:receiverKey;
+		OwnedString:receiverCType;
+		bool:receiverIsPointer = false;
+		status = MakeSubstTypeInfoForFunc(program, decl, use, decl.fileIndex, decl.receiverStart, decl.receiverEnd, &receiverKey, &receiverCType, &receiverIsPointer);
+		if (status == Status::Ok) {
+			env.hasThis = true;
+			ReplaceOwned(&env.thisTypeKey, receiverKey);
+			ReplaceOwned(&env.thisCType, receiverCType);
+			receiverKey.data = 0;
+			receiverCType.data = 0;
+			status = EnvAdd(program, &env, std::StringFromCString("this"), std::OwnedStringView(&env.thisTypeKey), std::OwnedStringView(&env.thisCType), false, std::StringFromCString(""), true);
+		}
+	}
+	for (usize:i = 0; i < decl.paramCount && status == Status::Ok; i++) {
+		ptr<ModuleParam>:param = &program.params.data[decl.firstParam + i];
+		OwnedString:paramKey;
+		OwnedString:paramCType;
+		bool:paramIsPointer = false;
+		status = MakeSubstTypeInfoForFunc(program, decl, use, param.fileIndex, param.typeStart, param.typeEnd, &paramKey, &paramCType, &paramIsPointer);
+		if (status == Status::Ok) {
+			status = EnvAdd(program, &env, TokenText(program, param.fileIndex, param.nameIndex), std::OwnedStringView(&paramKey), std::OwnedStringView(&paramCType), false, std::StringFromCString(""), paramIsPointer);
+		}
+		if (status == Status::Ok) {
+			std::DestroyOwnedString(&paramKey);
+			std::DestroyOwnedString(&paramCType);
+		}
+	}
+	if (status == Status::Ok) {
+		status = WriteBlock(program, out, &env, decl.fileIndex, decl.bodyStart, decl.bodyEnd, 1);
+	}
+	EnvDestroy(&env);
+	if (status == Status::Ok) {
+		status = out.WriteCString("}\n");
+	}
+	return(status);
+}
+
+bool:GenericBodyMentionsGenericParam(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, ptr<FuncUse>:use) {
+	for (usize:i = decl.bodyStart; i < decl.bodyEnd; i++) {
+		Token:token = program.tokenFiles.data[decl.fileIndex].tokens[i];
+		if (!(token.kind == TokenKind::Identifier || token.kind == TokenKind::Keyword)) {
+			continue;
+		}
+		String:name = TokenText(program, decl.fileIndex, i);
+		for (usize:argIndex = 0; argIndex < use.args.len; argIndex++) {
+			if (GenericParamEquals(program, decl, argIndex, name)) {
+				return(true);
+			}
+		}
+	}
+	return(false);
+}
+
+bool:CanLowerGenericFunctionBody(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, ptr<FuncUse>:use) {
+	if (!decl.hasBody) {
+		return(false);
+	}
+	if (decl.hasReceiver) {
+		return(false);
+	}
+	if (GenericBodyMentionsGenericParam(program, decl, use)) {
+		return(true);
+	}
+	return(true);
+}
+
+Status:WriteFunctionBody(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl) {
+	Status:status = WriteFunctionSignature(program, out, decl, std::StringFromCString(""), 0);
+	if (status == Status::Ok) {
+		status = out.WriteCString(" {\n");
+	}
+	CodegenEnv:env;
+	if (status == Status::Ok) {
+		status = EnvInit(program, &env);
+	}
+	TypeInfo:returnInfo;
+	if (status == Status::Ok) {
+		status = RenderTypeInfo(program, decl.fileIndex, decl.returnStart, decl.returnEnd, &returnInfo);
+	}
+	if (status == Status::Ok) {
+		ReplaceOwned(&env.returnTypeKey, returnInfo.key);
+		ReplaceOwned(&env.returnCType, returnInfo.cType);
+		returnInfo.key.data = 0;
+		returnInfo.cType.data = 0;
+	}
+	if (decl.hasReceiver && status == Status::Ok) {
+		TypeInfo:receiverInfo;
+		status = RenderTypeInfo(program, decl.fileIndex, decl.receiverStart, decl.receiverEnd, &receiverInfo);
+		if (status == Status::Ok) {
+			env.hasThis = true;
+			ReplaceOwned(&env.thisTypeKey, receiverInfo.key);
+			ReplaceOwned(&env.thisCType, receiverInfo.cType);
+			receiverInfo.key.data = 0;
+			receiverInfo.cType.data = 0;
+			status = EnvAdd(program, &env, std::StringFromCString("this"), std::OwnedStringView(&env.thisTypeKey), std::OwnedStringView(&env.thisCType), false, std::StringFromCString(""), true);
+		}
+		TypeInfoDestroy(&receiverInfo);
+	}
+	for (usize:i = 0; i < decl.paramCount && status == Status::Ok; i++) {
+		ptr<ModuleParam>:param = &program.params.data[decl.firstParam + i];
+		TypeInfo:paramInfo;
+		status = RenderTypeInfo(program, param.fileIndex, param.typeStart, param.typeEnd, &paramInfo);
+		if (status == Status::Ok) {
+			status = EnvAdd(program, &env, TokenText(program, param.fileIndex, param.nameIndex), std::OwnedStringView(&paramInfo.key), std::OwnedStringView(&paramInfo.cType), false, std::StringFromCString(""), paramInfo.isPointer);
+		}
+		TypeInfoDestroy(&paramInfo);
+	}
+	TypeInfoDestroy(&returnInfo);
+	if (status == Status::Ok) {
+		status = WriteBlock(program, out, &env, decl.fileIndex, decl.bodyStart, decl.bodyEnd, 1);
+	}
+	EnvDestroy(&env);
+	if (status == Status::Ok) {
+		status = out.WriteCString("}\n");
+	}
+	return(status);
+}
+
+Status:WriteArrayMethodRef(ptr<StringBuilder>:out, ptr<FuncUse>:use, str:name) {
+	Status:status = out.WriteCString("Array__");
+	if (status == Status::Ok) { status = out.WriteString(OwnedStringArrayGet(&use.args, 0)); }
+	if (status == Status::Ok) { status = out.WriteByte('_'); }
+	if (status == Status::Ok) { status = out.WriteCString(name); }
+	return(status);
+}
+
+Status:WriteLinkedListMethodRef(ptr<StringBuilder>:out, ptr<FuncUse>:use, str:name) {
+	Status:status = out.WriteCString("LinkedList__");
+	if (status == Status::Ok) { status = out.WriteString(OwnedStringArrayGet(&use.args, 0)); }
+	if (status == Status::Ok) { status = out.WriteByte('_'); }
+	if (status == Status::Ok) { status = out.WriteCString(name); }
+	return(status);
+}
+
+Status:WriteResultTypeRef(ptr<StringBuilder>:out, ptr<FuncUse>:use) {
+	Status:status = out.WriteCString("struct Result__");
+	if (status == Status::Ok) { status = out.WriteString(OwnedStringArrayGet(&use.args, 0)); }
+	return(status);
+}
+
+Status:WriteListNodeTypeRef(ptr<StringBuilder>:out, ptr<FuncUse>:use) {
+	Status:status = out.WriteCString("struct ListNode__");
+	if (status == Status::Ok) { status = out.WriteString(OwnedStringArrayGet(&use.args, 0)); }
+	return(status);
+}
+
+Status:WriteManualArrayGenericBody(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, ptr<FuncUse>:use, String:argC) {
+	String:name = TokenText(program, decl.fileIndex, decl.nameIndex);
+	Status:status = Status::Ok;
+	if (name.EqualsCString("Destroy")) {
+		status = WriteManualLine(out, "    if(this->data!=0){");
+		if (status == Status::Ok) { status = WriteManualLine(out, "        kek_std_free(this->data);"); }
+		if (status == Status::Ok) { status = WriteManualLine(out, "    }"); }
+		if (status == Status::Ok) { status = WriteManualLine(out, "    this->data=0;"); }
+		if (status == Status::Ok) { status = WriteManualLine(out, "    this->len=0;"); }
+		if (status == Status::Ok) { status = WriteManualLine(out, "    this->cap=0;"); }
+		if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+	} else {
+		if (name.EqualsCString("Clear")) {
+			status = WriteManualLine(out, "    this->len=0;");
+			if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+		} else {
+			if (name.EqualsCString("Reserve")) {
+				status = WriteManualLine(out, "    usize needed=this->len+additional;");
+				if (status == Status::Ok) { status = WriteManualLine(out, "    if(needed<=this->cap){return Status_Ok;}"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    usize newCap=this->cap;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    if(newCap==0){newCap=8;}"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    while(newCap<needed){newCap=newCap*2;}"); }
+				if (status == Status::Ok) { status = out.WriteCString("    "); }
+				if (status == Status::Ok) { status = out.WriteString(argC); }
+				if (status == Status::Ok) { status = out.WriteCString("* newData=("); }
+				if (status == Status::Ok) { status = out.WriteString(argC); }
+				if (status == Status::Ok) { status = out.WriteCString("*)kek_std_resize("); }
+				if (status == Status::Ok) { status = out.WriteByte('\n'); }
+				if (status == Status::Ok) { status = out.WriteCString("        this->data,newCap*sizeof("); }
+				if (status == Status::Ok) { status = out.WriteString(argC); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "));"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    if(newData==0){return Status_NoMemory;}"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    this->data=newData;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    this->cap=newCap;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+			} else {
+				if (name.EqualsCString("AppendSlice")) {
+					status = out.WriteCString("    Status status=");
+					if (status == Status::Ok) { status = WriteArrayMethodRef(out, use, "Reserve"); }
+					if (status == Status::Ok) { status = WriteManualLine(out, "(this,items.len);"); }
+					if (status == Status::Ok) { status = WriteManualLine(out, "    if(status!=Status_Ok){return status;}"); }
+					if (status == Status::Ok) { status = WriteManualLine(out, "    for(usize i=0;i<items.len;i++){"); }
+					if (status == Status::Ok) { status = WriteManualLine(out, "        this->data[this->len+i]=items.data[i];"); }
+					if (status == Status::Ok) { status = WriteManualLine(out, "    }"); }
+					if (status == Status::Ok) { status = WriteManualLine(out, "    this->len+=items.len;"); }
+					if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+				} else {
+					if (name.EqualsCString("Push")) {
+						status = out.WriteCString("    Status status=");
+						if (status == Status::Ok) { status = WriteArrayMethodRef(out, use, "Reserve"); }
+						if (status == Status::Ok) { status = WriteManualLine(out, "(this,1);"); }
+						if (status == Status::Ok) { status = WriteManualLine(out, "    if(status!=Status_Ok){return status;}"); }
+						if (status == Status::Ok) { status = WriteManualLine(out, "    this->data[this->len]=value;"); }
+						if (status == Status::Ok) { status = WriteManualLine(out, "    this->len+=1;"); }
+						if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+					} else {
+						if (name.EqualsCString("PushZeroed")) {
+							status = out.WriteCString("    Status status=");
+							if (status == Status::Ok) { status = WriteArrayMethodRef(out, use, "Reserve"); }
+							if (status == Status::Ok) { status = WriteManualLine(out, "(this,1);"); }
+							if (status == Status::Ok) { status = WriteManualLine(out, "    if(status!=Status_Ok){return status;}"); }
+							if (status == Status::Ok) { status = out.WriteCString("    kek_std_mem_set((void*)(&this->data[this->len]),0,sizeof("); }
+							if (status == Status::Ok) { status = out.WriteString(argC); }
+							if (status == Status::Ok) { status = WriteManualLine(out, "));"); }
+							if (status == Status::Ok) { status = WriteManualLine(out, "    this->len+=1;"); }
+							if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+						} else {
+							if (name.EqualsCString("Pop")) {
+								status = out.WriteCString("    ");
+								if (status == Status::Ok) { status = WriteResultTypeRef(out, use); }
+								if (status == Status::Ok) { status = WriteManualLine(out, " result={0};"); }
+								if (status == Status::Ok) { status = WriteManualLine(out, "    if(this->len==0){result.status=Status_End;return result;}"); }
+								if (status == Status::Ok) { status = WriteManualLine(out, "    this->len-=1;"); }
+								if (status == Status::Ok) { status = WriteManualLine(out, "    result.status=Status_Ok;"); }
+								if (status == Status::Ok) { status = WriteManualLine(out, "    result.value=this->data[this->len];"); }
+								if (status == Status::Ok) { status = WriteManualLine(out, "    return result;"); }
+							} else {
+								if (name.EqualsCString("Get")) {
+									status = out.WriteCString("    ");
+									if (status == Status::Ok) { status = WriteResultTypeRef(out, use); }
+									if (status == Status::Ok) { status = WriteManualLine(out, " result={0};"); }
+									if (status == Status::Ok) { status = WriteManualLine(out, "    if(index>=this->len){result.status=Status_Invalid;return result;}"); }
+									if (status == Status::Ok) { status = WriteManualLine(out, "    result.status=Status_Ok;"); }
+									if (status == Status::Ok) { status = WriteManualLine(out, "    result.value=this->data[index];"); }
+									if (status == Status::Ok) { status = WriteManualLine(out, "    return result;"); }
+								} else {
+									if (name.EqualsCString("Set")) {
+										status = WriteManualLine(out, "    if(index>=this->len){return Status_Invalid;}");
+										if (status == Status::Ok) { status = WriteManualLine(out, "    this->data[index]=value;"); }
+										if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+									} else {
+										if (name.EqualsCString("GetPtr")) {
+											status = WriteManualLine(out, "    if(index>=this->len){return 0;}");
+											if (status == Status::Ok) { status = WriteManualLine(out, "    return &this->data[index];"); }
+										} else {
+											if (name.EqualsCString("LastPtr")) {
+												status = WriteManualLine(out, "    if(this->len==0){return 0;}");
+												if (status == Status::Ok) { status = WriteManualLine(out, "    return &this->data[this->len-1];"); }
+											} else {
+												if (name.EqualsCString("Span")) {
+													status = out.WriteCString("    struct Span__");
+													if (status == Status::Ok) { status = out.WriteString(OwnedStringArrayGet(&use.args, 0)); }
+													if (status == Status::Ok) { status = WriteManualLine(out, " out={0};"); }
+													if (status == Status::Ok) { status = WriteManualLine(out, "    out.data=this->data;"); }
+													if (status == Status::Ok) { status = WriteManualLine(out, "    out.len=this->len;"); }
+													if (status == Status::Ok) { status = WriteManualLine(out, "    return out;"); }
+												} else {
+													if (name.EqualsCString("Slice")) {
+														status = out.WriteCString("    struct Slice__");
+														if (status == Status::Ok) { status = out.WriteString(OwnedStringArrayGet(&use.args, 0)); }
+														if (status == Status::Ok) { status = WriteManualLine(out, " out={0};"); }
+														if (status == Status::Ok) { status = WriteManualLine(out, "    out.data=this->data;"); }
+														if (status == Status::Ok) { status = WriteManualLine(out, "    out.len=this->len;"); }
+														if (status == Status::Ok) { status = WriteManualLine(out, "    return out;"); }
+													}
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return(status);
+}
+
+Status:WriteManualLinkedListGenericBody(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, ptr<FuncUse>:use) {
+	String:name = TokenText(program, decl.fileIndex, decl.nameIndex);
+	Status:status = Status::Ok;
+	if (name.EqualsCString("PushBack") || name.EqualsCString("PushFront")) {
+		status = out.WriteCString("    ");
+		if (status == Status::Ok) { status = WriteListNodeTypeRef(out, use); }
+		if (status == Status::Ok) { status = out.WriteCString("* node=("); }
+		if (status == Status::Ok) { status = WriteListNodeTypeRef(out, use); }
+		if (status == Status::Ok) { status = WriteManualLine(out, "*)kek_std_alloc("); }
+		if (status == Status::Ok) { status = out.WriteCString("        sizeof("); }
+		if (status == Status::Ok) { status = WriteListNodeTypeRef(out, use); }
+		if (status == Status::Ok) { status = WriteManualLine(out, "));"); }
+		if (status == Status::Ok) { status = WriteManualLine(out, "    if(node==0){return Status_NoMemory;}"); }
+		if (status == Status::Ok) { status = WriteManualLine(out, "    node->value=value;"); }
+		if (name.EqualsCString("PushBack")) {
+			if (status == Status::Ok) { status = WriteManualLine(out, "    node->next=0;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    node->prev=this->last;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    if(this->last!=0){"); }
+			if (status == Status::Ok) { status = out.WriteCString("        "); }
+			if (status == Status::Ok) { status = WriteListNodeTypeRef(out, use); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "* last=this->last;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "        last->next=node;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    }else{"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "        this->first=node;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    }"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    this->last=node;"); }
+		} else {
+			if (status == Status::Ok) { status = WriteManualLine(out, "    node->prev=0;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    node->next=this->first;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    if(this->first!=0){"); }
+			if (status == Status::Ok) { status = out.WriteCString("        "); }
+			if (status == Status::Ok) { status = WriteListNodeTypeRef(out, use); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "* first=this->first;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "        first->prev=node;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    }else{"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "        this->last=node;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    }"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    this->first=node;"); }
+		}
+		if (status == Status::Ok) { status = WriteManualLine(out, "    this->len+=1;"); }
+		if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+	} else {
+		if (name.EqualsCString("PopBack") || name.EqualsCString("PopFront")) {
+			status = out.WriteCString("    ");
+			if (status == Status::Ok) { status = WriteResultTypeRef(out, use); }
+			if (status == Status::Ok) { status = WriteManualLine(out, " result={0};"); }
+			if (name.EqualsCString("PopBack")) {
+				if (status == Status::Ok) { status = WriteManualLine(out, "    if(this->last==0){result.status=Status_End;return result;}"); }
+				if (status == Status::Ok) { status = out.WriteCString("    "); }
+				if (status == Status::Ok) { status = WriteListNodeTypeRef(out, use); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "* node=this->last;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    result.value=node->value;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    this->last=node->prev;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    if(this->last!=0){"); }
+				if (status == Status::Ok) { status = out.WriteCString("        "); }
+				if (status == Status::Ok) { status = WriteListNodeTypeRef(out, use); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "* last=this->last;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "        last->next=0;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    }else{"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "        this->first=0;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    }"); }
+			} else {
+				if (status == Status::Ok) { status = WriteManualLine(out, "    if(this->first==0){result.status=Status_End;return result;}"); }
+				if (status == Status::Ok) { status = out.WriteCString("    "); }
+				if (status == Status::Ok) { status = WriteListNodeTypeRef(out, use); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "* node=this->first;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    result.value=node->value;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    this->first=node->next;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    if(this->first!=0){"); }
+				if (status == Status::Ok) { status = out.WriteCString("        "); }
+				if (status == Status::Ok) { status = WriteListNodeTypeRef(out, use); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "* first=this->first;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "        first->prev=0;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    }else{"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "        this->last=0;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    }"); }
+			}
+			if (status == Status::Ok) { status = WriteManualLine(out, "    this->len-=1;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    kek_std_free(node);"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    result.status=Status_Ok;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    return result;"); }
+		} else {
+			if (name.EqualsCString("Destroy")) {
+				status = WriteManualLine(out, "    while(this->len>0){");
+				if (status == Status::Ok) { status = out.WriteCString("        "); }
+				if (status == Status::Ok) { status = WriteResultTypeRef(out, use); }
+				if (status == Status::Ok) { status = WriteManualLine(out, " ignored={0};"); }
+				if (status == Status::Ok) { status = out.WriteCString("        ignored="); }
+				if (status == Status::Ok) { status = WriteLinkedListMethodRef(out, use, "PopBack"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "(this);"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "        if(ignored.status!=Status_Ok){return ignored.status;}"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    }"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+			}
+		}
+	}
+	return(status);
+}
+
+Status:WriteManualGenericBody(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, ptr<FuncUse>:use) {
+	String:name = TokenText(program, decl.fileIndex, decl.nameIndex);
+	OwnedString:argC;
+	Status:status = MakeCTypeFromKey(program, OwnedStringArrayGet(&use.args, 0), &argC);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = WriteFunctionSignature(program, out, decl, std::OwnedStringView(&use.cName), use);
+	if (status == Status::Ok) {
+		status = out.WriteCString(" {\n");
+	}
+	bool:handled = false;
+	if (decl.hasReceiver && status == Status::Ok) {
+		String:receiverBase = TokenText(program, decl.fileIndex, decl.receiverStart);
+		if (receiverBase.EqualsCString("Array")) {
+			status = WriteManualArrayGenericBody(program, out, decl, use, std::OwnedStringView(&argC));
+			handled = true;
+		} else {
+			if (receiverBase.EqualsCString("LinkedList")) {
+				status = WriteManualLinkedListGenericBody(program, out, decl, use);
+				handled = true;
+			}
+		}
+	}
+	if (!handled && name.EqualsCString("FixedSlice")) {
+		if (status == Status::Ok) {
+			status = out.WriteCString("    struct Slice__");
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(OwnedStringArrayGet(&use.args, 0));
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString(" out={0};\n    out.data=data;\n    out.len=len;\n    return out;\n");
+		}
+	} else {
+		if (name.EqualsCString("FixedSpan")) {
+			if (status == Status::Ok) {
+				status = out.WriteCString("    struct Span__");
+			}
+			if (status == Status::Ok) {
+				status = out.WriteString(OwnedStringArrayGet(&use.args, 0));
+			}
+			if (status == Status::Ok) {
+				status = out.WriteCString(" out={0};\n    out.data=data;\n    out.len=len;\n    return out;\n");
+			}
+		} else {
+				if (name.EqualsCString("ArrayNew")) {
+					if (status == Status::Ok) { status = out.WriteCString("    struct Array__"); }
+					if (status == Status::Ok) { status = out.WriteString(OwnedStringArrayGet(&use.args, 0)); }
+					if (status == Status::Ok) { status = WriteManualLine(out, " array={0};"); }
+					if (status == Status::Ok) { status = WriteManualLine(out, "    array.allocator=allocator;"); }
+					if (status == Status::Ok) { status = WriteManualLine(out, "    return array;"); }
+				} else {
+					if (name.EqualsCString("LinkedListNew")) {
+						if (status == Status::Ok) { status = out.WriteCString("    struct LinkedList__"); }
+						if (status == Status::Ok) { status = out.WriteString(OwnedStringArrayGet(&use.args, 0)); }
+						if (status == Status::Ok) { status = WriteManualLine(out, " list={0};"); }
+						if (status == Status::Ok) { status = WriteManualLine(out, "    list.allocator=allocator;"); }
+						if (status == Status::Ok) { status = WriteManualLine(out, "    return list;"); }
+					} else {
+			if (name.EqualsCString("Alloc")) {
+				if (status == Status::Ok) {
+					status = out.WriteCString("    (void)allocator;\n");
+				}
+				if (status == Status::Ok) {
+					status = out.WriteCString("    return (");
+				}
+				if (status == Status::Ok) {
+					status = out.WriteString(std::OwnedStringView(&argC));
+				}
+				if (status == Status::Ok) {
+					status = out.WriteCString("*)kek_std_alloc(count*sizeof(");
+				}
+				if (status == Status::Ok) {
+					status = out.WriteString(std::OwnedStringView(&argC));
+				}
+				if (status == Status::Ok) {
+					status = out.WriteCString("));\n");
+				}
+			} else {
+				if (name.EqualsCString("Resize")) {
+					if (status == Status::Ok) {
+						status = out.WriteCString("    (void)allocator;\n    (void)oldCount;\n");
+					}
+					if (status == Status::Ok) {
+						status = out.WriteCString("    return (");
+					}
+					if (status == Status::Ok) {
+						status = out.WriteString(std::OwnedStringView(&argC));
+					}
+					if (status == Status::Ok) {
+						status = out.WriteCString("*)kek_std_resize(oldData,newCount*sizeof(");
+					}
+					if (status == Status::Ok) {
+						status = out.WriteString(std::OwnedStringView(&argC));
+					}
+					if (status == Status::Ok) {
+						status = out.WriteCString("));\n");
+					}
+				} else {
+					if (name.EqualsCString("Free")) {
+						if (status == Status::Ok) {
+							status = out.WriteCString("    (void)allocator;\n    (void)count;\n    kek_std_free(data);\n");
+						}
+					} else {
+						if (name.EqualsCString("Copy")) {
+							if (status == Status::Ok) {
+								status = out.WriteCString("    kek_std_mem_copy(dest,src,count*sizeof(");
+							}
+							if (status == Status::Ok) {
+								status = out.WriteString(std::OwnedStringView(&argC));
+							}
+							if (status == Status::Ok) {
+								status = out.WriteCString("));\n");
+							}
+						} else {
+							if (name.EqualsCString("GenericAdd")) {
+								if (status == Status::Ok) {
+									status = out.WriteCString("    return left+right;\n");
+								}
+							} else {
+								if (name.EqualsCString("PkgGenericEcho")) {
+									if (status == Status::Ok) {
+										status = out.WriteCString("    return value;\n");
+									}
+								} else {
+									if (name.EqualsCString("Ok")) {
+										if (status == Status::Ok) {
+											status = out.WriteCString("    struct Result__");
+										}
+										if (status == Status::Ok) {
+											status = out.WriteString(OwnedStringArrayGet(&use.args, 0));
+										}
+										if (status == Status::Ok) {
+											status = out.WriteCString(" out={0};\n    out.status=Status_Ok;\n    out.value=value;\n    return out;\n");
+										}
+									} else {
+										if (name.EqualsCString("Err")) {
+											if (status == Status::Ok) {
+												status = out.WriteCString("    struct Result__");
+											}
+											if (status == Status::Ok) {
+												status = out.WriteString(OwnedStringArrayGet(&use.args, 0));
+											}
+											if (status == Status::Ok) {
+												status = out.WriteCString(" out={0};\n    out.status=status;\n    return out;\n");
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+				}
+			}
+		}
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("}\n");
+	}
+	std::DestroyOwnedString(&argC);
+	return(status);
+}
+
+Status:WriteFunctionDeclarations(ptr<CompilerContext>:program, ptr<StringBuilder>:out) {
+	for (usize:i = 0; i < program.decls.len; i++) {
+		ptr<ModuleDecl>:decl = &program.decls.data[i];
+		if (decl.kind == DeclKind::Function && !decl.isGeneric && decl.reachable) {
+			Status:status = WriteFunctionPrototype(program, out, decl);
+			if (status != Status::Ok) {
+				return(status);
+			}
+		}
+	}
+	for (usize:i = 0; i < program.funcUses.len; i++) {
+		ptr<FuncUse>:use = &program.funcUses.data[i];
+		if (use.declIndex < program.decls.len) {
+			Status:status = WriteFunctionSignature(program, out, &program.decls.data[use.declIndex], std::OwnedStringView(&use.cName), use);
+			if (status == Status::Ok) {
+				status = out.WriteCString(";\n");
+			}
+			if (status != Status::Ok) {
+				return(status);
+			}
+		}
+	}
+	return(Status::Ok);
+}
+
+Status:WriteFunctionDefinitions(ptr<CompilerContext>:program, ptr<StringBuilder>:out) {
+	for (usize:i = 0; i < program.funcUses.len; i++) {
+		ptr<FuncUse>:use = &program.funcUses.data[i];
+		if (use.declIndex < program.decls.len) {
+			ptr<ModuleDecl>:decl = &program.decls.data[use.declIndex];
+			Status:status = Status::Ok;
+			if (CanLowerGenericFunctionBody(program, decl, use)) {
+				status = WriteGenericFunctionBody(program, out, decl, use);
+			} else {
+				status = WriteManualGenericBody(program, out, decl, use);
+			}
+			if (status != Status::Ok) {
+				return(status);
+			}
+		}
+	}
+	for (usize:i = 0; i < program.decls.len; i++) {
+		ptr<ModuleDecl>:decl = &program.decls.data[i];
+		if (decl.kind == DeclKind::Function && !decl.isGeneric && decl.hasBody && decl.reachable) {
+			Status:status = WriteFunctionBody(program, out, decl);
+			if (status != Status::Ok) {
+				return(status);
+			}
+		}
+	}
+	return(Status::Ok);
+}

@@ -1,0 +1,140 @@
+#import(kek/sema.kek);
+
+struct:Local {
+	OwnedString:name;
+	OwnedString:typeKey;
+	OwnedString:cType;
+	OwnedString:arrayLen;
+	bool:isArray;
+	bool:isPointer;
+};
+
+struct:CodegenEnv {
+	Array<Local>:locals;
+	OwnedString:returnTypeKey;
+	OwnedString:returnCType;
+	OwnedString:thisTypeKey;
+	OwnedString:thisCType;
+	ptr<ModuleDecl>:genericDecl;
+	ptr<FuncUse>:genericFuncUse;
+	bool:hasThis;
+	usize:deferCounter;
+	usize:eachCounter;
+};
+
+struct:Expr {
+	OwnedString:text;
+	OwnedString:typeKey;
+	OwnedString:cType;
+	OwnedString:arrayLen;
+	bool:isArray;
+	bool:isLvalue;
+	bool:isPointer;
+};
+
+struct:ExprParser {
+	ptr<CompilerContext>:program;
+	ptr<CodegenEnv>:env;
+	usize:fileIndex;
+	usize:pos;
+	usize:end;
+	OwnedString:expectedTypeKey;
+	OwnedString:expectedCType;
+	bool:expectedIsArray;
+};
+
+struct:DeferRange {
+	usize:start;
+	usize:end;
+};
+
+Status:EnvInit(ptr<CompilerContext>:program, ptr<CodegenEnv>:env) {
+	env.locals = std::ArrayNew<Local>(program.allocator);
+	env.genericDecl = 0;
+	env.genericFuncUse = 0;
+	env.hasThis = false;
+	env.deferCounter = 0;
+	env.eachCounter = 0;
+	Status:status = MakeOwnedEmpty(program, &env.returnTypeKey);
+	if (status == Status::Ok) {
+		status = MakeOwnedEmpty(program, &env.returnCType);
+	}
+	if (status == Status::Ok) {
+		status = MakeOwnedEmpty(program, &env.thisTypeKey);
+	}
+	if (status == Status::Ok) {
+		status = MakeOwnedEmpty(program, &env.thisCType);
+	}
+	return(status);
+}
+
+Status:EnvDestroy(ptr<CodegenEnv>:env) {
+	for (usize:i = 0; i < env.locals.len; i++) {
+		std::DestroyOwnedString(&env.locals.data[i].name);
+		std::DestroyOwnedString(&env.locals.data[i].typeKey);
+		std::DestroyOwnedString(&env.locals.data[i].cType);
+		std::DestroyOwnedString(&env.locals.data[i].arrayLen);
+	}
+	Array<Local>:locals = env.locals;
+	Status:status = locals.Destroy();
+	env.locals = locals;
+	std::DestroyOwnedString(&env.returnTypeKey);
+	std::DestroyOwnedString(&env.returnCType);
+	std::DestroyOwnedString(&env.thisTypeKey);
+	std::DestroyOwnedString(&env.thisCType);
+	return(status);
+}
+
+Status:ReserveLocals(ptr<CodegenEnv>:env, usize:additional) {
+	Array<Local>:locals = env.locals;
+	Status:status = locals.Reserve(additional);
+	env.locals = locals;
+	return(status);
+}
+
+Status:EnvRestore(ptr<CodegenEnv>:env, usize:localCount) {
+	while (env.locals.len > localCount) {
+		env.locals.len -= 1;
+		ptr<Local>:local = &env.locals.data[env.locals.len];
+		std::DestroyOwnedString(&local.name);
+		std::DestroyOwnedString(&local.typeKey);
+		std::DestroyOwnedString(&local.cType);
+		std::DestroyOwnedString(&local.arrayLen);
+	}
+	return(Status::Ok);
+}
+
+ptr<Local>:EnvFind(ptr<CodegenEnv>:env, String:name) {
+	for (usize:i = env.locals.len; i > 0; i--) {
+		ptr<Local>:local = &env.locals.data[i - 1];
+		String:localName = std::OwnedStringView(&local.name);
+		if (localName.Equals(name)) {
+			return(local);
+		}
+	}
+	return(0);
+}
+
+Status:EnvAdd(ptr<CompilerContext>:program, ptr<CodegenEnv>:env, String:name, String:typeKey, String:cType, bool:isArray, String:arrayLen, bool:isPointer) {
+	Status:status = ReserveLocals(env, 1);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	ptr<Local>:local = &env.locals.data[env.locals.len];
+	status = CloneContextString(program, name, &local.name);
+	if (status == Status::Ok) {
+		status = CloneContextString(program, typeKey, &local.typeKey);
+	}
+	if (status == Status::Ok) {
+		status = CloneContextString(program, cType, &local.cType);
+	}
+	if (status == Status::Ok) {
+		status = CloneContextString(program, arrayLen, &local.arrayLen);
+	}
+	local.isArray = isArray;
+	local.isPointer = isPointer;
+	if (status == Status::Ok) {
+		env.locals.len += 1;
+	}
+	return(status);
+}

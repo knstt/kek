@@ -1,5 +1,306 @@
 #import(kek/module.kek);
 
+bool:IsTypeDeclKind(DeclKind:kind) {
+	return(kind == DeclKind::Struct || kind == DeclKind::Union || kind == DeclKind::Enum || kind == DeclKind::Alias);
+}
+
+int:DeclNameIndexCompare(ptr<DeclNameIndexEntry>:left, ptr<DeclNameIndexEntry>:right) {
+	String:leftName = std::OwnedStringView(&left.name);
+	String:rightName = std::OwnedStringView(&right.name);
+	int:nameCompare = leftName.Compare(rightName);
+	if (nameCompare != 0) {
+		return(nameCompare);
+	}
+	if (left.declIndex < right.declIndex) {
+		return(-1);
+	}
+	if (left.declIndex > right.declIndex) {
+		return(1);
+	}
+	return(0);
+}
+
+Status:SortDeclNameIndex(ptr<Array<DeclNameIndexEntry>>:items) {
+	for (usize:i = 1; i < items.len; i++) {
+		DeclNameIndexEntry:value = items.data[i];
+		usize:j = i;
+		while (j > 0 && DeclNameIndexCompare(&value, &items.data[j - 1]) < 0) {
+			items.data[j] = items.data[j - 1];
+			j -= 1;
+		}
+		items.data[j] = value;
+	}
+	return(Status::Ok);
+}
+
+Status:ClearDeclNameIndex(ptr<Array<DeclNameIndexEntry>>:items) {
+	for (usize:i = 0; i < items.len; i++) {
+		std::DestroyOwnedString(&items.data[i].name);
+		std::DestroyOwnedString(&items.data[i].scope);
+	}
+	items.len = 0;
+	return(Status::Ok);
+}
+
+int:MethodDeclIndexCompare(ptr<MethodDeclIndexEntry>:left, ptr<MethodDeclIndexEntry>:right) {
+	String:leftReceiver = std::OwnedStringView(&left.receiverKey);
+	String:rightReceiver = std::OwnedStringView(&right.receiverKey);
+	int:receiverCompare = leftReceiver.Compare(rightReceiver);
+	if (receiverCompare != 0) {
+		return(receiverCompare);
+	}
+	String:leftName = std::OwnedStringView(&left.name);
+	String:rightName = std::OwnedStringView(&right.name);
+	int:nameCompare = leftName.Compare(rightName);
+	if (nameCompare != 0) {
+		return(nameCompare);
+	}
+	if (left.isOperator && !right.isOperator) {
+		return(-1);
+	}
+	if (!left.isOperator && right.isOperator) {
+		return(1);
+	}
+	if (left.operatorCode < right.operatorCode) {
+		return(-1);
+	}
+	if (left.operatorCode > right.operatorCode) {
+		return(1);
+	}
+	if (left.paramCount < right.paramCount) {
+		return(-1);
+	}
+	if (left.paramCount > right.paramCount) {
+		return(1);
+	}
+	if (left.declIndex < right.declIndex) {
+		return(-1);
+	}
+	if (left.declIndex > right.declIndex) {
+		return(1);
+	}
+	return(0);
+}
+
+Status:SortMethodDeclIndex(ptr<Array<MethodDeclIndexEntry>>:items) {
+	for (usize:i = 1; i < items.len; i++) {
+		MethodDeclIndexEntry:value = items.data[i];
+		usize:j = i;
+		while (j > 0 && MethodDeclIndexCompare(&value, &items.data[j - 1]) < 0) {
+			items.data[j] = items.data[j - 1];
+			j -= 1;
+		}
+		items.data[j] = value;
+	}
+	return(Status::Ok);
+}
+
+Status:ClearMethodDeclIndex(ptr<Array<MethodDeclIndexEntry>>:items) {
+	for (usize:i = 0; i < items.len; i++) {
+		std::DestroyOwnedString(&items.data[i].receiverKey);
+		std::DestroyOwnedString(&items.data[i].name);
+	}
+	items.len = 0;
+	return(Status::Ok);
+}
+
+Status:AddDeclNameIndexEntry(ptr<CompilerContext>:program, ptr<Array<DeclNameIndexEntry>>:items, String:name, String:scope, usize:declIndex) {
+	DeclNameIndexEntry:entry;
+	Status:status = CloneContextString(program, name, &entry.name);
+	if (status == Status::Ok) {
+		status = CloneContextString(program, scope, &entry.scope);
+	}
+	entry.declIndex = declIndex;
+	if (status == Status::Ok) {
+		Array<DeclNameIndexEntry>:indexItems = items[0];
+		status = indexItems.Push(entry);
+		items[0] = indexItems;
+	}
+	if (status != Status::Ok) {
+		std::DestroyOwnedString(&entry.name);
+		std::DestroyOwnedString(&entry.scope);
+	}
+	return(status);
+}
+
+Status:AddMethodDeclIndexEntry(ptr<CompilerContext>:program, ptr<Array<MethodDeclIndexEntry>>:items, ptr<ModuleDecl>:decl, usize:declIndex) {
+	MethodDeclIndexEntry:entry;
+	StringBuilder:receiver = std::StringBuilderNew(program.allocator);
+	Status:status = WriteTypeSuffixFromRange(program, &receiver, decl.fileIndex, decl.receiverStart, decl.receiverEnd);
+	if (status == Status::Ok) {
+		status = DetachBuilder(&receiver, &entry.receiverKey);
+	}
+	receiver.Destroy();
+	if (status == Status::Ok) {
+		if (decl.isOperator) {
+			status = CloneContextCString(program, "", &entry.name);
+		} else {
+			status = CloneContextString(program, TokenText(program, decl.fileIndex, decl.nameIndex), &entry.name);
+		}
+	}
+	entry.declIndex = declIndex;
+	entry.operatorCode = decl.operatorCode;
+	entry.paramCount = decl.paramCount;
+	entry.isOperator = decl.isOperator;
+	if (status == Status::Ok) {
+		Array<MethodDeclIndexEntry>:indexItems = items[0];
+		status = indexItems.Push(entry);
+		items[0] = indexItems;
+	}
+	if (status != Status::Ok) {
+		std::DestroyOwnedString(&entry.receiverKey);
+		std::DestroyOwnedString(&entry.name);
+	}
+	return(status);
+}
+
+String:ModuleDeclScopeName(ptr<ModuleDecl>:decl) {
+	String:packageName = std::OwnedStringView(&decl.packageName);
+	if (packageName.len > 0) {
+		return(packageName);
+	}
+	return(std::OwnedStringView(&decl.moduleName));
+}
+
+Status:BuildDeclIndexes(ptr<CompilerContext>:program) {
+	ClearDeclNameIndex(&program.typeDeclIndex);
+	ClearDeclNameIndex(&program.functionDeclIndex);
+	ClearMethodDeclIndex(&program.methodDeclIndex);
+	Status:status = ReserveTypeDeclIndex(program, program.decls.len);
+	if (status == Status::Ok) {
+		status = ReserveFunctionDeclIndex(program, program.decls.len);
+	}
+	if (status == Status::Ok) {
+		status = ReserveMethodDeclIndex(program, program.decls.len);
+	}
+	for (usize:i = 0; i < program.decls.len && status == Status::Ok; i++) {
+		ptr<ModuleDecl>:decl = &program.decls.data[i];
+		String:name = TokenText(program, decl.fileIndex, decl.nameIndex);
+		if (IsTypeDeclKind(decl.kind)) {
+			status = AddDeclNameIndexEntry(program, &program.typeDeclIndex, name, std::StringFromCString(""), i);
+		} else {
+			if (decl.kind == DeclKind::Function && !decl.hasReceiver) {
+				status = AddDeclNameIndexEntry(program, &program.functionDeclIndex, name, ModuleDeclScopeName(decl), i);
+			} else {
+				if (decl.kind == DeclKind::Function && decl.hasReceiver) {
+					status = AddMethodDeclIndexEntry(program, &program.methodDeclIndex, decl, i);
+				}
+			}
+		}
+	}
+	if (status == Status::Ok) {
+		status = SortDeclNameIndex(&program.typeDeclIndex);
+	}
+	if (status == Status::Ok) {
+		status = SortDeclNameIndex(&program.functionDeclIndex);
+	}
+	if (status == Status::Ok) {
+		status = SortMethodDeclIndex(&program.methodDeclIndex);
+	}
+	return(status);
+}
+
+ptr<ModuleDecl>:FindDeclByIndexedName(ptr<CompilerContext>:program, ptr<Array<DeclNameIndexEntry>>:items, String:name, String:scope) {
+	usize:low = 0;
+	usize:high = items.len;
+	while (low < high) {
+		usize:mid = low + (high - low) / 2;
+		String:midName = std::OwnedStringView(&items.data[mid].name);
+		int:nameCompare = midName.Compare(name);
+		if (nameCompare < 0) {
+			low = mid + 1;
+			continue;
+		}
+		if (nameCompare > 0) {
+			high = mid;
+			continue;
+		}
+		while (mid > 0) {
+			String:prevName = std::OwnedStringView(&items.data[mid - 1].name);
+			if (!prevName.Equals(name)) {
+				break;
+			}
+			mid -= 1;
+		}
+		for (usize:i = mid; i < items.len; i++) {
+			String:itemName = std::OwnedStringView(&items.data[i].name);
+			if (!itemName.Equals(name)) {
+				break;
+			}
+			String:itemScope = std::OwnedStringView(&items.data[i].scope);
+			if (scope.len == 0 || itemScope.Equals(scope)) {
+				return(&program.decls.data[items.data[i].declIndex]);
+			}
+		}
+		return(0);
+	}
+	return(0);
+}
+
+ptr<ModuleDecl>:FindIndexedTypeDecl(ptr<CompilerContext>:program, String:name) {
+	if (program.typeDeclIndex.len == 0) {
+		return(0);
+	}
+	return(FindDeclByIndexedName(program, &program.typeDeclIndex, name, std::StringFromCString("")));
+}
+
+ptr<ModuleDecl>:FindIndexedFunctionDeclByName(ptr<CompilerContext>:program, String:name, String:scopeName) {
+	if (program.functionDeclIndex.len == 0) {
+		return(0);
+	}
+	return(FindDeclByIndexedName(program, &program.functionDeclIndex, name, scopeName));
+}
+
+ptr<ModuleDecl>:FindIndexedMethodDecl(ptr<CompilerContext>:program, String:receiverType, String:name, bool:isOperator, u8:operatorCode, usize:argCount) {
+	if (program.methodDeclIndex.len == 0) {
+		return(0);
+	}
+	usize:low = 0;
+	usize:high = program.methodDeclIndex.len;
+	while (low < high) {
+		usize:mid = low + (high - low) / 2;
+		String:midReceiver = std::OwnedStringView(&program.methodDeclIndex.data[mid].receiverKey);
+		int:compare = midReceiver.Compare(receiverType);
+		if (compare < 0) {
+			low = mid + 1;
+			continue;
+		}
+		if (compare > 0) {
+			high = mid;
+			continue;
+		}
+		while (mid > 0) {
+			String:prevReceiver = std::OwnedStringView(&program.methodDeclIndex.data[mid - 1].receiverKey);
+			if (!prevReceiver.Equals(receiverType)) {
+				break;
+			}
+			mid -= 1;
+		}
+		for (usize:i = mid; i < program.methodDeclIndex.len; i++) {
+			ptr<MethodDeclIndexEntry>:entry = &program.methodDeclIndex.data[i];
+			String:itemReceiver = std::OwnedStringView(&entry.receiverKey);
+			if (!itemReceiver.Equals(receiverType)) {
+				break;
+			}
+			if (entry.isOperator != isOperator) {
+				continue;
+			}
+			if (isOperator) {
+				if (entry.operatorCode == operatorCode && entry.paramCount == argCount) {
+					return(&program.decls.data[entry.declIndex]);
+				}
+			} else {
+				String:itemName = std::OwnedStringView(&entry.name);
+				if (itemName.Equals(name)) {
+					return(&program.decls.data[entry.declIndex]);
+				}
+			}
+		}
+		return(0);
+	}
+	return(0);
+}
+
 bool:MarkDeclReachable(ptr<ModuleDecl>:decl) {
 	if (decl.reachable) {
 		return(false);
@@ -262,9 +563,12 @@ Status:TypeInfoDestroy(ptr<TypeInfo>:info) {
 	std::DestroyOwnedString(&info.key);
 	std::DestroyOwnedString(&info.cType);
 	std::DestroyOwnedString(&info.baseName);
-	std::DestroyOwnedString(&info.arg0);
-	std::DestroyOwnedString(&info.arg1);
-	std::DestroyOwnedString(&info.arg2);
+	for (usize:i = 0; i < info.args.len; i++) {
+		std::DestroyOwnedString(&info.args.data[i]);
+	}
+	Array<OwnedString>:args = info.args;
+	args.Destroy();
+	info.args = args;
 	return(Status::Ok);
 }
 
@@ -276,17 +580,55 @@ Status:TypeInfoInitEmpty(ptr<CompilerContext>:program, ptr<TypeInfo>:info) {
 	if (status == Status::Ok) {
 		status = MakeOwnedEmpty(program, &info.baseName);
 	}
-	if (status == Status::Ok) {
-		status = MakeOwnedEmpty(program, &info.arg0);
-	}
-	if (status == Status::Ok) {
-		status = MakeOwnedEmpty(program, &info.arg1);
-	}
-	if (status == Status::Ok) {
-		status = MakeOwnedEmpty(program, &info.arg2);
-	}
-	info.argCount = 0;
+	info.args = std::ArrayNew<OwnedString>(program.allocator);
 	info.isPointer = false;
+	return(status);
+}
+
+String:OwnedStringArrayGet(ptr<Array<OwnedString>>:args, usize:index) {
+	if (index >= args.len) {
+		return(std::StringFromCString(""));
+	}
+	return(std::OwnedStringView(&args.data[index]));
+}
+
+Status:OwnedStringArrayPushClone(ptr<CompilerContext>:program, ptr<Array<OwnedString>>:args, String:value) {
+	OwnedString:clone;
+	Status:status = CloneContextString(program, value, &clone);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = args.Push(clone);
+	if (status != Status::Ok) {
+		std::DestroyOwnedString(&clone);
+	}
+	return(status);
+}
+
+Status:CloneOwnedStringArray(ptr<CompilerContext>:program, ptr<Array<OwnedString>>:source, ptr<Array<OwnedString>>:target) {
+	target[0] = std::ArrayNew<OwnedString>(program.allocator);
+	for (usize:i = 0; i < source.len; i++) {
+		Status:status = OwnedStringArrayPushClone(program, target, std::OwnedStringView(&source.data[i]));
+		if (status != Status::Ok) {
+			for (usize:j = 0; j < target.len; j++) {
+				std::DestroyOwnedString(&target.data[j]);
+			}
+			Array<OwnedString>:items = target[0];
+			items.Destroy();
+			target[0] = items;
+			return(status);
+		}
+	}
+	return(Status::Ok);
+}
+
+Status:DestroyOwnedStringArray(ptr<Array<OwnedString>>:args) {
+	for (usize:i = 0; i < args.len; i++) {
+		std::DestroyOwnedString(&args.data[i]);
+	}
+	Array<OwnedString>:items = args[0];
+	Status:status = items.Destroy();
+	args[0] = items;
 	return(status);
 }
 
@@ -462,30 +804,7 @@ Status:RenderTypeInfo(ptr<CompilerContext>:program, usize:fileIndex, usize:start
 			if (status != Status::Ok) {
 				return(status);
 			}
-			if (info.argCount == 0) {
-				OwnedString:cloneArg;
-				status = CloneContextString(program, std::OwnedStringView(&argInfo.key), &cloneArg);
-				if (status == Status::Ok) {
-					status = ReplaceOwned(&info.arg0, cloneArg);
-				}
-			} else {
-				if (info.argCount == 1) {
-					OwnedString:cloneArg1;
-					status = CloneContextString(program, std::OwnedStringView(&argInfo.key), &cloneArg1);
-					if (status == Status::Ok) {
-						status = ReplaceOwned(&info.arg1, cloneArg1);
-					}
-				} else {
-					if (info.argCount == 2) {
-						OwnedString:cloneArg2;
-						status = CloneContextString(program, std::OwnedStringView(&argInfo.key), &cloneArg2);
-						if (status == Status::Ok) {
-							status = ReplaceOwned(&info.arg2, cloneArg2);
-						}
-					}
-				}
-			}
-			info.argCount += 1;
+			status = OwnedStringArrayPushClone(program, &info.args, std::OwnedStringView(&argInfo.key));
 			TypeInfoDestroy(&argInfo);
 			if (status != Status::Ok) {
 				return(status);
@@ -511,7 +830,7 @@ bool:TypeUseExists(ptr<CompilerContext>:program, String:key) {
 }
 
 Status:AddTypeUse(ptr<CompilerContext>:program, ptr<TypeInfo>:info) {
-	if (info.argCount == 0) {
+	if (info.args.len == 0) {
 		return(Status::Ok);
 	}
 	String:key = std::OwnedStringView(&info.key);
@@ -531,15 +850,8 @@ Status:AddTypeUse(ptr<CompilerContext>:program, ptr<TypeInfo>:info) {
 		status = CloneContextString(program, std::OwnedStringView(&info.baseName), &use.baseName);
 	}
 	if (status == Status::Ok) {
-		status = CloneContextString(program, std::OwnedStringView(&info.arg0), &use.arg0);
+		status = CloneOwnedStringArray(program, &info.args, &use.args);
 	}
-	if (status == Status::Ok) {
-		status = CloneContextString(program, std::OwnedStringView(&info.arg1), &use.arg1);
-	}
-	if (status == Status::Ok) {
-		status = CloneContextString(program, std::OwnedStringView(&info.arg2), &use.arg2);
-	}
-	use.argCount = info.argCount;
 	use.emitted = false;
 	if (status == Status::Ok) {
 		program.typeUses.len += 1;
@@ -578,16 +890,10 @@ Status:AddTypeUseFromBaseArg(ptr<CompilerContext>:program, str:baseName, String:
 	if (status == Status::Ok) {
 		status = CloneContextString(program, std::StringFromCString(baseName), &use.baseName);
 	}
+	use.args = std::ArrayNew<OwnedString>(program.allocator);
 	if (status == Status::Ok) {
-		status = CloneContextString(program, arg0, &use.arg0);
+		status = OwnedStringArrayPushClone(program, &use.args, arg0);
 	}
-	if (status == Status::Ok) {
-		status = MakeOwnedEmpty(program, &use.arg1);
-	}
-	if (status == Status::Ok) {
-		status = MakeOwnedEmpty(program, &use.arg2);
-	}
-	use.argCount = 1;
 	use.emitted = false;
 	if (status == Status::Ok) {
 		program.typeUses.len += 1;
@@ -619,17 +925,13 @@ bool:ConcreteTypeKey(ptr<CompilerContext>:program, String:key) {
 }
 
 bool:TypeInfoConcrete(ptr<CompilerContext>:program, ptr<TypeInfo>:info) {
-	if (info.argCount == 0) {
+	if (info.args.len == 0) {
 		return(ConcreteTypeKey(program, std::OwnedStringView(&info.key)));
 	}
-	if (info.argCount >= 1 && !ConcreteTypeKey(program, std::OwnedStringView(&info.arg0))) {
-		return(false);
-	}
-	if (info.argCount >= 2 && !ConcreteTypeKey(program, std::OwnedStringView(&info.arg1))) {
-		return(false);
-	}
-	if (info.argCount >= 3 && !ConcreteTypeKey(program, std::OwnedStringView(&info.arg2))) {
-		return(false);
+	for (usize:i = 0; i < info.args.len; i++) {
+		if (!ConcreteTypeKey(program, std::OwnedStringView(&info.args.data[i]))) {
+			return(false);
+		}
 	}
 	return(true);
 }
@@ -676,6 +978,10 @@ bool:ModuleDeclScopeMatches(ptr<ModuleDecl>:decl, String:scopeName) {
 }
 
 ptr<ModuleDecl>:FindFunctionDeclByName(ptr<CompilerContext>:program, String:name, String:scopeName) {
+	ptr<ModuleDecl>:indexed = FindIndexedFunctionDeclByName(program, name, scopeName);
+	if (indexed != 0) {
+		return(indexed);
+	}
 	for (usize:i = 0; i < program.decls.len; i++) {
 		ptr<ModuleDecl>:decl = &program.decls.data[i];
 		if (decl.kind != DeclKind::Function) {
@@ -713,16 +1019,16 @@ usize:ModuleDeclIndex(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl) {
 	return(program.decls.len);
 }
 
-Status:BuildGenericFuncCName(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, ptr<TypeInfo>:arg0, ptr<TypeInfo>:arg1, ptr<TypeInfo>:arg2, usize:argCount, ptr<OwnedString>:out) {
+Status:BuildGenericFuncCName(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, ptr<Array<TypeInfo>>:args, ptr<OwnedString>:out) {
 	StringBuilder:builder = std::StringBuilderNew(program.allocator);
 	Status:status = Status::Ok;
-	if (decl.hasReceiver && argCount >= 1) {
+	if (decl.hasReceiver && args.len >= 1) {
 		status = WriteSanitized(&builder, TokenText(program, decl.fileIndex, decl.receiverStart));
 		if (status == Status::Ok) {
 			status = builder.WriteCString("__");
 		}
 		if (status == Status::Ok) {
-			status = builder.WriteString(std::OwnedStringView(&arg0.key));
+			status = builder.WriteString(std::OwnedStringView(&args.data[0].key));
 		}
 		if (status == Status::Ok) {
 			status = builder.WriteByte('_');
@@ -752,22 +1058,12 @@ Status:BuildGenericFuncCName(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl,
 		return(status);
 	}
 	status = WriteDeclCName(program, &builder, decl);
-	if (status == Status::Ok && argCount >= 1) {
-		status = builder.WriteCString("__");
+	for (usize:i = 0; i < args.len; i++) {
 		if (status == Status::Ok) {
-			status = builder.WriteString(std::OwnedStringView(&arg0.key));
+			status = builder.WriteCString("__");
 		}
-	}
-	if (status == Status::Ok && argCount >= 2) {
-		status = builder.WriteCString("__");
 		if (status == Status::Ok) {
-			status = builder.WriteString(std::OwnedStringView(&arg1.key));
-		}
-	}
-	if (status == Status::Ok && argCount >= 3) {
-		status = builder.WriteCString("__");
-		if (status == Status::Ok) {
-			status = builder.WriteString(std::OwnedStringView(&arg2.key));
+			status = builder.WriteString(std::OwnedStringView(&args.data[i].key));
 		}
 	}
 	if (status == Status::Ok) {
@@ -777,21 +1073,17 @@ Status:BuildGenericFuncCName(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl,
 	return(status);
 }
 
-Status:AddFuncUse(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, ptr<TypeInfo>:arg0, ptr<TypeInfo>:arg1, ptr<TypeInfo>:arg2, usize:argCount) {
-	if (argCount == 0) {
+Status:AddFuncUse(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, ptr<Array<TypeInfo>>:args) {
+	if (args.len == 0) {
 		return(Status::Ok);
 	}
-	if (argCount >= 1 && !TypeInfoConcrete(program, arg0)) {
-		return(Status::Ok);
-	}
-	if (argCount >= 2 && !TypeInfoConcrete(program, arg1)) {
-		return(Status::Ok);
-	}
-	if (argCount >= 3 && !TypeInfoConcrete(program, arg2)) {
-		return(Status::Ok);
+	for (usize:i = 0; i < args.len; i++) {
+		if (!TypeInfoConcrete(program, &args.data[i])) {
+			return(Status::Ok);
+		}
 	}
 	OwnedString:cName;
-	Status:status = BuildGenericFuncCName(program, decl, arg0, arg1, arg2, argCount, &cName);
+	Status:status = BuildGenericFuncCName(program, decl, args, &cName);
 	if (status != Status::Ok) {
 		return(status);
 	}
@@ -814,28 +1106,18 @@ Status:AddFuncUse(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, ptr<TypeIn
 	} else {
 		std::DestroyOwnedString(&cName);
 	}
-	if (status == Status::Ok && argCount >= 1) {
-		status = CloneContextString(program, std::OwnedStringView(&arg0.key), &use.arg0);
-	} else {
-		if (status == Status::Ok) {
-			status = MakeOwnedEmpty(program, &use.arg0);
-		}
+	use.args = std::ArrayNew<OwnedString>(program.allocator);
+	for (usize:i = 0; i < args.len && status == Status::Ok; i++) {
+		status = OwnedStringArrayPushClone(program, &use.args, std::OwnedStringView(&args.data[i].key));
 	}
-	if (status == Status::Ok && argCount >= 2) {
-		status = CloneContextString(program, std::OwnedStringView(&arg1.key), &use.arg1);
-	} else {
-		if (status == Status::Ok) {
-			status = MakeOwnedEmpty(program, &use.arg1);
+	if (status != Status::Ok) {
+		for (usize:i = 0; i < use.args.len; i++) {
+			std::DestroyOwnedString(&use.args.data[i]);
 		}
+		Array<OwnedString>:useArgs = use.args;
+		useArgs.Destroy();
+		use.args = useArgs;
 	}
-	if (status == Status::Ok && argCount >= 3) {
-		status = CloneContextString(program, std::OwnedStringView(&arg2.key), &use.arg2);
-	} else {
-		if (status == Status::Ok) {
-			status = MakeOwnedEmpty(program, &use.arg2);
-		}
-	}
-	use.argCount = argCount;
 	use.emitted = false;
 	if (status == Status::Ok) {
 		program.funcUses.len += 1;
@@ -856,40 +1138,31 @@ Status:CollectGenericFunctionUsesInRange(ptr<CompilerContext>:program, usize:fil
 				}
 				ptr<ModuleDecl>:decl = FindFunctionDeclByName(program, name, scopeName);
 				if (decl != 0 && decl.isGeneric) {
-					TypeInfo:arg0;
-					TypeInfo:arg1;
-					TypeInfo:arg2;
-					TypeInfoInitEmpty(program, &arg0);
-					TypeInfoInitEmpty(program, &arg1);
-					TypeInfoInitEmpty(program, &arg2);
-					usize:argCount = 0;
+					Array<TypeInfo>:args = std::ArrayNew<TypeInfo>(program.allocator);
 					usize:argStart = i + 2;
 					Status:status = Status::Ok;
 					while (argStart < genericEnd) {
 						usize:argEnd = FindTokenAtDepthZero(program, fileIndex, argStart, genericEnd, PunctuationKind::Comma);
-						if (argCount == 0) {
-							status = RenderTypeInfo(program, fileIndex, argStart, argEnd, &arg0);
-						} else {
-							if (argCount == 1) {
-								status = RenderTypeInfo(program, fileIndex, argStart, argEnd, &arg1);
-							} else {
-								if (argCount == 2) {
-									status = RenderTypeInfo(program, fileIndex, argStart, argEnd, &arg2);
-								}
-							}
+						TypeInfo:argInfo;
+						status = RenderTypeInfo(program, fileIndex, argStart, argEnd, &argInfo);
+						if (status == Status::Ok) {
+							status = args.Push(argInfo);
 						}
-						argCount += 1;
+						if (status != Status::Ok) {
+							TypeInfoDestroy(&argInfo);
+						}
 						if (status != Status::Ok || argEnd >= genericEnd) {
 							break;
 						}
 						argStart = argEnd + 1;
 					}
 					if (status == Status::Ok) {
-						status = AddFuncUse(program, decl, &arg0, &arg1, &arg2, argCount);
+						status = AddFuncUse(program, decl, &args);
 					}
-					TypeInfoDestroy(&arg0);
-					TypeInfoDestroy(&arg1);
-					TypeInfoDestroy(&arg2);
+					for (usize:argIndex = 0; argIndex < args.len; argIndex++) {
+						TypeInfoDestroy(&args.data[argIndex]);
+					}
+					args.Destroy();
 					if (status != Status::Ok) {
 						return(status);
 					}
@@ -927,40 +1200,25 @@ Status:AddGenericMethodUseByName(ptr<CompilerContext>:program, ptr<TypeUse>:type
 	if (decl == 0) {
 		return(Status::Ok);
 	}
-	TypeInfo:arg0;
-	TypeInfo:arg1;
-	TypeInfo:arg2;
-	bool:arg0Ready = false;
-	bool:arg1Ready = false;
-	bool:arg2Ready = false;
-	Status:status = TypeInfoInitEmpty(program, &arg1);
-	if (status == Status::Ok) {
-		arg1Ready = true;
+	Array<TypeInfo>:args = std::ArrayNew<TypeInfo>(program.allocator);
+	Status:status = Status::Ok;
+	if (typeUse.args.len >= 1) {
+		TypeInfo:argInfo;
+		status = TypeInfoFromKey(program, std::OwnedStringView(&typeUse.args.data[0]), &argInfo);
+		if (status == Status::Ok) {
+			status = args.Push(argInfo);
+		}
+		if (status != Status::Ok) {
+			TypeInfoDestroy(&argInfo);
+		}
 	}
 	if (status == Status::Ok) {
-		status = TypeInfoInitEmpty(program, &arg2);
+		status = AddFuncUse(program, decl, &args);
 	}
-	if (status == Status::Ok) {
-		arg2Ready = true;
+	for (usize:i = 0; i < args.len; i++) {
+		TypeInfoDestroy(&args.data[i]);
 	}
-	if (status == Status::Ok) {
-		status = TypeInfoFromKey(program, std::OwnedStringView(&typeUse.arg0), &arg0);
-	}
-	if (status == Status::Ok) {
-		arg0Ready = true;
-	}
-	if (status == Status::Ok) {
-		status = AddFuncUse(program, decl, &arg0, &arg1, &arg2, 1);
-	}
-	if (arg0Ready) {
-		TypeInfoDestroy(&arg0);
-	}
-	if (arg1Ready) {
-		TypeInfoDestroy(&arg1);
-	}
-	if (arg2Ready) {
-		TypeInfoDestroy(&arg2);
-	}
+	args.Destroy();
 	return(status);
 }
 
@@ -1004,14 +1262,15 @@ Status:CollectGenericCollectionMethods(ptr<CompilerContext>:program) {
 		TypeUse:useValue = program.typeUses.data[i];
 		ptr<TypeUse>:use = &useValue;
 		String:base = std::OwnedStringView(&use.baseName);
-		if (use.argCount < 1) {
+		if (use.args.len < 1) {
 			continue;
 		}
 		Status:status = Status::Ok;
 		if (base.EqualsCString("Array")) {
-			if (status == Status::Ok && (arrayPopUsed || arrayGetUsed)) { status = AddTypeUseFromBaseArg(program, "Result", std::OwnedStringView(&use.arg0)); }
-			if (status == Status::Ok && (arrayAppendSliceUsed || arraySliceUsed)) { status = AddTypeUseFromBaseArg(program, "Slice", std::OwnedStringView(&use.arg0)); }
-			if (status == Status::Ok && arraySpanUsed) { status = AddTypeUseFromBaseArg(program, "Span", std::OwnedStringView(&use.arg0)); }
+			String:firstArg = OwnedStringArrayGet(&use.args, 0);
+			if (status == Status::Ok && (arrayPopUsed || arrayGetUsed)) { status = AddTypeUseFromBaseArg(program, "Result", firstArg); }
+			if (status == Status::Ok && (arrayAppendSliceUsed || arraySliceUsed)) { status = AddTypeUseFromBaseArg(program, "Slice", firstArg); }
+			if (status == Status::Ok && arraySpanUsed) { status = AddTypeUseFromBaseArg(program, "Span", firstArg); }
 			if (status == Status::Ok && arrayDestroyUsed) { status = AddGenericMethodUseByName(program, use, "Destroy"); }
 			if (status == Status::Ok && arrayClearUsed) { status = AddGenericMethodUseByName(program, use, "Clear"); }
 			if (status == Status::Ok && (arrayReserveUsed || arrayAppendSliceUsed || arrayPushUsed || arrayPushZeroedUsed)) { status = AddGenericMethodUseByName(program, use, "Reserve"); }
@@ -1027,8 +1286,9 @@ Status:CollectGenericCollectionMethods(ptr<CompilerContext>:program) {
 			if (status == Status::Ok && arraySliceUsed) { status = AddGenericMethodUseByName(program, use, "Slice"); }
 		} else {
 			if (base.EqualsCString("LinkedList")) {
-				status = AddTypeUseFromBaseArg(program, "ListNode", std::OwnedStringView(&use.arg0));
-				if (status == Status::Ok) { status = AddTypeUseFromBaseArg(program, "Result", std::OwnedStringView(&use.arg0)); }
+				String:firstArg = OwnedStringArrayGet(&use.args, 0);
+				status = AddTypeUseFromBaseArg(program, "ListNode", firstArg);
+				if (status == Status::Ok) { status = AddTypeUseFromBaseArg(program, "Result", firstArg); }
 				if (status == Status::Ok) { status = AddGenericMethodUseByName(program, use, "PushBack"); }
 				if (status == Status::Ok) { status = AddGenericMethodUseByName(program, use, "PushFront"); }
 				if (status == Status::Ok) { status = AddGenericMethodUseByName(program, use, "PopBack"); }
@@ -1073,7 +1333,10 @@ Status:CollectTypeUses(ptr<CompilerContext>:program) {
 
 
 Status:CheckModule(ptr<CompilerContext>:program) {
-	Status:status = MarkReachableDecls(program);
+	Status:status = BuildDeclIndexes(program);
+	if (status == Status::Ok) {
+		status = MarkReachableDecls(program);
+	}
 	if (status == Status::Ok) {
 		status = CollectTypeUses(program);
 	}
