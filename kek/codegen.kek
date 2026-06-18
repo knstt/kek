@@ -1,16 +1,3712 @@
-#import(kek/diagnostics.kek);
-#import(kek/compiler.kek);
+#import(kek/sema.kek);
+
+Status:WritePrelude(ptr<StringBuilder>:out) {
+	Status:status = out.WriteCString("#include <assert.h>");
+	if (status == Status::Ok) { status = out.WriteByte(10); }
+	if (status == Status::Ok) { status = out.WriteCString("#include <stdint.h>"); }
+	if (status == Status::Ok) { status = out.WriteByte(10); }
+	if (status == Status::Ok) { status = out.WriteCString("#include <stddef.h>"); }
+	if (status == Status::Ok) { status = out.WriteByte(10); }
+	if (status == Status::Ok) { status = out.WriteCString("#include <stdbool.h>"); }
+	if (status == Status::Ok) { status = out.WriteByte(10); }
+	if (status == Status::Ok) { status = out.WriteByte(10); }
+	if (status == Status::Ok) { status = out.WriteCString("typedef uint8_t u8;"); }
+	if (status == Status::Ok) { status = out.WriteByte(10); }
+	if (status == Status::Ok) { status = out.WriteCString("typedef uint16_t u16;"); }
+	if (status == Status::Ok) { status = out.WriteByte(10); }
+	if (status == Status::Ok) { status = out.WriteCString("typedef uint32_t u32;"); }
+	if (status == Status::Ok) { status = out.WriteByte(10); }
+	if (status == Status::Ok) { status = out.WriteCString("typedef uint64_t u64;"); }
+	if (status == Status::Ok) { status = out.WriteByte(10); }
+	if (status == Status::Ok) { status = out.WriteCString("typedef int8_t i8;"); }
+	if (status == Status::Ok) { status = out.WriteByte(10); }
+	if (status == Status::Ok) { status = out.WriteCString("typedef int16_t i16;"); }
+	if (status == Status::Ok) { status = out.WriteByte(10); }
+	if (status == Status::Ok) { status = out.WriteCString("typedef int32_t i32;"); }
+	if (status == Status::Ok) { status = out.WriteByte(10); }
+	if (status == Status::Ok) { status = out.WriteCString("typedef int64_t i64;"); }
+	if (status == Status::Ok) { status = out.WriteByte(10); }
+	if (status == Status::Ok) { status = out.WriteCString("typedef float f32;"); }
+	if (status == Status::Ok) { status = out.WriteByte(10); }
+	if (status == Status::Ok) { status = out.WriteCString("typedef double f64;"); }
+	if (status == Status::Ok) { status = out.WriteByte(10); }
+	if (status == Status::Ok) { status = out.WriteCString("typedef void* ptr;"); }
+	if (status == Status::Ok) { status = out.WriteByte(10); }
+	if (status == Status::Ok) { status = out.WriteCString("typedef const char* str;"); }
+	if (status == Status::Ok) { status = out.WriteByte(10); }
+	if (status == Status::Ok) { status = out.WriteByte(10); }
+	return(status);
+}
+
+Status:WriteDeclarator(ptr<CompilerContext>:program, ptr<StringBuilder>:out, usize:fileIndex, usize:typeStart, usize:typeEnd, usize:nameIndex, bool:isArray, usize:arrayStart, usize:arrayEnd) {
+	TypeInfo:info;
+	Status:status = RenderTypeInfo(program, fileIndex, typeStart, typeEnd, &info);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = out.WriteString(std::OwnedStringView(&info.cType));
+	if (status == Status::Ok) {
+		status = out.WriteByte(' ');
+	}
+	if (status == Status::Ok) {
+		status = WriteToken(program, out, fileIndex, nameIndex);
+	}
+	if (status == Status::Ok && isArray) {
+		status = out.WriteByte('[');
+		if (status == Status::Ok) {
+			status = WriteTokenRangeRaw(program, out, fileIndex, arrayStart, arrayEnd);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte(']');
+		}
+	}
+	TypeInfoDestroy(&info);
+	return(status);
+}
+
+Status:WriteFields(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl) {
+	for (usize:i = 0; i < decl.fieldCount; i++) {
+		ptr<ModuleField>:field = &program.fields.data[decl.firstField + i];
+		Status:status = out.WriteCString("    ");
+		if (status != Status::Ok) {
+			return(status);
+		}
+		if (field.isNestedStruct) {
+			status = out.WriteCString("struct {\n");
+			if (status != Status::Ok) {
+				return(status);
+			}
+			ModuleDecl:nested;
+			nested.kind = DeclKind::Struct;
+			nested.fileIndex = field.fileIndex;
+			nested.bodyStart = field.nestedBodyStart;
+			nested.bodyEnd = field.nestedBodyEnd;
+			nested.firstField = program.fields.len;
+			nested.fieldCount = 0;
+			nested.nameIndex = field.nameIndex;
+			nested.isGeneric = false;
+			Status:parseNested = ParseFields(program, &nested, field.fileIndex, field.nestedBodyStart, field.nestedBodyEnd);
+			if (parseNested != Status::Ok) {
+				return(parseNested);
+			}
+			status = WriteFields(program, out, &nested);
+			if (status != Status::Ok) {
+				return(status);
+			}
+			status = out.WriteCString("    } ");
+			if (status == Status::Ok) {
+				status = WriteToken(program, out, field.fileIndex, field.nameIndex);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteCString(";\n");
+			}
+			return(status);
+		}
+		status = WriteDeclarator(program, out, field.fileIndex, field.typeStart, field.typeEnd, field.nameIndex, field.isArray, field.arrayStart, field.arrayEnd);
+		if (status == Status::Ok) {
+			status = out.WriteCString(";\n");
+		}
+		if (status != Status::Ok) {
+			return(status);
+		}
+	}
+	return(Status::Ok);
+}
+
+bool:GenericParamEquals(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, usize:paramIndex, String:name) {
+	if (!decl.isGeneric) {
+		return(false);
+	}
+	if (decl.genericStart < FileTokenCount(program, decl.fileIndex)) {
+		usize:index = decl.genericStart + 1;
+		usize:current = 0;
+		while (index < decl.genericEnd) {
+			if (IsPunctuation(program, decl.fileIndex, index, PunctuationKind::Comma)) {
+				index += 1;
+				continue;
+			}
+			if (current == paramIndex) {
+				String:paramName = TokenText(program, decl.fileIndex, index);
+				return(paramName.Equals(name));
+			}
+			current += 1;
+			while (index < decl.genericEnd && !IsPunctuation(program, decl.fileIndex, index, PunctuationKind::Comma)) {
+				index += 1;
+			}
+		}
+	}
+	if (decl.hasReceiver && decl.receiverStart + 1 < decl.receiverEnd
+		&& IsOperator(program, decl.fileIndex, decl.receiverStart + 1, OperatorKind::Less)) {
+		usize:genericEnd = FindMatching(program, decl.fileIndex, decl.receiverStart + 1);
+		usize:index = decl.receiverStart + 2;
+		usize:current = 0;
+		while (index < genericEnd) {
+			if (IsPunctuation(program, decl.fileIndex, index, PunctuationKind::Comma)) {
+				index += 1;
+				continue;
+			}
+			if (current == paramIndex) {
+				String:paramName = TokenText(program, decl.fileIndex, index);
+				return(paramName.Equals(name));
+			}
+			current += 1;
+			while (index < genericEnd && !IsPunctuation(program, decl.fileIndex, index, PunctuationKind::Comma)) {
+				index += 1;
+			}
+		}
+	}
+	return(false);
+}
+
+Status:WriteTypeSuffixSubst(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, ptr<TypeUse>:use, usize:fileIndex, usize:start, usize:end) {
+	if (start >= end) {
+		return(Status::Ok);
+	}
+	String:first = TokenText(program, fileIndex, start);
+	if (end == start + 1) {
+		if (GenericParamEquals(program, decl, 0, first)) {
+			return(out.WriteString(std::OwnedStringView(&use.arg0)));
+		}
+		if (GenericParamEquals(program, decl, 1, first)) {
+			return(out.WriteString(std::OwnedStringView(&use.arg1)));
+		}
+		if (GenericParamEquals(program, decl, 2, first)) {
+			return(out.WriteString(std::OwnedStringView(&use.arg2)));
+		}
+		return(WriteSanitized(out, first));
+	}
+	if (start + 1 < end && IsOperator(program, fileIndex, start + 1, OperatorKind::Less)) {
+		Status:status = WriteSanitized(out, first);
+		usize:genericEnd = FindMatching(program, fileIndex, start + 1);
+		usize:argStart = start + 2;
+		while (argStart < genericEnd) {
+			usize:argEnd = FindTokenAtDepthZero(program, fileIndex, argStart, genericEnd, PunctuationKind::Comma);
+			if (status == Status::Ok) {
+				status = out.WriteCString("__");
+			}
+			if (status == Status::Ok) {
+				status = WriteTypeSuffixSubst(program, out, decl, use, fileIndex, argStart, argEnd);
+			}
+			if (status != Status::Ok || argEnd >= genericEnd) {
+				break;
+			}
+			argStart = argEnd + 1;
+		}
+		return(status);
+	}
+	return(WriteTypeSuffixFromRange(program, out, fileIndex, start, end));
+}
+
+Status:MakeSubstTypeKey(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, ptr<TypeUse>:use, usize:fileIndex, usize:start, usize:end, ptr<OwnedString>:out) {
+	StringBuilder:builder = std::StringBuilderNew(program.allocator);
+	Status:status = WriteTypeSuffixSubst(program, &builder, decl, use, fileIndex, start, end);
+	if (status == Status::Ok) {
+		status = DetachBuilder(&builder, out);
+	}
+	builder.Destroy();
+	return(status);
+}
+
+Status:WriteDeclaratorSubst(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, ptr<TypeUse>:use, usize:fileIndex, usize:typeStart, usize:typeEnd, usize:nameIndex, bool:isArray, usize:arrayStart, usize:arrayEnd) {
+	String:first = TokenText(program, fileIndex, typeStart);
+	OwnedString:key;
+	Status:status = Status::Ok;
+	if (first.EqualsCString("ptr") && typeStart + 1 < typeEnd && IsOperator(program, fileIndex, typeStart + 1, OperatorKind::Less)) {
+		usize:genericEnd = FindMatching(program, fileIndex, typeStart + 1);
+		OwnedString:innerKey;
+		status = MakeSubstTypeKey(program, decl, use, fileIndex, typeStart + 2, genericEnd, &innerKey);
+		StringBuilder:ct = std::StringBuilderNew(program.allocator);
+		if (status == Status::Ok) {
+			status = WriteCTypeFromKey(program, &ct, std::OwnedStringView(&innerKey));
+		}
+		if (status == Status::Ok) {
+			status = ct.WriteByte('*');
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(ct.View());
+		}
+		ct.Destroy();
+		std::DestroyOwnedString(&innerKey);
+	} else {
+		status = MakeSubstTypeKey(program, decl, use, fileIndex, typeStart, typeEnd, &key);
+		if (status == Status::Ok) {
+			status = WriteCTypeFromKey(program, out, std::OwnedStringView(&key));
+		}
+		if (status == Status::Ok) {
+			std::DestroyOwnedString(&key);
+		}
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte(' ');
+	}
+	if (status == Status::Ok) {
+		status = WriteToken(program, out, fileIndex, nameIndex);
+	}
+	if (status == Status::Ok && isArray) {
+		status = out.WriteByte('[');
+		if (status == Status::Ok) {
+			status = WriteTokenRangeRaw(program, out, fileIndex, arrayStart, arrayEnd);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte(']');
+		}
+	}
+	return(status);
+}
+
+Status:WriteFieldsSubst(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, ptr<TypeUse>:use) {
+	for (usize:i = 0; i < decl.fieldCount; i++) {
+		ptr<ModuleField>:field = &program.fields.data[decl.firstField + i];
+		Status:status = out.WriteCString("    ");
+		if (status == Status::Ok) {
+			status = WriteDeclaratorSubst(program, out, decl, use, field.fileIndex, field.typeStart, field.typeEnd, field.nameIndex, field.isArray, field.arrayStart, field.arrayEnd);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString(";\n");
+		}
+		if (status != Status::Ok) {
+			return(status);
+		}
+	}
+	return(Status::Ok);
+}
+
+Status:WriteStructDecl(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, String:specializedName) {
+	Status:status = out.WriteCString("struct ");
+	bool:hasPacked = false;
+	bool:hasAligned = false;
+	usize:alignedValue = 0;
+	if (decl.start > 0) {
+		usize:scan = decl.start;
+		while (scan > 0) {
+			scan -= 1;
+			if (IsPunctuation(program, decl.fileIndex, scan, PunctuationKind::LeftBracket)) {
+				for (usize:i = scan; i < decl.start; i++) {
+					if (IsIdentifierText(program, decl.fileIndex, i, "packed")) {
+						hasPacked = true;
+					}
+					if (IsIdentifierText(program, decl.fileIndex, i, "aligned")) {
+						hasAligned = true;
+						if (i + 2 < decl.start && IsPunctuation(program, decl.fileIndex, i + 1, PunctuationKind::LeftParen)) {
+							alignedValue = i + 2;
+						}
+					}
+				}
+				break;
+			}
+			if (IsPunctuation(program, decl.fileIndex, scan, PunctuationKind::Semicolon)
+				|| IsPunctuation(program, decl.fileIndex, scan, PunctuationKind::RightBrace)) {
+				break;
+			}
+		}
+	}
+	if (status == Status::Ok && (hasPacked || hasAligned)) {
+		status = out.WriteCString("__attribute__((");
+		if (status == Status::Ok && hasPacked) {
+			status = out.WriteCString("packed");
+		}
+		if (status == Status::Ok && hasAligned) {
+			if (hasPacked) {
+				status = out.WriteByte(',');
+			}
+			if (status == Status::Ok) {
+				status = out.WriteCString("aligned(");
+			}
+			if (status == Status::Ok && alignedValue != 0) {
+				status = WriteToken(program, out, decl.fileIndex, alignedValue);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteByte(')');
+			}
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString(")) ");
+		}
+	}
+	if (status != Status::Ok) {
+		return(status);
+	}
+	if (specializedName.len > 0) {
+		status = out.WriteString(specializedName);
+	} else {
+		status = WriteToken(program, out, decl.fileIndex, decl.nameIndex);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(" {\n");
+	}
+	if (status == Status::Ok) {
+		status = WriteFields(program, out, decl);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("};\n");
+	}
+	return(status);
+}
+
+Status:WriteUnionDecl(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl) {
+	Status:status = out.WriteCString("typedef union ");
+	if (status == Status::Ok) {
+		status = WriteToken(program, out, decl.fileIndex, decl.nameIndex);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(" {\n");
+	}
+	if (status == Status::Ok) {
+		status = WriteFields(program, out, decl);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("} ");
+	}
+	if (status == Status::Ok) {
+		status = WriteToken(program, out, decl.fileIndex, decl.nameIndex);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(";\n");
+	}
+	return(status);
+}
+
+Status:WriteEnumDecl(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl) {
+	Status:status = out.WriteCString("typedef enum ");
+	if (status == Status::Ok) {
+		status = WriteToken(program, out, decl.fileIndex, decl.nameIndex);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(" {\n");
+	}
+	usize:i = decl.bodyStart;
+	while (i < decl.bodyEnd) {
+		if (IsPunctuation(program, decl.fileIndex, i, PunctuationKind::Comma)) {
+			i += 1;
+			continue;
+		}
+		if (!IsTokenKind(program, decl.fileIndex, i, TokenKind::Identifier)) {
+			i += 1;
+			continue;
+		}
+		status = out.WriteCString("    ");
+		if (status == Status::Ok) {
+			status = WriteToken(program, out, decl.fileIndex, decl.nameIndex);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte('_');
+		}
+		if (status == Status::Ok) {
+			status = WriteToken(program, out, decl.fileIndex, i);
+		}
+		i += 1;
+		if (i < decl.bodyEnd && IsOperator(program, decl.fileIndex, i, OperatorKind::Assign)) {
+			status = out.WriteByte('=');
+			i += 1;
+			while (i < decl.bodyEnd && !IsPunctuation(program, decl.fileIndex, i, PunctuationKind::Comma)) {
+				if (status == Status::Ok) {
+					status = WriteToken(program, out, decl.fileIndex, i);
+				}
+				i += 1;
+			}
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString(",\n");
+		}
+		if (status != Status::Ok) {
+			return(status);
+		}
+	}
+	status = out.WriteCString("} ");
+	if (status == Status::Ok) {
+		status = WriteToken(program, out, decl.fileIndex, decl.nameIndex);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(";\n");
+	}
+	return(status);
+}
+
+Status:WriteAliasDecl(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl) {
+	TypeInfo:info;
+	Status:status = RenderTypeInfo(program, decl.fileIndex, decl.returnStart, decl.returnEnd, &info);
+	if (status == Status::Ok) {
+		status = out.WriteCString("typedef ");
+	}
+	if (status == Status::Ok) {
+		status = out.WriteString(std::OwnedStringView(&info.cType));
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte(' ');
+	}
+	if (status == Status::Ok) {
+		status = WriteToken(program, out, decl.fileIndex, decl.nameIndex);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(";\n");
+	}
+	TypeInfoDestroy(&info);
+	return(status);
+}
+
+Status:WriteExternDecl(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl) {
+	ptr<SyntaxFile>:file = &program.tokenFiles.data[decl.fileIndex];
+	Token:open = file.tokens[decl.bodyStart - 1];
+	Token:close = file.tokens[decl.bodyEnd];
+	usize:start = open.offset + open.length;
+	usize:end = close.offset;
+	if (end < start) {
+		return(Status::Ok);
+	}
+	String:sourceText = file.sourceText;
+	Status:status = out.WriteCString("#if defined(__GNUC__) || defined(__clang__)\n#pragma GCC diagnostic push\n#pragma GCC diagnostic ignored ");
+	if (status == Status::Ok) {
+		status = out.WriteByte(34);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("-Wunused-function");
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte(34);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("\n#endif\n");
+	}
+	if (status == Status::Ok) {
+		status = out.WriteString(sourceText.Slice(start, end - start));
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("\n#if defined(__GNUC__) || defined(__clang__)\n#pragma GCC diagnostic pop\n#endif");
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte('\n');
+	}
+	return(status);
+}
+
+Status:WriteTypeUseDeclaration(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<TypeUse>:use) {
+	if (use.emitted) {
+		return(Status::Ok);
+	}
+	ptr<ModuleDecl>:decl = FindTypeDecl(program, std::OwnedStringView(&use.baseName));
+	if (decl == 0 || decl.kind != DeclKind::Struct) {
+		return(Status::Ok);
+	}
+	Status:status = out.WriteCString("struct ");
+	if (status == Status::Ok) {
+		status = out.WriteString(std::OwnedStringView(&use.key));
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(" {\n");
+	}
+	if (status == Status::Ok) {
+		status = WriteFieldsSubst(program, out, decl, use);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("};\n");
+	}
+	if (status == Status::Ok) {
+		use.emitted = true;
+	}
+	return(status);
+}
+
+Status:WriteTypeUsesForArg(ptr<CompilerContext>:program, ptr<StringBuilder>:out, String:argName) {
+	for (usize:i = 0; i < program.typeUses.len; i++) {
+		ptr<TypeUse>:use = &program.typeUses.data[i];
+		if (use.emitted || use.argCount == 0) {
+			continue;
+		}
+		String:arg0 = std::OwnedStringView(&use.arg0);
+		if (arg0.Equals(argName)) {
+			Status:status = WriteTypeUseDeclaration(program, out, use);
+			if (status != Status::Ok) {
+				return(status);
+			}
+		}
+	}
+	return(Status::Ok);
+}
+
+bool:ShouldWritePlainTypeDecl(ptr<ModuleDecl>:decl) {
+	return(decl.kind == DeclKind::Alias
+		|| (decl.kind == DeclKind::Struct && !decl.isGeneric)
+		|| decl.kind == DeclKind::Union
+		|| decl.kind == DeclKind::Enum);
+}
+
+bool:TypeKeyReady(ptr<CompilerContext>:program, String:key) {
+	String:name = key;
+	while (name.len > 0 && name.data[name.len - 1] == '*') {
+		name = name.Slice(0, name.len - 1);
+	}
+	ptr<ModuleDecl>:decl = FindTypeDecl(program, name);
+	if (decl != 0 && !decl.isGeneric) {
+		return(decl.emitted);
+	}
+	for (usize:i = 0; i < program.typeUses.len; i++) {
+		String:useKey = std::OwnedStringView(&program.typeUses.data[i].key);
+		if (useKey.Equals(name)) {
+			return(program.typeUses.data[i].emitted);
+		}
+	}
+	return(true);
+}
+
+bool:TypeRangeReady(ptr<CompilerContext>:program, usize:fileIndex, usize:start, usize:end) {
+	for (usize:i = start; i < end; i++) {
+		Token:token = program.tokenFiles.data[fileIndex].tokens[i];
+		if (!(token.kind == TokenKind::Identifier || token.kind == TokenKind::Keyword)) {
+			continue;
+		}
+		ptr<ModuleDecl>:decl = FindTypeDecl(program, TokenText(program, fileIndex, i));
+		if (decl != 0 && decl.isGeneric && i + 1 < end && IsOperator(program, fileIndex, i + 1, OperatorKind::Less)) {
+			usize:genericEnd = FindMatching(program, fileIndex, i + 1);
+			OwnedString:key;
+			Status:status = BuildTypeKey(program, fileIndex, i, genericEnd + 1, &key);
+			if (status == Status::Ok) {
+				bool:ready = TypeKeyReady(program, std::OwnedStringView(&key));
+				std::DestroyOwnedString(&key);
+				if (!ready) {
+					return(false);
+				}
+			}
+			i = genericEnd;
+			continue;
+		}
+		if (decl == 0 || decl.isGeneric) {
+			continue;
+		}
+		if (!decl.emitted) {
+			return(false);
+		}
+	}
+	return(true);
+}
+
+bool:TypeUseRangeReady(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, ptr<TypeUse>:use, usize:fileIndex, usize:start, usize:end) {
+	for (usize:i = start; i < end; i++) {
+		Token:token = program.tokenFiles.data[fileIndex].tokens[i];
+		if (!(token.kind == TokenKind::Identifier || token.kind == TokenKind::Keyword)) {
+			continue;
+		}
+		String:name = TokenText(program, fileIndex, i);
+		bool:genericParam = false;
+		if (use.argCount >= 1 && GenericParamEquals(program, decl, 0, name)) {
+			if (!TypeKeyReady(program, std::OwnedStringView(&use.arg0))) {
+				return(false);
+			}
+			genericParam = true;
+		}
+		if (!genericParam && use.argCount >= 2 && GenericParamEquals(program, decl, 1, name)) {
+			if (!TypeKeyReady(program, std::OwnedStringView(&use.arg1))) {
+				return(false);
+			}
+			genericParam = true;
+		}
+		if (!genericParam && use.argCount >= 3 && GenericParamEquals(program, decl, 2, name)) {
+			if (!TypeKeyReady(program, std::OwnedStringView(&use.arg2))) {
+				return(false);
+			}
+			genericParam = true;
+		}
+		if (genericParam) {
+			continue;
+		}
+		ptr<ModuleDecl>:typeDecl = FindTypeDecl(program, name);
+		if (typeDecl == 0 || typeDecl.isGeneric) {
+			continue;
+		}
+		if (!typeDecl.emitted) {
+			return(false);
+		}
+	}
+	return(true);
+}
+
+bool:TypeDeclDependenciesReady(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl) {
+	if (decl.kind == DeclKind::Alias) {
+		return(TypeRangeReady(program, decl.fileIndex, decl.returnStart, decl.returnEnd));
+	}
+	if (decl.kind == DeclKind::Struct || decl.kind == DeclKind::Union) {
+		for (usize:i = 0; i < decl.fieldCount; i++) {
+			ptr<ModuleField>:field = &program.fields.data[decl.firstField + i];
+			if (field.isNestedStruct) {
+				if (!TypeRangeReady(program, field.fileIndex, field.nestedBodyStart, field.nestedBodyEnd)) {
+					return(false);
+				}
+			} else {
+				if (!TypeRangeReady(program, field.fileIndex, field.typeStart, field.typeEnd)) {
+					return(false);
+				}
+			}
+		}
+	}
+	return(true);
+}
+
+bool:TypeUseDependenciesReady(ptr<CompilerContext>:program, ptr<TypeUse>:use) {
+	if (use.argCount >= 1 && !TypeKeyReady(program, std::OwnedStringView(&use.arg0))) {
+		return(false);
+	}
+	if (use.argCount >= 2 && !TypeKeyReady(program, std::OwnedStringView(&use.arg1))) {
+		return(false);
+	}
+	if (use.argCount >= 3 && !TypeKeyReady(program, std::OwnedStringView(&use.arg2))) {
+		return(false);
+	}
+	ptr<ModuleDecl>:decl = FindTypeDecl(program, std::OwnedStringView(&use.baseName));
+	if (decl == 0 || decl.kind != DeclKind::Struct) {
+		return(true);
+	}
+	for (usize:i = 0; i < decl.fieldCount; i++) {
+		ptr<ModuleField>:field = &program.fields.data[decl.firstField + i];
+		if (field.isNestedStruct) {
+			if (!TypeUseRangeReady(program, decl, use, field.fileIndex, field.nestedBodyStart, field.nestedBodyEnd)) {
+				return(false);
+			}
+		} else {
+			if (!TypeUseRangeReady(program, decl, use, field.fileIndex, field.typeStart, field.typeEnd)) {
+				return(false);
+			}
+		}
+	}
+	return(true);
+}
+
+Status:WritePlainTypeDeclaration(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl) {
+	Status:status = Status::Ok;
+	if (decl.kind == DeclKind::Alias) {
+		status = WriteAliasDecl(program, out, decl);
+	} else {
+		if (decl.kind == DeclKind::Struct && !decl.isGeneric) {
+			status = WriteStructDecl(program, out, decl, std::StringFromCString(""));
+		} else {
+			if (decl.kind == DeclKind::Union) {
+				status = WriteUnionDecl(program, out, decl);
+			} else {
+				if (decl.kind == DeclKind::Enum) {
+					status = WriteEnumDecl(program, out, decl);
+				}
+			}
+		}
+	}
+	if (status == Status::Ok) {
+		decl.emitted = true;
+	}
+	return(status);
+}
+
+Status:WriteTypeDeclarations(ptr<CompilerContext>:program, ptr<StringBuilder>:out) {
+	for (usize:i = 0; i < program.decls.len; i++) {
+		ptr<ModuleDecl>:decl = &program.decls.data[i];
+		if (decl.kind == DeclKind::ExternC) {
+			Status:status = WriteExternDecl(program, out, decl);
+			if (status != Status::Ok) {
+				return(status);
+			}
+			decl.emitted = true;
+		}
+	}
+	bool:progress = true;
+	while (progress) {
+		progress = false;
+		for (usize:i = 0; i < program.decls.len; i++) {
+			ptr<ModuleDecl>:decl = &program.decls.data[i];
+			if (!decl.reachable || decl.emitted || !ShouldWritePlainTypeDecl(decl)) {
+				continue;
+			}
+			if (!TypeDeclDependenciesReady(program, decl)) {
+				continue;
+			}
+			Status:status = WritePlainTypeDeclaration(program, out, decl);
+			if (status != Status::Ok) {
+				return(status);
+			}
+			progress = true;
+		}
+		for (usize:i = 0; i < program.typeUses.len; i++) {
+			ptr<TypeUse>:use = &program.typeUses.data[i];
+			if (use.emitted || !TypeUseDependenciesReady(program, use)) {
+				continue;
+			}
+			Status:status = WriteTypeUseDeclaration(program, out, use);
+			if (status != Status::Ok) {
+				return(status);
+			}
+			if (use.emitted) {
+				progress = true;
+			}
+		}
+	}
+	for (usize:i = 0; i < program.decls.len; i++) {
+		ptr<ModuleDecl>:decl = &program.decls.data[i];
+		if (decl.reachable && !decl.emitted && ShouldWritePlainTypeDecl(decl)) {
+			Status:status = WritePlainTypeDeclaration(program, out, decl);
+			if (status != Status::Ok) {
+				return(status);
+			}
+		}
+	}
+	for (usize:i = 0; i < program.typeUses.len; i++) {
+		ptr<TypeUse>:use = &program.typeUses.data[i];
+		Status:status = WriteTypeUseDeclaration(program, out, use);
+		if (status != Status::Ok) {
+			return(status);
+		}
+	}
+	return(Status::Ok);
+}
+
+Status:EnvInit(ptr<CompilerContext>:program, ptr<CodegenEnv>:env) {
+	env.locals = std::ArrayNew<Local>(program.allocator);
+	env.hasThis = false;
+	env.deferCounter = 0;
+	env.eachCounter = 0;
+	Status:status = MakeOwnedEmpty(program, &env.returnTypeKey);
+	if (status == Status::Ok) {
+		status = MakeOwnedEmpty(program, &env.returnCType);
+	}
+	if (status == Status::Ok) {
+		status = MakeOwnedEmpty(program, &env.thisTypeKey);
+	}
+	if (status == Status::Ok) {
+		status = MakeOwnedEmpty(program, &env.thisCType);
+	}
+	return(status);
+}
+
+Status:EnvDestroy(ptr<CodegenEnv>:env) {
+	for (usize:i = 0; i < env.locals.len; i++) {
+		std::DestroyOwnedString(&env.locals.data[i].name);
+		std::DestroyOwnedString(&env.locals.data[i].typeKey);
+		std::DestroyOwnedString(&env.locals.data[i].cType);
+		std::DestroyOwnedString(&env.locals.data[i].arrayLen);
+	}
+	Array<Local>:locals = env.locals;
+	Status:status = locals.Destroy();
+	env.locals = locals;
+	std::DestroyOwnedString(&env.returnTypeKey);
+	std::DestroyOwnedString(&env.returnCType);
+	std::DestroyOwnedString(&env.thisTypeKey);
+	std::DestroyOwnedString(&env.thisCType);
+	return(status);
+}
+
+ptr<Local>:EnvFind(ptr<CodegenEnv>:env, String:name) {
+	for (usize:i = env.locals.len; i > 0; i--) {
+		ptr<Local>:local = &env.locals.data[i - 1];
+		String:localName = std::OwnedStringView(&local.name);
+		if (localName.Equals(name)) {
+			return(local);
+		}
+	}
+	return(0);
+}
+
+Status:EnvAdd(ptr<CompilerContext>:program, ptr<CodegenEnv>:env, String:name, String:typeKey, String:cType, bool:isArray, String:arrayLen, bool:isPointer) {
+	Status:status = ReserveLocals(env, 1);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	ptr<Local>:local = &env.locals.data[env.locals.len];
+	status = CloneContextString(program, name, &local.name);
+	if (status == Status::Ok) {
+		status = CloneContextString(program, typeKey, &local.typeKey);
+	}
+	if (status == Status::Ok) {
+		status = CloneContextString(program, cType, &local.cType);
+	}
+	if (status == Status::Ok) {
+		status = CloneContextString(program, arrayLen, &local.arrayLen);
+	}
+	local.isArray = isArray;
+	local.isPointer = isPointer;
+	if (status == Status::Ok) {
+		env.locals.len += 1;
+	}
+	return(status);
+}
+
+Status:ExprInitEmpty(ptr<CompilerContext>:program, ptr<Expr>:expr) {
+	Status:status = MakeOwnedEmpty(program, &expr.text);
+	if (status == Status::Ok) {
+		status = MakeOwnedEmpty(program, &expr.typeKey);
+	}
+	if (status == Status::Ok) {
+		status = MakeOwnedEmpty(program, &expr.cType);
+	}
+	if (status == Status::Ok) {
+		status = MakeOwnedEmpty(program, &expr.arrayLen);
+	}
+	expr.isArray = false;
+	expr.isLvalue = false;
+	expr.isPointer = false;
+	return(status);
+}
+
+Status:ExprDestroy(ptr<Expr>:expr) {
+	std::DestroyOwnedString(&expr.text);
+	std::DestroyOwnedString(&expr.typeKey);
+	std::DestroyOwnedString(&expr.cType);
+	std::DestroyOwnedString(&expr.arrayLen);
+	return(Status::Ok);
+}
+
+Status:ExprSetText(ptr<CompilerContext>:program, ptr<Expr>:expr, String:text) {
+	OwnedString:owned;
+	Status:status = CloneContextString(program, text, &owned);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	return(ReplaceOwned(&expr.text, owned));
+}
+
+Status:ExprSetCString(ptr<CompilerContext>:program, ptr<Expr>:expr, str:text) {
+	OwnedString:owned;
+	Status:status = CloneContextCString(program, text, &owned);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	return(ReplaceOwned(&expr.text, owned));
+}
+
+Status:ExprSetType(ptr<CompilerContext>:program, ptr<Expr>:expr, String:key, String:cType, bool:isPointer) {
+	OwnedString:keyOwned;
+	Status:status = CloneContextString(program, key, &keyOwned);
+	if (status == Status::Ok) {
+		status = ReplaceOwned(&expr.typeKey, keyOwned);
+	}
+	OwnedString:cOwned;
+	if (status == Status::Ok) {
+		status = CloneContextString(program, cType, &cOwned);
+	}
+	if (status == Status::Ok) {
+		status = ReplaceOwned(&expr.cType, cOwned);
+	}
+	expr.isPointer = isPointer;
+	return(status);
+}
+
+Status:ExprFromBuilder(ptr<Expr>:expr, ptr<StringBuilder>:builder) {
+	OwnedString:owned;
+	Status:status = DetachBuilder(builder, &owned);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	return(ReplaceOwned(&expr.text, owned));
+}
+
+u8:OperatorPrecedence(ptr<CompilerContext>:program, usize:fileIndex, usize:index) {
+	if (IsOperator(program, fileIndex, index, OperatorKind::Assign)
+		|| IsOperator(program, fileIndex, index, OperatorKind::PlusAssign)
+		|| IsOperator(program, fileIndex, index, OperatorKind::MinusAssign)) {
+		return(1);
+	}
+	if (IsOperator(program, fileIndex, index, OperatorKind::LogicalOr)) {
+		return(2);
+	}
+	if (IsOperator(program, fileIndex, index, OperatorKind::LogicalAnd)) {
+		return(3);
+	}
+	if (IsOperator(program, fileIndex, index, OperatorKind::Equal)
+		|| IsOperator(program, fileIndex, index, OperatorKind::NotEqual)
+		|| IsOperator(program, fileIndex, index, OperatorKind::Less)
+		|| IsOperator(program, fileIndex, index, OperatorKind::LessEqual)
+		|| IsOperator(program, fileIndex, index, OperatorKind::Greater)
+		|| IsOperator(program, fileIndex, index, OperatorKind::GreaterEqual)) {
+		return(4);
+	}
+	if (IsOperator(program, fileIndex, index, OperatorKind::Plus)
+		|| IsOperator(program, fileIndex, index, OperatorKind::Minus)) {
+		return(5);
+	}
+	if (IsOperator(program, fileIndex, index, OperatorKind::Multiply)
+		|| IsOperator(program, fileIndex, index, OperatorKind::Divide)
+		|| IsOperator(program, fileIndex, index, OperatorKind::Modulo)) {
+		return(6);
+	}
+	return(0);
+}
+
+bool:OperatorRightAssociative(ptr<CompilerContext>:program, usize:fileIndex, usize:index) {
+	return(IsOperator(program, fileIndex, index, OperatorKind::Assign)
+		|| IsOperator(program, fileIndex, index, OperatorKind::PlusAssign)
+		|| IsOperator(program, fileIndex, index, OperatorKind::MinusAssign));
+}
+
+Status:WriteNumberToken(ptr<CompilerContext>:program, ptr<StringBuilder>:out, usize:fileIndex, usize:index) {
+	String:text = TokenText(program, fileIndex, index);
+	if (text.len > 2 && text.data[0] == '0' && (text.data[1] == 'b' || text.data[1] == 'B')) {
+		u64:value = 0;
+		for (usize:i = 2; i < text.len; i++) {
+			if (text.data[i] == '_') {
+				continue;
+			}
+			if (text.data[i] == '0' || text.data[i] == '1') {
+				value = value * 2 + cast<u64>(text.data[i] - '0');
+			}
+		}
+		Status:status = out.WriteCString("0x");
+		if (status == Status::Ok) {
+			status = std::FormatU64ToBuilder(out, value, 16);
+		}
+		return(status);
+	}
+	for (usize:i = 0; i < text.len; i++) {
+		if (text.data[i] != '_') {
+			Status:status = out.WriteByte(text.data[i]);
+			if (status != Status::Ok) {
+				return(status);
+			}
+		}
+	}
+	return(Status::Ok);
+}
+
+ptr<ModuleDecl>:FindFieldDecl(ptr<CompilerContext>:program, String:typeKey) {
+	for (usize:i = 0; i < program.decls.len; i++) {
+		ptr<ModuleDecl>:decl = &program.decls.data[i];
+		if ((decl.kind == DeclKind::Struct || decl.kind == DeclKind::Union) && ModuleDeclNameMatches(program, decl, typeKey)) {
+			return(decl);
+		}
+	}
+	for (usize:i = 0; i < program.typeUses.len; i++) {
+		String:useKey = std::OwnedStringView(&program.typeUses.data[i].key);
+		if (useKey.Equals(typeKey)) {
+			return(FindTypeDecl(program, std::OwnedStringView(&program.typeUses.data[i].baseName)));
+		}
+	}
+	return(0);
+}
+
+Status:ModuleFieldType(ptr<CompilerContext>:program, String:typeKey, String:fieldName, ptr<TypeInfo>:outInfo) {
+	TypeInfoInitEmpty(program, outInfo);
+	ptr<ModuleDecl>:decl = FindFieldDecl(program, typeKey);
+	if (decl == 0) {
+		return(Status::Ok);
+	}
+	for (usize:i = 0; i < decl.fieldCount; i++) {
+		ptr<ModuleField>:field = &program.fields.data[decl.firstField + i];
+		String:fieldToken = TokenText(program, field.fileIndex, field.nameIndex);
+		if (fieldToken.Equals(fieldName)) {
+			TypeInfoDestroy(outInfo);
+			return(RenderTypeInfo(program, field.fileIndex, field.typeStart, field.typeEnd, outInfo));
+		}
+	}
+	return(Status::Ok);
+}
+
+ptr<ModuleDecl>:FindMethod(ptr<CompilerContext>:program, String:receiverType, String:name, bool:isOperator, u8:operatorCode, usize:argCount) {
+	for (usize:i = 0; i < program.decls.len; i++) {
+		ptr<ModuleDecl>:decl = &program.decls.data[i];
+		if (decl.kind != DeclKind::Function || !decl.hasReceiver) {
+			continue;
+		}
+		StringBuilder:receiver = std::StringBuilderNew(program.allocator);
+		Status:status = WriteTypeSuffixFromRange(program, &receiver, decl.fileIndex, decl.receiverStart, decl.receiverEnd);
+		if (status != Status::Ok) {
+			receiver.Destroy();
+			continue;
+		}
+		String:receiverView = receiver.View();
+		bool:receiverMatches = receiverView.Equals(receiverType);
+		receiver.Destroy();
+		if (!receiverMatches) {
+			continue;
+		}
+		if (isOperator) {
+			if (decl.isOperator && decl.operatorCode == operatorCode && decl.paramCount == argCount) {
+				return(decl);
+			}
+		} else {
+			String:methodName = TokenText(program, decl.fileIndex, decl.nameIndex);
+			if (!decl.isOperator && methodName.Equals(name)) {
+				return(decl);
+			}
+		}
+	}
+	return(0);
+}
+
+Status:ParserInit(ptr<CompilerContext>:program, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, usize:end, String:expectedKey, String:expectedCType, bool:expectedIsArray, ptr<ExprParser>:parser) {
+	parser.program = program;
+	parser.env = env;
+	parser.fileIndex = fileIndex;
+	parser.pos = start;
+	parser.end = end;
+	parser.expectedIsArray = expectedIsArray;
+	Status:status = CloneContextString(program, expectedKey, &parser.expectedTypeKey);
+	if (status == Status::Ok) {
+		status = CloneContextString(program, expectedCType, &parser.expectedCType);
+	}
+	return(status);
+}
+
+Status:ParserDestroy(ptr<ExprParser>:parser) {
+	std::DestroyOwnedString(&parser.expectedTypeKey);
+	std::DestroyOwnedString(&parser.expectedCType);
+	return(Status::Ok);
+}
+
+Status:CompileExpressionRange(ptr<CompilerContext>:program, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, usize:end, String:expectedKey, String:expectedCType, bool:expectedIsArray, ptr<Expr>:out) {
+	ExprParser:parser;
+	Status:status = ParserInit(program, env, fileIndex, start, end, expectedKey, expectedCType, expectedIsArray, &parser);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = CompileExpression(&parser, 1, out);
+	ParserDestroy(&parser);
+	return(status);
+}
+
+Status:WriteInitializerList(ptr<ExprParser>:parser, usize:start, usize:end, ptr<StringBuilder>:out) {
+	Status:status = out.WriteByte('{');
+	usize:itemStart = start;
+	while (itemStart < end) {
+		if (IsPunctuation(parser.program, parser.fileIndex, itemStart, PunctuationKind::Comma)) {
+			itemStart += 1;
+			continue;
+		}
+		usize:itemEnd = FindTokenAtDepthZero(parser.program, parser.fileIndex, itemStart, end, PunctuationKind::Comma);
+		if (itemStart + 1 < itemEnd && IsOperator(parser.program, parser.fileIndex, itemStart + 1, OperatorKind::Assign) && IsTokenKind(parser.program, parser.fileIndex, itemStart, TokenKind::Identifier)) {
+			if (status == Status::Ok) {
+				status = out.WriteByte('.');
+			}
+			if (status == Status::Ok) {
+				status = WriteToken(parser.program, out, parser.fileIndex, itemStart);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteByte('=');
+			}
+			Expr:value;
+			if (status == Status::Ok) {
+				status = CompileExpressionRange(parser.program, parser.env, parser.fileIndex, itemStart + 2, itemEnd, std::StringFromCString(""), std::StringFromCString(""), false, &value);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteString(std::OwnedStringView(&value.text));
+			}
+			if (status == Status::Ok) {
+				ExprDestroy(&value);
+			}
+		} else {
+			Expr:value;
+			if (status == Status::Ok) {
+				status = CompileExpressionRange(parser.program, parser.env, parser.fileIndex, itemStart, itemEnd, std::StringFromCString(""), std::StringFromCString(""), false, &value);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteString(std::OwnedStringView(&value.text));
+			}
+			if (status == Status::Ok) {
+				ExprDestroy(&value);
+			}
+		}
+		if (status != Status::Ok) {
+			return(status);
+		}
+		if (itemEnd >= end) {
+			break;
+		}
+		status = out.WriteByte(',');
+		itemStart = itemEnd + 1;
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte('}');
+	}
+	return(status);
+}
+
+Status:ExprFromLiteralBlock(ptr<ExprParser>:parser, usize:blockStart, usize:blockEnd, ptr<Expr>:out) {
+	Status:status = ExprInitEmpty(parser.program, out);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	StringBuilder:builder = std::StringBuilderNew(parser.program[0].allocator);
+	String:expectedKey = std::OwnedStringView(&parser.expectedTypeKey);
+	String:expectedCType = std::OwnedStringView(&parser.expectedCType);
+	if (expectedCType.len > 0 && !parser.expectedIsArray) {
+		status = builder.WriteByte('(');
+		if (status == Status::Ok) {
+			status = builder.WriteString(expectedCType);
+		}
+		if (status == Status::Ok) {
+			status = builder.WriteByte(')');
+		}
+	}
+	if (status == Status::Ok) {
+		status = WriteInitializerList(parser, blockStart + 1, blockEnd, &builder);
+	}
+	if (status == Status::Ok) {
+		status = ExprFromBuilder(out, &builder);
+	}
+	builder.Destroy();
+	if (status == Status::Ok && expectedKey.len > 0) {
+		status = ExprSetType(parser.program, out, expectedKey, expectedCType, false);
+	}
+	return(status);
+}
+
+Status:CompilePrimary(ptr<ExprParser>:parser, ptr<Expr>:out) {
+	Status:status = ExprInitEmpty(parser.program, out);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	if (parser.pos >= parser.end) {
+		return(Status::Ok);
+	}
+	usize:index = parser.pos;
+	Token:token = parser.program[0].tokenFiles.data[parser.fileIndex].tokens[index];
+	if (token.kind == TokenKind::Number) {
+		StringBuilder:builder = std::StringBuilderNew(parser.program[0].allocator);
+		status = WriteNumberToken(parser.program, &builder, parser.fileIndex, index);
+		if (status == Status::Ok) {
+			status = ExprFromBuilder(out, &builder);
+		}
+		builder.Destroy();
+		if (status == Status::Ok) {
+			status = ExprSetType(parser.program, out, std::StringFromCString("int"), std::StringFromCString("int"), false);
+		}
+		parser.pos += 1;
+		return(status);
+	}
+	if (token.kind == TokenKind::String || token.kind == TokenKind::Char) {
+		status = ExprSetText(parser.program, out, TokenText(parser.program, parser.fileIndex, index));
+		if (status == Status::Ok) {
+			if (token.kind == TokenKind::String) {
+				status = ExprSetType(parser.program, out, std::StringFromCString("str"), std::StringFromCString("str"), true);
+			} else {
+				status = ExprSetType(parser.program, out, std::StringFromCString("int"), std::StringFromCString("int"), false);
+			}
+		}
+		parser.pos += 1;
+		return(status);
+	}
+	if (IsKeyword(parser.program, parser.fileIndex, index, KeywordKind::True)
+		|| IsKeyword(parser.program, parser.fileIndex, index, KeywordKind::False)) {
+		if (IsKeyword(parser.program, parser.fileIndex, index, KeywordKind::True)) {
+			status = ExprSetCString(parser.program, out, "1");
+		} else {
+			status = ExprSetCString(parser.program, out, "0");
+		}
+		if (status == Status::Ok) {
+			status = ExprSetType(parser.program, out, std::StringFromCString("bool"), std::StringFromCString("bool"), false);
+		}
+		parser.pos += 1;
+		return(status);
+	}
+	if (IsPunctuation(parser.program, parser.fileIndex, index, PunctuationKind::LeftParen)) {
+		usize:match = FindMatching(parser.program, parser.fileIndex, index);
+		Expr:inner;
+		status = CompileExpressionRange(parser.program, parser.env, parser.fileIndex, index + 1, match, std::StringFromCString(""), std::StringFromCString(""), false, &inner);
+		StringBuilder:builder = std::StringBuilderNew(parser.program[0].allocator);
+		if (status == Status::Ok) {
+			status = builder.WriteByte('(');
+		}
+		if (status == Status::Ok) {
+			status = builder.WriteString(std::OwnedStringView(&inner.text));
+		}
+		if (status == Status::Ok) {
+			status = builder.WriteByte(')');
+		}
+		if (status == Status::Ok) {
+			status = ExprFromBuilder(out, &builder);
+		}
+		builder.Destroy();
+		if (status == Status::Ok) {
+			status = ExprSetType(parser.program, out, std::OwnedStringView(&inner.typeKey), std::OwnedStringView(&inner.cType), inner.isPointer);
+			out.isArray = inner.isArray;
+			out.isLvalue = inner.isLvalue;
+			out.isPointer = inner.isPointer;
+		}
+		ExprDestroy(&inner);
+		parser.pos = match + 1;
+		return(status);
+	}
+	if (IsPunctuation(parser.program, parser.fileIndex, index, PunctuationKind::LeftBrace)) {
+		usize:match = FindMatching(parser.program, parser.fileIndex, index);
+		status = ExprFromLiteralBlock(parser, index, match, out);
+		parser.pos = match + 1;
+		return(status);
+	}
+	if (IsOperator(parser.program, parser.fileIndex, index, OperatorKind::Scope)) {
+		if (index + 1 < parser.end) {
+			status = ExprSetText(parser.program, out, TokenText(parser.program, parser.fileIndex, index + 1));
+			parser.pos = index + 2;
+			return(status);
+		}
+	}
+	if (token.kind == TokenKind::Identifier || token.kind == TokenKind::Keyword) {
+		if (index + 2 < parser.end && IsPunctuation(parser.program, parser.fileIndex, index + 1, PunctuationKind::Colon)
+			&& IsPunctuation(parser.program, parser.fileIndex, index + 2, PunctuationKind::LeftBrace)) {
+			usize:blockEnd = FindMatching(parser.program, parser.fileIndex, index + 2);
+			TypeInfo:typeInfo;
+			status = RenderTypeInfo(parser.program, parser.fileIndex, index, index + 1, &typeInfo);
+			StringBuilder:builder = std::StringBuilderNew(parser.program[0].allocator);
+			if (status == Status::Ok) {
+				status = builder.WriteByte('(');
+			}
+			if (status == Status::Ok) {
+				status = builder.WriteString(std::OwnedStringView(&typeInfo.cType));
+			}
+			if (status == Status::Ok) {
+				status = builder.WriteByte(')');
+			}
+			if (status == Status::Ok) {
+				status = WriteInitializerList(parser, index + 3, blockEnd, &builder);
+			}
+			if (status == Status::Ok) {
+				status = ExprFromBuilder(out, &builder);
+			}
+			builder.Destroy();
+			if (status == Status::Ok) {
+				status = ExprSetType(parser.program, out, std::OwnedStringView(&typeInfo.key), std::OwnedStringView(&typeInfo.cType), typeInfo.isPointer);
+			}
+			TypeInfoDestroy(&typeInfo);
+			parser.pos = blockEnd + 1;
+			return(status);
+		}
+		if (IsIdentifierText(parser.program, parser.fileIndex, index, "cast") && index + 1 < parser.end && IsOperator(parser.program, parser.fileIndex, index + 1, OperatorKind::Less)) {
+			usize:genericEnd = FindMatching(parser.program, parser.fileIndex, index + 1);
+			usize:groupStart = genericEnd + 1;
+			usize:groupEnd = FindMatching(parser.program, parser.fileIndex, groupStart);
+			TypeInfo:typeInfo;
+			status = RenderTypeInfo(parser.program, parser.fileIndex, index + 2, genericEnd, &typeInfo);
+			Expr:value;
+			if (status == Status::Ok) {
+				status = CompileExpressionRange(parser.program, parser.env, parser.fileIndex, groupStart + 1, groupEnd, std::StringFromCString(""), std::StringFromCString(""), false, &value);
+			}
+			StringBuilder:builder = std::StringBuilderNew(parser.program[0].allocator);
+			if (status == Status::Ok) {
+				status = builder.WriteCString("((");
+			}
+			if (status == Status::Ok) {
+				status = builder.WriteString(std::OwnedStringView(&typeInfo.cType));
+			}
+			if (status == Status::Ok) {
+				status = builder.WriteCString(")(");
+			}
+			if (status == Status::Ok) {
+				status = builder.WriteString(std::OwnedStringView(&value.text));
+			}
+			if (status == Status::Ok) {
+				status = builder.WriteCString("))");
+			}
+			if (status == Status::Ok) {
+				status = ExprFromBuilder(out, &builder);
+			}
+			builder.Destroy();
+			if (status == Status::Ok) {
+				status = ExprSetType(parser.program, out, std::OwnedStringView(&typeInfo.key), std::OwnedStringView(&typeInfo.cType), typeInfo.isPointer);
+			}
+			ExprDestroy(&value);
+			TypeInfoDestroy(&typeInfo);
+			parser.pos = groupEnd + 1;
+			return(status);
+		}
+		if ((IsIdentifierText(parser.program, parser.fileIndex, index, "sizeof") || IsIdentifierText(parser.program, parser.fileIndex, index, "alignof"))
+			&& index + 1 < parser.end && IsPunctuation(parser.program, parser.fileIndex, index + 1, PunctuationKind::LeftParen)) {
+			usize:groupEnd = FindMatching(parser.program, parser.fileIndex, index + 1);
+			StringBuilder:builder = std::StringBuilderNew(parser.program[0].allocator);
+			bool:isAlign = IsIdentifierText(parser.program, parser.fileIndex, index, "alignof");
+			if (isAlign) {
+				status = builder.WriteCString("_Alignof(");
+			} else {
+				status = builder.WriteCString("sizeof(");
+			}
+			TypeInfo:typeInfo;
+			if (status == Status::Ok) {
+				status = RenderTypeInfo(parser.program, parser.fileIndex, index + 2, groupEnd, &typeInfo);
+			}
+			if (status == Status::Ok) {
+				status = builder.WriteString(std::OwnedStringView(&typeInfo.cType));
+			}
+			if (status == Status::Ok) {
+				status = builder.WriteByte(')');
+			}
+			if (status == Status::Ok) {
+				status = ExprFromBuilder(out, &builder);
+			}
+			builder.Destroy();
+			TypeInfoDestroy(&typeInfo);
+			if (status == Status::Ok) {
+				status = ExprSetType(parser.program, out, std::StringFromCString("usize"), std::StringFromCString("usize"), false);
+			}
+			parser.pos = groupEnd + 1;
+			return(status);
+		}
+		if (IsIdentifierText(parser.program, parser.fileIndex, index, "offsetof")
+			&& index + 1 < parser.end && IsPunctuation(parser.program, parser.fileIndex, index + 1, PunctuationKind::LeftParen)) {
+			usize:groupEnd = FindMatching(parser.program, parser.fileIndex, index + 1);
+			usize:comma = FindTokenAtDepthZero(parser.program, parser.fileIndex, index + 2, groupEnd, PunctuationKind::Comma);
+			TypeInfo:typeInfo;
+			status = RenderTypeInfo(parser.program, parser.fileIndex, index + 2, comma, &typeInfo);
+			StringBuilder:builder = std::StringBuilderNew(parser.program[0].allocator);
+			if (status == Status::Ok) {
+				status = builder.WriteCString("offsetof(");
+			}
+			if (status == Status::Ok) {
+				status = builder.WriteString(std::OwnedStringView(&typeInfo.cType));
+			}
+			if (status == Status::Ok) {
+				status = builder.WriteByte(',');
+			}
+			if (status == Status::Ok) {
+				status = WriteTokenRangeRaw(parser.program, &builder, parser.fileIndex, comma + 1, groupEnd);
+			}
+			if (status == Status::Ok) {
+				status = builder.WriteByte(')');
+			}
+			if (status == Status::Ok) {
+				status = ExprFromBuilder(out, &builder);
+			}
+			builder.Destroy();
+			TypeInfoDestroy(&typeInfo);
+			if (status == Status::Ok) {
+				status = ExprSetType(parser.program, out, std::StringFromCString("usize"), std::StringFromCString("usize"), false);
+			}
+			parser.pos = groupEnd + 1;
+			return(status);
+		}
+
+		StringBuilder:builder = std::StringBuilderNew(parser.program[0].allocator);
+		if (index + 2 < parser.end && IsOperator(parser.program, parser.fileIndex, index + 1, OperatorKind::Scope)) {
+			String:scopeName = TokenText(parser.program, parser.fileIndex, index);
+			String:name = TokenText(parser.program, parser.fileIndex, index + 2);
+			ptr<ModuleDecl>:scopedDecl = FindFunctionDeclByName(parser.program, name, scopeName);
+			if (scopedDecl != 0) {
+				status = WriteDeclCName(parser.program, &builder, scopedDecl);
+			} else {
+				status = WriteToken(parser.program, &builder, parser.fileIndex, index);
+				if (status == Status::Ok) {
+					status = builder.WriteByte('_');
+				}
+				if (status == Status::Ok) {
+					status = WriteToken(parser.program, &builder, parser.fileIndex, index + 2);
+				}
+			}
+			parser.pos = index + 3;
+			if (parser.pos < parser.end && IsOperator(parser.program, parser.fileIndex, parser.pos, OperatorKind::Less)) {
+				usize:gEnd = FindMatching(parser.program, parser.fileIndex, parser.pos);
+				if (gEnd + 1 < parser.end && IsPunctuation(parser.program, parser.fileIndex, gEnd + 1, PunctuationKind::LeftParen)) {
+					usize:argStart = parser.pos + 1;
+					while (argStart < gEnd) {
+						usize:argEnd = FindTokenAtDepthZero(parser.program, parser.fileIndex, argStart, gEnd, PunctuationKind::Comma);
+						if (status == Status::Ok) {
+							status = builder.WriteCString("__");
+						}
+						if (status == Status::Ok) {
+							status = WriteTypeSuffixFromRange(parser.program, &builder, parser.fileIndex, argStart, argEnd);
+						}
+						if (argEnd >= gEnd) {
+							break;
+						}
+						argStart = argEnd + 1;
+					}
+					parser.pos = gEnd + 1;
+				}
+			}
+		} else {
+			status = WriteToken(parser.program, &builder, parser.fileIndex, index);
+			parser.pos = index + 1;
+			if (parser.pos < parser.end && IsOperator(parser.program, parser.fileIndex, parser.pos, OperatorKind::Less)) {
+				usize:gEnd = FindMatching(parser.program, parser.fileIndex, parser.pos);
+				if (gEnd + 1 < parser.end && IsPunctuation(parser.program, parser.fileIndex, gEnd + 1, PunctuationKind::LeftParen)) {
+					usize:argStart = parser.pos + 1;
+					while (argStart < gEnd) {
+						usize:argEnd = FindTokenAtDepthZero(parser.program, parser.fileIndex, argStart, gEnd, PunctuationKind::Comma);
+						if (status == Status::Ok) {
+							status = builder.WriteCString("__");
+						}
+						if (status == Status::Ok) {
+							status = WriteTypeSuffixFromRange(parser.program, &builder, parser.fileIndex, argStart, argEnd);
+						}
+						if (argEnd >= gEnd) {
+							break;
+						}
+						argStart = argEnd + 1;
+					}
+					parser.pos = gEnd + 1;
+				}
+			}
+		}
+		if (status == Status::Ok) {
+			status = ExprFromBuilder(out, &builder);
+		}
+		builder.Destroy();
+		ptr<Local>:local = EnvFind(parser.env, TokenText(parser.program, parser.fileIndex, index));
+		if (status == Status::Ok && local != 0) {
+			status = ExprSetType(parser.program, out, std::OwnedStringView(&local.typeKey), std::OwnedStringView(&local.cType), local.isPointer);
+			out.isArray = local.isArray;
+			out.isPointer = local.isPointer;
+			out.isLvalue = true;
+			OwnedString:arrLen;
+			if (status == Status::Ok) {
+				status = CloneContextString(parser.program, std::OwnedStringView(&local.arrayLen), &arrLen);
+			}
+			if (status == Status::Ok) {
+				status = ReplaceOwned(&out.arrayLen, arrLen);
+			}
+		} else {
+			if (status == Status::Ok) {
+				ptr<ModuleDecl>:functionDecl = FindFunctionDeclByName(parser.program, TokenText(parser.program, parser.fileIndex, index), std::StringFromCString(""));
+				if (functionDecl != 0) {
+					StringBuilder:functionName = std::StringBuilderNew(parser.program[0].allocator);
+					status = WriteDeclCName(parser.program, &functionName, functionDecl);
+					String:currentName = std::OwnedStringView(&out.text);
+					Result<usize>:suffixStart = currentName.FindByte('_');
+					if (status == Status::Ok && suffixStart.status == Status::Ok && suffixStart.value + 1 < currentName.len && currentName.data[suffixStart.value + 1] == '_') {
+						status = functionName.WriteString(currentName.Slice(suffixStart.value, currentName.len - suffixStart.value));
+					}
+					if (status == Status::Ok) {
+						status = ExprFromBuilder(out, &functionName);
+					}
+					functionName.Destroy();
+				}
+			}
+		}
+		return(status);
+	}
+	parser.pos += 1;
+	return(Status::Ok);
+}
+
+Status:WriteCallArgs(ptr<ExprParser>:parser, usize:start, usize:end, ptr<StringBuilder>:out) {
+	usize:itemStart = start;
+	bool:first = true;
+	Status:status = Status::Ok;
+	while (itemStart < end) {
+		if (IsPunctuation(parser.program, parser.fileIndex, itemStart, PunctuationKind::Comma)) {
+			itemStart += 1;
+			continue;
+		}
+		usize:itemEnd = FindTokenAtDepthZero(parser.program, parser.fileIndex, itemStart, end, PunctuationKind::Comma);
+		usize:exprStart = itemStart;
+		usize:assign = FindTokenAtDepthZero(parser.program, parser.fileIndex, itemStart, itemEnd, PunctuationKind::Colon);
+		if (assign < itemEnd) {
+			exprStart = assign + 1;
+		} else {
+			for (usize:i = itemStart; i < itemEnd; i++) {
+				if (IsOperator(parser.program, parser.fileIndex, i, OperatorKind::Assign)) {
+					exprStart = i + 1;
+					break;
+				}
+			}
+		}
+		Expr:arg;
+		if (status == Status::Ok) {
+			status = CompileExpressionRange(parser.program, parser.env, parser.fileIndex, exprStart, itemEnd, std::StringFromCString(""), std::StringFromCString(""), false, &arg);
+		}
+		if (status == Status::Ok && !first) {
+			status = out.WriteByte(',');
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&arg.text));
+		}
+		if (status == Status::Ok) {
+			ExprDestroy(&arg);
+		}
+		first = false;
+		if (status != Status::Ok || itemEnd >= end) {
+			break;
+		}
+		itemStart = itemEnd + 1;
+	}
+	return(status);
+}
+
+usize:CountCallArgs(ptr<CompilerContext>:program, usize:fileIndex, usize:start, usize:end) {
+	if (start >= end) {
+		return(0);
+	}
+	usize:count = 1;
+	usize:i = start;
+	while (i < end) {
+		usize:comma = FindTokenAtDepthZero(program, fileIndex, i, end, PunctuationKind::Comma);
+		if (comma >= end) {
+			break;
+		}
+		count += 1;
+		i = comma + 1;
+	}
+	return(count);
+}
+
+Status:ApplyPostfix(ptr<ExprParser>:parser, ptr<Expr>:expr) {
+	while (parser.pos < parser.end) {
+		if (IsPunctuation(parser.program, parser.fileIndex, parser.pos, PunctuationKind::LeftParen)) {
+			usize:groupStart = parser.pos;
+			usize:groupEnd = FindMatching(parser.program, parser.fileIndex, groupStart);
+			String:funcText = std::OwnedStringView(&expr.text);
+			if (funcText.EqualsCString("len")) {
+				Expr:arg;
+				Status:status = CompileExpressionRange(parser.program, parser.env, parser.fileIndex, groupStart + 1, groupEnd, std::StringFromCString(""), std::StringFromCString(""), false, &arg);
+				StringBuilder:lenBuilder = std::StringBuilderNew(parser.program[0].allocator);
+				if (status == Status::Ok) {
+					if (arg.isArray) {
+						status = lenBuilder.WriteCString("((void)(");
+						if (status == Status::Ok) {
+							status = lenBuilder.WriteString(std::OwnedStringView(&arg.text));
+						}
+						if (status == Status::Ok) {
+							status = lenBuilder.WriteCString("),");
+						}
+						if (status == Status::Ok) {
+							status = lenBuilder.WriteString(std::OwnedStringView(&arg.arrayLen));
+						}
+						if (status == Status::Ok) {
+							status = lenBuilder.WriteByte(')');
+						}
+					} else {
+						status = lenBuilder.WriteCString("(sizeof(");
+						if (status == Status::Ok) {
+							status = lenBuilder.WriteString(std::OwnedStringView(&arg.text));
+						}
+						if (status == Status::Ok) {
+							status = lenBuilder.WriteCString(")/sizeof((");
+						}
+						if (status == Status::Ok) {
+							status = lenBuilder.WriteString(std::OwnedStringView(&arg.text));
+						}
+						if (status == Status::Ok) {
+							status = lenBuilder.WriteCString(")[0]))");
+						}
+					}
+				}
+				if (status == Status::Ok) {
+					status = ExprFromBuilder(expr, &lenBuilder);
+				}
+				lenBuilder.Destroy();
+				ExprDestroy(&arg);
+				if (status == Status::Ok) {
+					status = ExprSetType(parser.program, expr, std::StringFromCString("usize"), std::StringFromCString("usize"), false);
+				}
+				parser.pos = groupEnd + 1;
+				if (status != Status::Ok) {
+					return(status);
+				}
+				continue;
+			}
+			StringBuilder:builder = std::StringBuilderNew(parser.program[0].allocator);
+			Status:status = builder.WriteString(funcText);
+			if (status == Status::Ok) {
+				status = builder.WriteByte('(');
+			}
+			if (status == Status::Ok) {
+				status = WriteCallArgs(parser, groupStart + 1, groupEnd, &builder);
+			}
+			usize:argCount = CountCallArgs(parser.program, parser.fileIndex, groupStart + 1, groupEnd);
+			if (status == Status::Ok && funcText.EqualsCString("add") && argCount == 1) {
+				status = builder.WriteCString(",0");
+			}
+			if (status == Status::Ok) {
+				status = builder.WriteByte(')');
+			}
+			if (status == Status::Ok) {
+				status = ExprFromBuilder(expr, &builder);
+			}
+			builder.Destroy();
+			expr.isLvalue = false;
+			parser.pos = groupEnd + 1;
+			if (status != Status::Ok) {
+				return(status);
+			}
+			continue;
+		}
+		if (IsPunctuation(parser.program, parser.fileIndex, parser.pos, PunctuationKind::LeftBracket)) {
+			usize:indexStart = parser.pos;
+			usize:indexEnd = FindMatching(parser.program, parser.fileIndex, indexStart);
+			Expr:indexExpr;
+			Status:status = CompileExpressionRange(parser.program, parser.env, parser.fileIndex, indexStart + 1, indexEnd, std::StringFromCString(""), std::StringFromCString(""), false, &indexExpr);
+			StringBuilder:builder = std::StringBuilderNew(parser.program[0].allocator);
+			if (status == Status::Ok) {
+				status = builder.WriteString(std::OwnedStringView(&expr.text));
+			}
+			if (status == Status::Ok) {
+				status = builder.WriteByte('[');
+			}
+			if (status == Status::Ok) {
+				status = builder.WriteString(std::OwnedStringView(&indexExpr.text));
+			}
+			if (status == Status::Ok) {
+				status = builder.WriteByte(']');
+			}
+			if (status == Status::Ok) {
+				status = ExprFromBuilder(expr, &builder);
+			}
+			builder.Destroy();
+			ExprDestroy(&indexExpr);
+			expr.isLvalue = true;
+			expr.isArray = false;
+			String:indexedKey = std::OwnedStringView(&expr.typeKey);
+			if (indexedKey.len > 0 && indexedKey.data[indexedKey.len - 1] == '*') {
+				OwnedString:newKey;
+				status = CloneContextString(parser.program, indexedKey.Slice(0, indexedKey.len - 1), &newKey);
+				if (status == Status::Ok) {
+					status = ReplaceOwned(&expr.typeKey, newKey);
+				}
+				OwnedString:newCType;
+				if (status == Status::Ok) {
+					status = MakeCTypeFromKey(parser.program, std::OwnedStringView(&expr.typeKey), &newCType);
+				}
+				if (status == Status::Ok) {
+					status = ReplaceOwned(&expr.cType, newCType);
+				}
+				expr.isPointer = false;
+			}
+			parser.pos = indexEnd + 1;
+			if (status != Status::Ok) {
+				return(status);
+			}
+			continue;
+		}
+		if (IsPunctuation(parser.program, parser.fileIndex, parser.pos, PunctuationKind::Dot)) {
+			usize:nameIndex = parser.pos + 1;
+			String:fieldName = TokenText(parser.program, parser.fileIndex, nameIndex);
+			if (nameIndex + 1 < parser.end && IsPunctuation(parser.program, parser.fileIndex, nameIndex + 1, PunctuationKind::LeftParen)) {
+				usize:groupStart = nameIndex + 1;
+				usize:groupEnd = FindMatching(parser.program, parser.fileIndex, groupStart);
+				String:receiverKey = std::OwnedStringView(&expr.typeKey);
+				String:methodReceiverKey = receiverKey;
+				if (expr.isPointer && receiverKey.len > 0 && receiverKey.data[receiverKey.len - 1] == '*') {
+					methodReceiverKey = receiverKey.Slice(0, receiverKey.len - 1);
+				}
+				ptr<ModuleDecl>:method = FindMethod(parser.program, methodReceiverKey, fieldName, false, 0, 0);
+				StringBuilder:builder = std::StringBuilderNew(parser.program[0].allocator);
+				Status:status = Status::Ok;
+				if (method != 0) {
+					status = WriteDeclCName(parser.program, &builder, method);
+				} else {
+					status = builder.WriteString(methodReceiverKey);
+					if (status == Status::Ok) {
+						status = builder.WriteByte('_');
+					}
+					if (status == Status::Ok) {
+						status = builder.WriteString(fieldName);
+					}
+				}
+				if (status == Status::Ok) {
+					status = builder.WriteByte('(');
+				}
+				if (status == Status::Ok && !expr.isPointer) {
+					status = builder.WriteByte('&');
+				}
+				if (status == Status::Ok) {
+					status = builder.WriteString(std::OwnedStringView(&expr.text));
+				}
+				if (groupStart + 1 < groupEnd) {
+					if (status == Status::Ok) {
+						status = builder.WriteByte(',');
+					}
+					if (status == Status::Ok) {
+						status = WriteCallArgs(parser, groupStart + 1, groupEnd, &builder);
+					}
+				}
+				if (status == Status::Ok) {
+					status = builder.WriteByte(')');
+				}
+				if (status == Status::Ok) {
+					status = ExprFromBuilder(expr, &builder);
+				}
+				builder.Destroy();
+				expr.isLvalue = false;
+				if (method != 0) {
+					TypeInfo:returnInfo;
+					if (status == Status::Ok) {
+						status = RenderTypeInfo(parser.program, method.fileIndex, method.returnStart, method.returnEnd, &returnInfo);
+					}
+					if (status == Status::Ok) {
+						status = ExprSetType(parser.program, expr, std::OwnedStringView(&returnInfo.key), std::OwnedStringView(&returnInfo.cType), returnInfo.isPointer);
+					}
+					if (status == Status::Ok) {
+						TypeInfoDestroy(&returnInfo);
+					}
+				}
+				parser.pos = groupEnd + 1;
+				if (status != Status::Ok) {
+					return(status);
+				}
+				continue;
+			}
+			StringBuilder:builder = std::StringBuilderNew(parser.program[0].allocator);
+			Status:status = builder.WriteString(std::OwnedStringView(&expr.text));
+			if (status == Status::Ok) {
+				String:exprText = std::OwnedStringView(&expr.text);
+				if (expr.isPointer || exprText.EqualsCString("this")) {
+					status = builder.WriteCString("->");
+				} else {
+					status = builder.WriteByte('.');
+				}
+			}
+			if (status == Status::Ok) {
+				status = builder.WriteString(fieldName);
+			}
+			if (status == Status::Ok) {
+				status = ExprFromBuilder(expr, &builder);
+			}
+			builder.Destroy();
+			TypeInfo:fieldType;
+			if (status == Status::Ok) {
+				status = ModuleFieldType(parser.program, std::OwnedStringView(&expr.typeKey), fieldName, &fieldType);
+			}
+			if (status == Status::Ok) {
+				status = ExprSetType(parser.program, expr, std::OwnedStringView(&fieldType.key), std::OwnedStringView(&fieldType.cType), fieldType.isPointer);
+			}
+			if (status == Status::Ok) {
+				TypeInfoDestroy(&fieldType);
+			}
+			expr.isLvalue = true;
+			parser.pos = nameIndex + 1;
+			if (status != Status::Ok) {
+				return(status);
+			}
+			continue;
+		}
+		break;
+	}
+	return(Status::Ok);
+}
+
+Status:CompileUnary(ptr<ExprParser>:parser, ptr<Expr>:out) {
+	if (parser.pos < parser.end
+		&& (IsOperator(parser.program, parser.fileIndex, parser.pos, OperatorKind::Minus)
+			|| IsOperator(parser.program, parser.fileIndex, parser.pos, OperatorKind::LogicalNot)
+			|| IsOperator(parser.program, parser.fileIndex, parser.pos, OperatorKind::BitwiseNot)
+			|| IsOperator(parser.program, parser.fileIndex, parser.pos, OperatorKind::BitwiseAnd)
+			|| IsOperator(parser.program, parser.fileIndex, parser.pos, OperatorKind::Multiply))) {
+		usize:op = parser.pos;
+		parser.pos += 1;
+		Expr:inner;
+		Status:status = CompileUnary(parser, &inner);
+		StringBuilder:builder = std::StringBuilderNew(parser.program[0].allocator);
+		if (status == Status::Ok) {
+			status = WriteToken(parser.program, &builder, parser.fileIndex, op);
+		}
+		if (status == Status::Ok) {
+			status = builder.WriteString(std::OwnedStringView(&inner.text));
+		}
+		if (status == Status::Ok) {
+			status = ExprInitEmpty(parser.program, out);
+		}
+		if (status == Status::Ok) {
+			status = ExprFromBuilder(out, &builder);
+		}
+		builder.Destroy();
+		if (status == Status::Ok) {
+			ptr<ModuleDecl>:unaryMethod = 0;
+			if (IsOperator(parser.program, parser.fileIndex, op, OperatorKind::Minus)) {
+				unaryMethod = FindMethod(parser.program, std::OwnedStringView(&inner.typeKey), std::StringFromCString(""), true, OperatorCode(parser.program, parser.fileIndex, op), 0);
+			}
+			if (unaryMethod != 0) {
+				StringBuilder:call = std::StringBuilderNew(parser.program[0].allocator);
+				status = WriteDeclCName(parser.program, &call, unaryMethod);
+				if (status == Status::Ok) {
+					status = call.WriteCString("(&");
+				}
+				if (status == Status::Ok) {
+					status = call.WriteString(std::OwnedStringView(&inner.text));
+				}
+				if (status == Status::Ok) {
+					status = call.WriteByte(')');
+				}
+				if (status == Status::Ok) {
+					status = ExprFromBuilder(out, &call);
+				}
+				call.Destroy();
+			} else {
+				if (IsOperator(parser.program, parser.fileIndex, op, OperatorKind::BitwiseAnd)) {
+				StringBuilder:key = std::StringBuilderNew(parser.program[0].allocator);
+				status = key.WriteString(std::OwnedStringView(&inner.typeKey));
+				if (status == Status::Ok) {
+					status = key.WriteByte('*');
+				}
+				OwnedString:keyOwned;
+				if (status == Status::Ok) {
+					status = DetachBuilder(&key, &keyOwned);
+				}
+				key.Destroy();
+				OwnedString:cOwned;
+				if (status == Status::Ok) {
+					StringBuilder:ct = std::StringBuilderNew(parser.program[0].allocator);
+					status = ct.WriteString(std::OwnedStringView(&inner.cType));
+					if (status == Status::Ok) {
+						status = ct.WriteByte('*');
+					}
+					if (status == Status::Ok) {
+						status = DetachBuilder(&ct, &cOwned);
+					}
+					ct.Destroy();
+				}
+				if (status == Status::Ok) {
+					status = ExprSetType(parser.program, out, std::OwnedStringView(&keyOwned), std::OwnedStringView(&cOwned), true);
+					std::DestroyOwnedString(&keyOwned);
+					std::DestroyOwnedString(&cOwned);
+				}
+			} else {
+				status = ExprSetType(parser.program, out, std::OwnedStringView(&inner.typeKey), std::OwnedStringView(&inner.cType), inner.isPointer);
+			}
+			}
+		}
+		ExprDestroy(&inner);
+		return(status);
+	}
+	Status:status = CompilePrimary(parser, out);
+	if (status == Status::Ok) {
+		status = ApplyPostfix(parser, out);
+	}
+	return(status);
+}
+
+Status:CompileBinaryOperation(ptr<ExprParser>:parser, ptr<Expr>:left, usize:operatorIndex, ptr<Expr>:right, ptr<Expr>:out) {
+	Status:status = ExprInitEmpty(parser.program, out);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	u8:opCode = OperatorCode(parser.program, parser.fileIndex, operatorIndex);
+	ptr<ModuleDecl>:method = 0;
+	usize:operatorArgCount = 1;
+	if (IsOperator(parser.program, parser.fileIndex, operatorIndex, OperatorKind::PlusAssign)
+		|| IsOperator(parser.program, parser.fileIndex, operatorIndex, OperatorKind::MinusAssign)) {
+		operatorArgCount = 1;
+	}
+	if (opCode != 0 && std::OwnedStringView(&left.typeKey).len > 0) {
+		method = FindMethod(parser.program, std::OwnedStringView(&left.typeKey), std::StringFromCString(""), true, opCode, operatorArgCount);
+	}
+	if (method != 0) {
+		StringBuilder:builder = std::StringBuilderNew(parser.program[0].allocator);
+		status = WriteDeclCName(parser.program, &builder, method);
+		if (status == Status::Ok) {
+			status = builder.WriteCString("(&");
+		}
+		if (status == Status::Ok) {
+			status = builder.WriteString(std::OwnedStringView(&left.text));
+		}
+		if (status == Status::Ok) {
+			status = builder.WriteByte(',');
+		}
+		if (status == Status::Ok) {
+			status = builder.WriteString(std::OwnedStringView(&right.text));
+		}
+		if (status == Status::Ok) {
+			status = builder.WriteByte(')');
+		}
+		if (status == Status::Ok) {
+			status = ExprFromBuilder(out, &builder);
+		}
+		builder.Destroy();
+		if (status == Status::Ok) {
+			TypeInfo:returnInfo;
+			status = RenderTypeInfo(parser.program, method.fileIndex, method.returnStart, method.returnEnd, &returnInfo);
+			if (status == Status::Ok) {
+				status = ExprSetType(parser.program, out, std::OwnedStringView(&returnInfo.key), std::OwnedStringView(&returnInfo.cType), returnInfo.isPointer);
+			}
+			if (status == Status::Ok) {
+				TypeInfoDestroy(&returnInfo);
+			}
+		}
+		return(status);
+	}
+	StringBuilder:builder = std::StringBuilderNew(parser.program[0].allocator);
+	status = builder.WriteString(std::OwnedStringView(&left.text));
+	if (status == Status::Ok) {
+		status = WriteToken(parser.program, &builder, parser.fileIndex, operatorIndex);
+	}
+	if (status == Status::Ok) {
+		status = builder.WriteString(std::OwnedStringView(&right.text));
+	}
+	if (status == Status::Ok) {
+		status = ExprFromBuilder(out, &builder);
+	}
+	builder.Destroy();
+	if (status == Status::Ok) {
+		if (IsOperator(parser.program, parser.fileIndex, operatorIndex, OperatorKind::Equal)
+			|| IsOperator(parser.program, parser.fileIndex, operatorIndex, OperatorKind::NotEqual)
+			|| IsOperator(parser.program, parser.fileIndex, operatorIndex, OperatorKind::Less)
+			|| IsOperator(parser.program, parser.fileIndex, operatorIndex, OperatorKind::LessEqual)
+			|| IsOperator(parser.program, parser.fileIndex, operatorIndex, OperatorKind::Greater)
+			|| IsOperator(parser.program, parser.fileIndex, operatorIndex, OperatorKind::GreaterEqual)
+			|| IsOperator(parser.program, parser.fileIndex, operatorIndex, OperatorKind::LogicalAnd)
+			|| IsOperator(parser.program, parser.fileIndex, operatorIndex, OperatorKind::LogicalOr)) {
+			status = ExprSetType(parser.program, out, std::StringFromCString("bool"), std::StringFromCString("bool"), false);
+		} else {
+			status = ExprSetType(parser.program, out, std::OwnedStringView(&left.typeKey), std::OwnedStringView(&left.cType), left.isPointer);
+		}
+	}
+	return(status);
+}
+
+Status:CompileExpression(ptr<ExprParser>:parser, u8:minPrecedence, ptr<Expr>:out) {
+	Expr:left;
+	Status:status = CompileUnary(parser, &left);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	while (parser.pos < parser.end) {
+		u8:precedence = OperatorPrecedence(parser.program, parser.fileIndex, parser.pos);
+		if (precedence == 0 || precedence < minPrecedence) {
+			break;
+		}
+		usize:op = parser.pos;
+		parser.pos += 1;
+		u8:nextMin = precedence + 1;
+		if (OperatorRightAssociative(parser.program, parser.fileIndex, op)) {
+			nextMin = precedence;
+		}
+		Expr:right;
+		status = CompileExpression(parser, nextMin, &right);
+		if (status != Status::Ok) {
+			ExprDestroy(&left);
+			return(status);
+		}
+		Expr:combined;
+		status = CompileBinaryOperation(parser, &left, op, &right, &combined);
+		ExprDestroy(&left);
+		ExprDestroy(&right);
+		if (status != Status::Ok) {
+			return(status);
+		}
+		left = combined;
+	}
+	out[0] = left;
+	return(Status::Ok);
+}
+
+Status:WriteIndent(ptr<StringBuilder>:out, usize:indent) {
+	for (usize:i = 0; i < indent; i++) {
+		Status:status = out.WriteCString("    ");
+		if (status != Status::Ok) {
+			return(status);
+		}
+	}
+	return(Status::Ok);
+}
+
+usize:FindStatementSemicolon(ptr<CompilerContext>:program, usize:fileIndex, usize:start, usize:end) {
+	usize:i = start;
+	while (i < end) {
+		if (IsPunctuation(program, fileIndex, i, PunctuationKind::LeftParen)
+			|| IsPunctuation(program, fileIndex, i, PunctuationKind::LeftBrace)
+			|| IsPunctuation(program, fileIndex, i, PunctuationKind::LeftBracket)) {
+			i = SkipDelimited(program, fileIndex, i);
+			continue;
+		}
+		if (IsPunctuation(program, fileIndex, i, PunctuationKind::Semicolon)) {
+			return(i);
+		}
+		i += 1;
+	}
+	return(end);
+}
+
+Status:ArrayLenString(ptr<CompilerContext>:program, usize:fileIndex, usize:start, usize:end, ptr<OwnedString>:out) {
+	StringBuilder:builder = std::StringBuilderNew(program.allocator);
+	Status:status = WriteTokenRangeRaw(program, &builder, fileIndex, start, end);
+	if (status == Status::Ok) {
+		status = DetachBuilder(&builder, out);
+	}
+	builder.Destroy();
+	return(status);
+}
+
+bool:ModuleFieldDefaultIsZero(ptr<CompilerContext>:program, ptr<ModuleField>:field) {
+	if (!field.hasDefault) {
+		return(true);
+	}
+	if (field.defaultEnd != field.defaultStart + 1) {
+		return(false);
+	}
+	if (IsTokenKind(program, field.fileIndex, field.defaultStart, TokenKind::Number)
+		&& TokenEquals(program, field.fileIndex, field.defaultStart, "0")) {
+		return(true);
+	}
+	if (IsIdentifierText(program, field.fileIndex, field.defaultStart, "false")) {
+		return(true);
+	}
+	return(false);
+}
+
+Status:WriteDefaultInitializer(ptr<CompilerContext>:program, ptr<StringBuilder>:out, String:typeKey) {
+	ptr<ModuleDecl>:decl = FindFieldDecl(program, typeKey);
+	if (decl != 0 && decl.kind == DeclKind::Union) {
+		return(out.WriteCString("{0}"));
+	}
+	if (decl == 0 || decl.kind != DeclKind::Struct) {
+		return(out.WriteCString("0"));
+	}
+	bool:hasNonZeroDefault = false;
+	for (usize:i = 0; i < decl.fieldCount; i++) {
+		ptr<ModuleField>:field = &program.fields.data[decl.firstField + i];
+		if (field.hasDefault && !ModuleFieldDefaultIsZero(program, field)) {
+			hasNonZeroDefault = true;
+			break;
+		}
+	}
+	if (!hasNonZeroDefault) {
+		return(out.WriteCString("{0}"));
+	}
+	Status:status = out.WriteByte('{');
+	bool:first = true;
+	for (usize:i = 0; i < decl.fieldCount; i++) {
+		ptr<ModuleField>:field = &program.fields.data[decl.firstField + i];
+		if (!field.hasDefault || ModuleFieldDefaultIsZero(program, field)) {
+			continue;
+		}
+		if (!first && status == Status::Ok) {
+			status = out.WriteByte(',');
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte('.');
+		}
+		if (status == Status::Ok) {
+			status = WriteToken(program, out, field.fileIndex, field.nameIndex);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte('=');
+		}
+		Expr:defaultExpr;
+		CodegenEnv:emptyEnv;
+		EnvInit(program, &emptyEnv);
+		if (status == Status::Ok) {
+			status = CompileExpressionRange(program, &emptyEnv, field.fileIndex, field.defaultStart, field.defaultEnd, std::StringFromCString(""), std::StringFromCString(""), false, &defaultExpr);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&defaultExpr.text));
+		}
+		if (status == Status::Ok) {
+			ExprDestroy(&defaultExpr);
+		}
+		EnvDestroy(&emptyEnv);
+		first = false;
+		if (status != Status::Ok) {
+			return(status);
+		}
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte('}');
+	}
+	return(status);
+}
+
+Status:WriteVarDecl(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, usize:semicolon, usize:indent) {
+	usize:colon = FindTopLevelColon(program, fileIndex, start, semicolon);
+	if (colon >= semicolon) {
+		return(Status::Invalid);
+	}
+	usize:nameIndex = colon + 1;
+	usize:afterName = nameIndex + 1;
+	bool:isArray = false;
+	usize:arrayStart = semicolon;
+	usize:arrayEnd = semicolon;
+	if (afterName < semicolon && IsPunctuation(program, fileIndex, afterName, PunctuationKind::LeftBracket)) {
+		isArray = true;
+		arrayStart = afterName + 1;
+		arrayEnd = FindMatching(program, fileIndex, afterName);
+		afterName = arrayEnd + 1;
+		while (afterName < semicolon && IsPunctuation(program, fileIndex, afterName, PunctuationKind::LeftBracket)) {
+			afterName = FindMatching(program, fileIndex, afterName) + 1;
+		}
+	}
+	usize:arraySuffixStart = nameIndex + 1;
+	usize:arraySuffixEnd = afterName;
+	usize:initStart = semicolon;
+	bool:hasInit = false;
+	for (usize:i = afterName; i < semicolon; i++) {
+		if (IsOperator(program, fileIndex, i, OperatorKind::Assign)) {
+			initStart = i + 1;
+			hasInit = true;
+			break;
+		}
+	}
+	TypeInfo:typeInfo;
+	Status:status = RenderTypeInfo(program, fileIndex, start, colon, &typeInfo);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = WriteIndent(out, indent);
+	if (status == Status::Ok) {
+		status = out.WriteString(std::OwnedStringView(&typeInfo.cType));
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte(' ');
+	}
+	if (status == Status::Ok) {
+		status = WriteToken(program, out, fileIndex, nameIndex);
+	}
+	OwnedString:arrayLen;
+	if (isArray) {
+		if (status == Status::Ok) {
+			status = WriteTokenRangeRaw(program, out, fileIndex, arraySuffixStart, arraySuffixEnd);
+		}
+		if (status == Status::Ok) {
+			status = ArrayLenString(program, fileIndex, arrayStart, arrayEnd, &arrayLen);
+		}
+	} else {
+		if (status == Status::Ok) {
+			status = MakeOwnedEmpty(program, &arrayLen);
+		}
+	}
+	if (hasInit) {
+		Expr:init;
+		if (status == Status::Ok) {
+			status = CompileExpressionRange(program, env, fileIndex, initStart, semicolon, std::OwnedStringView(&typeInfo.key), std::OwnedStringView(&typeInfo.cType), isArray, &init);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte('=');
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&init.text));
+		}
+		if (status == Status::Ok) {
+			ExprDestroy(&init);
+		}
+	} else {
+		if (!isArray) {
+			if (status == Status::Ok) {
+				status = out.WriteByte('=');
+			}
+			if (status == Status::Ok) {
+				status = WriteDefaultInitializer(program, out, std::OwnedStringView(&typeInfo.key));
+			}
+		}
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(";\n");
+	}
+	if (status == Status::Ok) {
+		status = EnvAdd(program, env, TokenText(program, fileIndex, nameIndex), std::OwnedStringView(&typeInfo.key), std::OwnedStringView(&typeInfo.cType), isArray, std::OwnedStringView(&arrayLen), typeInfo.isPointer);
+	}
+	std::DestroyOwnedString(&arrayLen);
+	TypeInfoDestroy(&typeInfo);
+	return(status);
+}
+
+Status:WriteExprStatement(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, usize:semicolon, usize:indent) {
+	if (start >= semicolon) {
+		return(Status::Ok);
+	}
+	if (start + 2 == semicolon
+		&& IsOperator(program, fileIndex, start + 1, OperatorKind::Plus)
+		&& IsOperator(program, fileIndex, start + 2, OperatorKind::Plus)) {
+	}
+	Expr:expr;
+	Status:status = CompileExpressionRange(program, env, fileIndex, start, semicolon, std::StringFromCString(""), std::StringFromCString(""), false, &expr);
+	if (status == Status::Ok) {
+		status = WriteIndent(out, indent);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteString(std::OwnedStringView(&expr.text));
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(";\n");
+	}
+	ExprDestroy(&expr);
+	return(status);
+}
+
+Status:WriteIfStatement(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, ptr<usize>:outNext, usize:indent) {
+	usize:groupStart = FindNextGroup(program, fileIndex, start, FileTokenCount(program, fileIndex));
+	usize:groupEnd = FindMatching(program, fileIndex, groupStart);
+	usize:blockStart = groupEnd + 1;
+	usize:blockEnd = blockStart;
+	Expr:cond;
+	Status:status = CompileExpressionRange(program, env, fileIndex, groupStart + 1, groupEnd, std::StringFromCString(""), std::StringFromCString(""), false, &cond);
+	if (status == Status::Ok) {
+		status = WriteIndent(out, indent);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("if (");
+	}
+	if (status == Status::Ok) {
+		status = out.WriteString(std::OwnedStringView(&cond.text));
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(") ");
+	}
+	ExprDestroy(&cond);
+	if (blockStart < FileTokenCount(program, fileIndex) && IsPunctuation(program, fileIndex, blockStart, PunctuationKind::LeftBrace)) {
+		blockEnd = FindMatching(program, fileIndex, blockStart);
+		if (status == Status::Ok) {
+			status = out.WriteCString("{\n");
+		}
+		if (status == Status::Ok) {
+			status = WriteBlock(program, out, env, fileIndex, blockStart + 1, blockEnd, indent + 1);
+		}
+		if (status == Status::Ok) {
+			status = WriteIndent(out, indent);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("}");
+		}
+		outNext[0] = blockEnd + 1;
+	} else {
+		usize:semicolon = FindStatementSemicolon(program, fileIndex, blockStart, FileTokenCount(program, fileIndex));
+		if (status == Status::Ok) {
+			status = out.WriteCString("{\n");
+		}
+		if (status == Status::Ok) {
+			status = WriteExprStatement(program, out, env, fileIndex, blockStart, semicolon, indent + 1);
+		}
+		if (status == Status::Ok) {
+			status = WriteIndent(out, indent);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("}");
+		}
+		outNext[0] = semicolon + 1;
+	}
+	if (outNext[0] < FileTokenCount(program, fileIndex) && IsKeyword(program, fileIndex, outNext[0], KeywordKind::Else)) {
+		if (status == Status::Ok) {
+			status = out.WriteCString(" else ");
+		}
+		usize:elseStart = outNext[0] + 1;
+		if (elseStart < FileTokenCount(program, fileIndex) && IsPunctuation(program, fileIndex, elseStart, PunctuationKind::LeftBrace)) {
+			usize:elseEnd = FindMatching(program, fileIndex, elseStart);
+			if (status == Status::Ok) {
+				status = out.WriteCString("{\n");
+			}
+			if (status == Status::Ok) {
+				status = WriteBlock(program, out, env, fileIndex, elseStart + 1, elseEnd, indent + 1);
+			}
+			if (status == Status::Ok) {
+				status = WriteIndent(out, indent);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteCString("}");
+			}
+			outNext[0] = elseEnd + 1;
+		} else {
+			if (status == Status::Ok) {
+				status = out.WriteCString("{\n");
+			}
+			usize:semicolon = FindStatementSemicolon(program, fileIndex, elseStart, FileTokenCount(program, fileIndex));
+			if (status == Status::Ok) {
+				status = WriteExprStatement(program, out, env, fileIndex, elseStart, semicolon, indent + 1);
+			}
+			if (status == Status::Ok) {
+				status = WriteIndent(out, indent);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteCString("}");
+			}
+			outNext[0] = semicolon + 1;
+		}
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte('\n');
+	}
+	return(status);
+}
+
+Status:WriteWhileStatement(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, ptr<usize>:outNext, usize:indent) {
+	usize:groupStart = FindNextGroup(program, fileIndex, start, FileTokenCount(program, fileIndex));
+	usize:groupEnd = FindMatching(program, fileIndex, groupStart);
+	usize:blockStart = groupEnd + 1;
+	usize:blockEnd = FindMatching(program, fileIndex, blockStart);
+	Expr:cond;
+	Status:status = CompileExpressionRange(program, env, fileIndex, groupStart + 1, groupEnd, std::StringFromCString(""), std::StringFromCString(""), false, &cond);
+	if (status == Status::Ok) {
+		status = WriteIndent(out, indent);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("while (");
+	}
+	if (status == Status::Ok) {
+		status = out.WriteString(std::OwnedStringView(&cond.text));
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(") {\n");
+	}
+	ExprDestroy(&cond);
+	if (status == Status::Ok) {
+		status = WriteBlock(program, out, env, fileIndex, blockStart + 1, blockEnd, indent + 1);
+	}
+	if (status == Status::Ok) {
+		status = WriteIndent(out, indent);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("}\n");
+	}
+	outNext[0] = blockEnd + 1;
+	return(status);
+}
+
+Status:WriteDoStatement(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, ptr<usize>:outNext, usize:indent) {
+	usize:blockStart = start + 1;
+	usize:blockEnd = FindMatching(program, fileIndex, blockStart);
+	usize:whileIndex = blockEnd + 1;
+	usize:groupStart = FindNextGroup(program, fileIndex, whileIndex, FileTokenCount(program, fileIndex));
+	usize:groupEnd = FindMatching(program, fileIndex, groupStart);
+	Expr:cond;
+	Status:status = CompileExpressionRange(program, env, fileIndex, groupStart + 1, groupEnd, std::StringFromCString(""), std::StringFromCString(""), false, &cond);
+	if (status == Status::Ok) {
+		status = WriteIndent(out, indent);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("do {\n");
+	}
+	if (status == Status::Ok) {
+		status = WriteBlock(program, out, env, fileIndex, blockStart + 1, blockEnd, indent + 1);
+	}
+	if (status == Status::Ok) {
+		status = WriteIndent(out, indent);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("} while (");
+	}
+	if (status == Status::Ok) {
+		status = out.WriteString(std::OwnedStringView(&cond.text));
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(");\n");
+	}
+	ExprDestroy(&cond);
+	outNext[0] = groupEnd + 2;
+	return(status);
+}
+
+Status:WriteForStatement(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, ptr<usize>:outNext, usize:indent) {
+	usize:groupStart = FindNextGroup(program, fileIndex, start, FileTokenCount(program, fileIndex));
+	usize:groupEnd = FindMatching(program, fileIndex, groupStart);
+	usize:firstSemi = FindTokenAtDepthZero(program, fileIndex, groupStart + 1, groupEnd, PunctuationKind::Semicolon);
+	usize:secondSemi = FindTokenAtDepthZero(program, fileIndex, firstSemi + 1, groupEnd, PunctuationKind::Semicolon);
+	usize:blockStart = groupEnd + 1;
+	usize:blockEnd = FindMatching(program, fileIndex, blockStart);
+	Status:status = WriteIndent(out, indent);
+	if (status == Status::Ok) {
+		status = out.WriteCString("for (");
+	}
+	usize:colon = FindTopLevelColon(program, fileIndex, groupStart + 1, firstSemi);
+	if (colon < firstSemi) {
+		TypeInfo:typeInfo;
+		if (status == Status::Ok) {
+			status = RenderTypeInfo(program, fileIndex, groupStart + 1, colon, &typeInfo);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&typeInfo.cType));
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte(' ');
+		}
+		if (status == Status::Ok) {
+			status = WriteToken(program, out, fileIndex, colon + 1);
+		}
+		if (status == Status::Ok) {
+			status = EnvAdd(program, env, TokenText(program, fileIndex, colon + 1), std::OwnedStringView(&typeInfo.key), std::OwnedStringView(&typeInfo.cType), false, std::StringFromCString(""), typeInfo.isPointer);
+		}
+		usize:eq = colon + 2;
+		while (eq < firstSemi && !IsOperator(program, fileIndex, eq, OperatorKind::Assign)) {
+			eq += 1;
+		}
+		if (eq < firstSemi) {
+			Expr:init;
+			if (status == Status::Ok) {
+				status = CompileExpressionRange(program, env, fileIndex, eq + 1, firstSemi, std::OwnedStringView(&typeInfo.key), std::OwnedStringView(&typeInfo.cType), false, &init);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteByte('=');
+			}
+			if (status == Status::Ok) {
+				status = out.WriteString(std::OwnedStringView(&init.text));
+			}
+			if (status == Status::Ok) {
+				ExprDestroy(&init);
+			}
+		}
+		TypeInfoDestroy(&typeInfo);
+	} else {
+		Expr:initExpr;
+		if (status == Status::Ok) {
+			status = CompileExpressionRange(program, env, fileIndex, groupStart + 1, firstSemi, std::StringFromCString(""), std::StringFromCString(""), false, &initExpr);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&initExpr.text));
+		}
+		if (status == Status::Ok) {
+			ExprDestroy(&initExpr);
+		}
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte(';');
+	}
+	Expr:cond;
+	if (status == Status::Ok) {
+		status = CompileExpressionRange(program, env, fileIndex, firstSemi + 1, secondSemi, std::StringFromCString(""), std::StringFromCString(""), false, &cond);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteString(std::OwnedStringView(&cond.text));
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte(';');
+	}
+	if (status == Status::Ok) {
+		status = WriteTokenRangeRaw(program, out, fileIndex, secondSemi + 1, groupEnd);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(") {\n");
+	}
+	if (status == Status::Ok) {
+		status = WriteBlock(program, out, env, fileIndex, blockStart + 1, blockEnd, indent + 1);
+	}
+	if (status == Status::Ok) {
+		status = WriteIndent(out, indent);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("}\n");
+	}
+	ExprDestroy(&cond);
+	outNext[0] = blockEnd + 1;
+	return(status);
+}
+
+Status:WriteEachStatement(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, ptr<usize>:outNext, usize:indent) {
+	usize:genericStart = start + 1;
+	usize:genericEnd = FindMatching(program, fileIndex, genericStart);
+	usize:groupStart = genericEnd + 1;
+	usize:groupEnd = FindMatching(program, fileIndex, groupStart);
+	usize:blockStart = groupEnd + 1;
+	usize:blockEnd = FindMatching(program, fileIndex, blockStart);
+	usize:comma = FindTokenAtDepthZero(program, fileIndex, genericStart + 1, genericEnd, PunctuationKind::Comma);
+	usize:valueTypeStart = genericStart + 1;
+	usize:valueTypeEnd = genericEnd;
+	usize:valueNameIndex = genericStart + 1;
+	bool:hasIndex = false;
+	usize:indexTypeStart = genericStart + 1;
+	usize:indexTypeEnd = genericStart + 1;
+	usize:indexNameIndex = genericStart + 1;
+	if (comma < genericEnd) {
+		hasIndex = true;
+		usize:indexColon = FindTopLevelColon(program, fileIndex, genericStart + 1, comma);
+		indexTypeStart = genericStart + 1;
+		indexTypeEnd = indexColon;
+		indexNameIndex = indexColon + 1;
+		usize:valueColon = FindTopLevelColon(program, fileIndex, comma + 1, genericEnd);
+		valueTypeStart = comma + 1;
+		valueTypeEnd = valueColon;
+		valueNameIndex = valueColon + 1;
+	} else {
+		usize:valueColon = FindTopLevelColon(program, fileIndex, genericStart + 1, genericEnd);
+		valueTypeStart = genericStart + 1;
+		valueTypeEnd = valueColon;
+		valueNameIndex = valueColon + 1;
+	}
+	TypeInfo:valueType;
+	Status:status = RenderTypeInfo(program, fileIndex, valueTypeStart, valueTypeEnd, &valueType);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	if (groupStart + 2 < groupEnd && IsIdentifierText(program, fileIndex, groupStart + 1, "range")) {
+		usize:rangeGroup = groupStart + 4;
+		while (rangeGroup < groupEnd && !IsPunctuation(program, fileIndex, rangeGroup, PunctuationKind::LeftParen)) {
+			rangeGroup += 1;
+		}
+		usize:rangeEnd = FindMatching(program, fileIndex, rangeGroup);
+		usize:firstComma = FindTokenAtDepthZero(program, fileIndex, rangeGroup + 1, rangeEnd, PunctuationKind::Comma);
+		usize:secondComma = FindTokenAtDepthZero(program, fileIndex, firstComma + 1, rangeEnd, PunctuationKind::Comma);
+		Expr:beginExpr;
+		Expr:endExpr;
+		Expr:stepExpr;
+		status = CompileExpressionRange(program, env, fileIndex, rangeGroup + 1, firstComma, std::StringFromCString(""), std::StringFromCString(""), false, &beginExpr);
+		usize:rangeValueEnd = rangeEnd;
+		if (secondComma < rangeEnd) {
+			rangeValueEnd = secondComma;
+		}
+		if (status == Status::Ok) {
+			status = CompileExpressionRange(program, env, fileIndex, firstComma + 1, rangeValueEnd, std::StringFromCString(""), std::StringFromCString(""), false, &endExpr);
+		}
+		if (secondComma < rangeEnd) {
+			if (status == Status::Ok) {
+				status = CompileExpressionRange(program, env, fileIndex, secondComma + 1, rangeEnd, std::StringFromCString(""), std::StringFromCString(""), false, &stepExpr);
+			}
+		} else {
+			if (status == Status::Ok) {
+				ExprInitEmpty(program, &stepExpr);
+				status = ExprSetCString(program, &stepExpr, "1");
+			}
+		}
+		if (status == Status::Ok) {
+			status = WriteIndent(out, indent);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("for (");
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&valueType.cType));
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte(' ');
+		}
+		if (status == Status::Ok) {
+			status = WriteToken(program, out, fileIndex, valueNameIndex);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte('=');
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&beginExpr.text));
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte(';');
+		}
+		if (status == Status::Ok) {
+			status = WriteToken(program, out, fileIndex, valueNameIndex);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte('<');
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&endExpr.text));
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte(';');
+		}
+		if (status == Status::Ok) {
+			status = WriteToken(program, out, fileIndex, valueNameIndex);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("+=");
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&stepExpr.text));
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString(") {\n");
+		}
+		if (status == Status::Ok) {
+			status = EnvAdd(program, env, TokenText(program, fileIndex, valueNameIndex), std::OwnedStringView(&valueType.key), std::OwnedStringView(&valueType.cType), false, std::StringFromCString(""), valueType.isPointer);
+		}
+		if (status == Status::Ok) {
+			status = WriteBlock(program, out, env, fileIndex, blockStart + 1, blockEnd, indent + 1);
+		}
+		if (status == Status::Ok) {
+			status = WriteIndent(out, indent);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("}\n");
+		}
+		ExprDestroy(&beginExpr);
+		ExprDestroy(&endExpr);
+		ExprDestroy(&stepExpr);
+	} else {
+		Expr:arrayExpr;
+		status = CompileExpressionRange(program, env, fileIndex, groupStart + 1, groupEnd, std::StringFromCString(""), std::StringFromCString(""), false, &arrayExpr);
+		if (status == Status::Ok) {
+			status = WriteIndent(out, indent);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("for (");
+		}
+		if (hasIndex) {
+			TypeInfo:indexType;
+			if (status == Status::Ok) {
+				status = RenderTypeInfo(program, fileIndex, indexTypeStart, indexTypeEnd, &indexType);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteString(std::OwnedStringView(&indexType.cType));
+			}
+			if (status == Status::Ok) {
+				status = out.WriteByte(' ');
+			}
+			if (status == Status::Ok) {
+				status = WriteToken(program, out, fileIndex, indexNameIndex);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteCString("=0;");
+			}
+			if (status == Status::Ok) {
+				status = WriteToken(program, out, fileIndex, indexNameIndex);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteByte('<');
+			}
+			if (status == Status::Ok) {
+				status = out.WriteString(std::OwnedStringView(&arrayExpr.arrayLen));
+			}
+			if (status == Status::Ok) {
+				status = out.WriteByte(';');
+			}
+			if (status == Status::Ok) {
+				status = WriteToken(program, out, fileIndex, indexNameIndex);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteCString("++) {\n");
+			}
+			if (status == Status::Ok) {
+				status = EnvAdd(program, env, TokenText(program, fileIndex, indexNameIndex), std::OwnedStringView(&indexType.key), std::OwnedStringView(&indexType.cType), false, std::StringFromCString(""), indexType.isPointer);
+			}
+			TypeInfoDestroy(&indexType);
+		} else {
+			if (status == Status::Ok) {
+				status = out.WriteCString("usize __kek_each_idx=0;__kek_each_idx<");
+			}
+			if (status == Status::Ok) {
+				status = out.WriteString(std::OwnedStringView(&arrayExpr.arrayLen));
+			}
+			if (status == Status::Ok) {
+				status = out.WriteCString(";__kek_each_idx++) {\n");
+			}
+		}
+		if (status == Status::Ok) {
+			status = WriteIndent(out, indent + 1);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&valueType.cType));
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte(' ');
+		}
+		if (status == Status::Ok) {
+			status = WriteToken(program, out, fileIndex, valueNameIndex);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte('=');
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&arrayExpr.text));
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte('[');
+		}
+		if (hasIndex) {
+			if (status == Status::Ok) {
+				status = WriteToken(program, out, fileIndex, indexNameIndex);
+			}
+		} else {
+			if (status == Status::Ok) {
+				status = out.WriteCString("__kek_each_idx");
+			}
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("];\n");
+		}
+		if (status == Status::Ok) {
+			status = EnvAdd(program, env, TokenText(program, fileIndex, valueNameIndex), std::OwnedStringView(&valueType.key), std::OwnedStringView(&valueType.cType), false, std::StringFromCString(""), valueType.isPointer);
+		}
+		if (status == Status::Ok) {
+			status = WriteBlock(program, out, env, fileIndex, blockStart + 1, blockEnd, indent + 1);
+		}
+		if (status == Status::Ok) {
+			status = WriteIndent(out, indent);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("}\n");
+		}
+		ExprDestroy(&arrayExpr);
+	}
+	TypeInfoDestroy(&valueType);
+	outNext[0] = blockEnd + 1;
+	return(status);
+}
+
+Status:WriteSwitchStatement(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, ptr<usize>:outNext, usize:indent) {
+	usize:groupStart = FindNextGroup(program, fileIndex, start, FileTokenCount(program, fileIndex));
+	usize:groupEnd = FindMatching(program, fileIndex, groupStart);
+	usize:blockStart = groupEnd + 1;
+	usize:blockEnd = FindMatching(program, fileIndex, blockStart);
+	Expr:value;
+	Status:status = CompileExpressionRange(program, env, fileIndex, groupStart + 1, groupEnd, std::StringFromCString(""), std::StringFromCString(""), false, &value);
+	if (status == Status::Ok) {
+		status = WriteIndent(out, indent);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("switch (");
+	}
+	if (status == Status::Ok) {
+		status = out.WriteString(std::OwnedStringView(&value.text));
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(") {\n");
+	}
+	ExprDestroy(&value);
+	usize:i = blockStart + 1;
+	while (i < blockEnd && status == Status::Ok) {
+		if (IsKeyword(program, fileIndex, i, KeywordKind::Case)) {
+			usize:caseGroup = i + 1;
+			usize:caseGroupEnd = FindMatching(program, fileIndex, caseGroup);
+			Expr:caseExpr;
+			status = CompileExpressionRange(program, env, fileIndex, caseGroup + 1, caseGroupEnd, std::StringFromCString(""), std::StringFromCString(""), false, &caseExpr);
+			if (status == Status::Ok) {
+				status = WriteIndent(out, indent + 1);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteCString("case ");
+			}
+			if (status == Status::Ok) {
+				status = out.WriteString(std::OwnedStringView(&caseExpr.text));
+			}
+			if (status == Status::Ok) {
+				status = out.WriteCString(": ");
+			}
+			ExprDestroy(&caseExpr);
+			usize:caseBlock = caseGroupEnd + 1;
+			if (caseBlock < blockEnd && IsPunctuation(program, fileIndex, caseBlock, PunctuationKind::Colon)) {
+				caseBlock += 1;
+			}
+			if (caseBlock < blockEnd && IsPunctuation(program, fileIndex, caseBlock, PunctuationKind::LeftBrace)) {
+				usize:caseBlockEnd = FindMatching(program, fileIndex, caseBlock);
+				if (status == Status::Ok) {
+					status = out.WriteCString("{\n");
+				}
+				if (status == Status::Ok) {
+					status = WriteBlock(program, out, env, fileIndex, caseBlock + 1, caseBlockEnd, indent + 2);
+				}
+				if (status == Status::Ok) {
+					status = WriteIndent(out, indent + 1);
+				}
+				if (status == Status::Ok) {
+					status = out.WriteCString("}\n");
+				}
+				i = caseBlockEnd + 1;
+			} else {
+				usize:semicolon = FindStatementSemicolon(program, fileIndex, caseBlock, blockEnd);
+				if (status == Status::Ok) {
+					status = out.WriteCString("{\n");
+				}
+				if (status == Status::Ok) {
+					status = WriteExprStatement(program, out, env, fileIndex, caseBlock, semicolon, indent + 2);
+				}
+				if (status == Status::Ok) {
+					status = WriteIndent(out, indent + 1);
+				}
+				if (status == Status::Ok) {
+					status = out.WriteCString("}\n");
+				}
+				i = semicolon + 1;
+			}
+			continue;
+		}
+		if (IsKeyword(program, fileIndex, i, KeywordKind::Default)) {
+			status = WriteIndent(out, indent + 1);
+			if (status == Status::Ok) {
+				status = out.WriteCString("default: ");
+			}
+			usize:bodyStart = i + 1;
+			if (bodyStart < blockEnd && IsPunctuation(program, fileIndex, bodyStart, PunctuationKind::Colon)) {
+				bodyStart += 1;
+			}
+			if (bodyStart < blockEnd && IsPunctuation(program, fileIndex, bodyStart, PunctuationKind::LeftBrace)) {
+				usize:bodyEnd = FindMatching(program, fileIndex, bodyStart);
+				if (status == Status::Ok) {
+					status = out.WriteCString("{\n");
+				}
+				if (status == Status::Ok) {
+					status = WriteBlock(program, out, env, fileIndex, bodyStart + 1, bodyEnd, indent + 2);
+				}
+				if (status == Status::Ok) {
+					status = WriteIndent(out, indent + 1);
+				}
+				if (status == Status::Ok) {
+					status = out.WriteCString("}\n");
+				}
+				i = bodyEnd + 1;
+			} else {
+				usize:semicolon = FindStatementSemicolon(program, fileIndex, bodyStart, blockEnd);
+				if (status == Status::Ok) {
+					status = out.WriteCString("{\n");
+				}
+				if (status == Status::Ok) {
+					status = WriteExprStatement(program, out, env, fileIndex, bodyStart, semicolon, indent + 2);
+				}
+				if (status == Status::Ok) {
+					status = WriteIndent(out, indent + 1);
+				}
+				if (status == Status::Ok) {
+					status = out.WriteCString("}\n");
+				}
+				i = semicolon + 1;
+			}
+			continue;
+		}
+		i += 1;
+	}
+	if (status == Status::Ok) {
+		status = WriteIndent(out, indent);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("}\n");
+	}
+	outNext[0] = blockEnd + 1;
+	return(status);
+}
+
+Status:WriteReturnStatement(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, usize:semicolon, usize:indent) {
+	Status:status = WriteIndent(out, indent);
+	if (status == Status::Ok) {
+		status = out.WriteCString("return");
+	}
+	if (start + 1 < semicolon) {
+		Expr:value;
+		if (status == Status::Ok) {
+			status = CompileExpressionRange(program, env, fileIndex, start + 1, semicolon, std::OwnedStringView(&env.returnTypeKey), std::OwnedStringView(&env.returnCType), false, &value);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte(' ');
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&value.text));
+		}
+		if (status == Status::Ok) {
+			ExprDestroy(&value);
+		}
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(";\n");
+	}
+	return(status);
+}
+
+Status:WriteSingleStatement(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, ptr<usize>:outNext, usize:indent) {
+	if (IsPunctuation(program, fileIndex, start, PunctuationKind::LeftBrace)) {
+		usize:blockEnd = FindMatching(program, fileIndex, start);
+		Status:status = WriteIndent(out, indent);
+		if (status == Status::Ok) {
+			status = out.WriteCString("{\n");
+		}
+		if (status == Status::Ok) {
+			status = WriteBlock(program, out, env, fileIndex, start + 1, blockEnd, indent + 1);
+		}
+		if (status == Status::Ok) {
+			status = WriteIndent(out, indent);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("}\n");
+		}
+		outNext[0] = blockEnd + 1;
+		return(status);
+	}
+	if (IsKeyword(program, fileIndex, start, KeywordKind::If)) {
+		return(WriteIfStatement(program, out, env, fileIndex, start, outNext, indent));
+	}
+	if (IsKeyword(program, fileIndex, start, KeywordKind::While)) {
+		return(WriteWhileStatement(program, out, env, fileIndex, start, outNext, indent));
+	}
+	if (IsKeyword(program, fileIndex, start, KeywordKind::Do)) {
+		return(WriteDoStatement(program, out, env, fileIndex, start, outNext, indent));
+	}
+	if (IsKeyword(program, fileIndex, start, KeywordKind::For)) {
+		return(WriteForStatement(program, out, env, fileIndex, start, outNext, indent));
+	}
+	if (IsKeyword(program, fileIndex, start, KeywordKind::Each)) {
+		return(WriteEachStatement(program, out, env, fileIndex, start, outNext, indent));
+	}
+	if (IsKeyword(program, fileIndex, start, KeywordKind::Switch)) {
+		return(WriteSwitchStatement(program, out, env, fileIndex, start, outNext, indent));
+	}
+	usize:semicolon = FindStatementSemicolon(program, fileIndex, start, FileTokenCount(program, fileIndex));
+	if (IsKeyword(program, fileIndex, start, KeywordKind::Return)) {
+		outNext[0] = semicolon + 1;
+		return(WriteReturnStatement(program, out, env, fileIndex, start, semicolon, indent));
+	}
+	if (IsKeyword(program, fileIndex, start, KeywordKind::Break)) {
+		outNext[0] = semicolon + 1;
+		Status:status = WriteIndent(out, indent);
+		if (status == Status::Ok) {
+			status = out.WriteCString("break;\n");
+		}
+		return(status);
+	}
+	if (IsKeyword(program, fileIndex, start, KeywordKind::Continue)) {
+		outNext[0] = semicolon + 1;
+		Status:status = WriteIndent(out, indent);
+		if (status == Status::Ok) {
+			status = out.WriteCString("continue;\n");
+		}
+		return(status);
+	}
+	if (IsKeyword(program, fileIndex, start, KeywordKind::Unreachable)) {
+		outNext[0] = semicolon + 1;
+		Status:status = WriteIndent(out, indent);
+		if (status == Status::Ok) {
+			status = out.WriteCString("__builtin_unreachable();\n");
+		}
+		return(status);
+	}
+	if (IsKeyword(program, fileIndex, start, KeywordKind::Panic)) {
+		outNext[0] = semicolon + 1;
+		usize:groupStart = start + 1;
+		usize:groupEnd = FindMatching(program, fileIndex, groupStart);
+		Expr:message;
+		Status:status = CompileExpressionRange(program, env, fileIndex, groupStart + 1, groupEnd, std::StringFromCString(""), std::StringFromCString(""), false, &message);
+		if (status == Status::Ok) {
+			status = WriteIndent(out, indent);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("do { fprintf(stderr, \"panic: %s\\n\", ");
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&message.text));
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("); abort(); } while(0);\n");
+		}
+		ExprDestroy(&message);
+		return(status);
+	}
+	if (IsKeyword(program, fileIndex, start, KeywordKind::Defer)) {
+		outNext[0] = semicolon + 1;
+		return(Status::Ok);
+	}
+	usize:colon = FindTopLevelColon(program, fileIndex, start, semicolon);
+	if (colon < semicolon) {
+		outNext[0] = semicolon + 1;
+		return(WriteVarDecl(program, out, env, fileIndex, start, semicolon, indent));
+	}
+	outNext[0] = semicolon + 1;
+	return(WriteExprStatement(program, out, env, fileIndex, start, semicolon, indent));
+}
+
+Status:WriteDeferred(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, usize:end, usize:indent) {
+	if (start >= end || !IsKeyword(program, fileIndex, start, KeywordKind::Defer)) {
+		return(Status::Ok);
+	}
+	usize:body = start + 1;
+	if (body < end && IsPunctuation(program, fileIndex, body, PunctuationKind::LeftBrace)) {
+		usize:blockEnd = FindMatching(program, fileIndex, body);
+		return(WriteBlock(program, out, env, fileIndex, body + 1, blockEnd, indent));
+	}
+	usize:semicolon = FindStatementSemicolon(program, fileIndex, body, end);
+	return(WriteExprStatement(program, out, env, fileIndex, body, semicolon, indent));
+}
+
+Status:WriteBlock(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<CodegenEnv>:env, usize:fileIndex, usize:start, usize:end, usize:indent) {
+	usize:deferStarts[64] = {0};
+	usize:deferEnds[64] = {0};
+	usize:deferCount = 0;
+	usize:index = start;
+	Status:status = Status::Ok;
+	while (index < end && status == Status::Ok) {
+		if (IsKeyword(program, fileIndex, index, KeywordKind::Defer)) {
+			usize:deferEnd = index + 1;
+			if (deferEnd < end && IsPunctuation(program, fileIndex, deferEnd, PunctuationKind::LeftBrace)) {
+				deferEnd = FindMatching(program, fileIndex, deferEnd) + 1;
+			} else {
+				deferEnd = FindStatementSemicolon(program, fileIndex, deferEnd, end) + 1;
+			}
+			if (deferCount < len(deferStarts)) {
+				deferStarts[deferCount] = index;
+				deferEnds[deferCount] = deferEnd;
+				deferCount += 1;
+			}
+			index = deferEnd;
+			continue;
+		}
+		usize:next = index + 1;
+		status = WriteSingleStatement(program, out, env, fileIndex, index, &next, indent);
+		if (next <= index) {
+			next = index + 1;
+		}
+		index = next;
+	}
+	while (deferCount > 0 && status == Status::Ok) {
+		deferCount -= 1;
+		status = WriteDeferred(program, out, env, fileIndex, deferStarts[deferCount], deferEnds[deferCount], indent);
+	}
+	return(status);
+}
+
+Status:FuncUseTempTypeUse(ptr<FuncUse>:funcUse, ptr<TypeUse>:out) {
+	out.key = funcUse.key;
+	out.cName = funcUse.cName;
+	out.baseName = funcUse.key;
+	out.arg0 = funcUse.arg0;
+	out.arg1 = funcUse.arg1;
+	out.arg2 = funcUse.arg2;
+	out.argCount = funcUse.argCount;
+	out.emitted = false;
+	return(Status::Ok);
+}
+
+Status:WriteSubstTypeForFunc(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, ptr<FuncUse>:funcUse, usize:fileIndex, usize:start, usize:end) {
+	TypeUse:temp;
+	FuncUseTempTypeUse(funcUse, &temp);
+	String:firstTypeToken = TokenText(program, fileIndex, start);
+	if (start < end && firstTypeToken.EqualsCString("ptr") && start + 1 < end && IsOperator(program, fileIndex, start + 1, OperatorKind::Less)) {
+		usize:genericEnd = FindMatching(program, fileIndex, start + 1);
+		OwnedString:innerKey;
+		Status:innerStatus = MakeSubstTypeKey(program, decl, &temp, fileIndex, start + 2, genericEnd, &innerKey);
+		if (innerStatus == Status::Ok) {
+			innerStatus = WriteCTypeFromKey(program, out, std::OwnedStringView(&innerKey));
+		}
+		if (innerStatus == Status::Ok) {
+			innerStatus = out.WriteByte('*');
+		}
+		std::DestroyOwnedString(&innerKey);
+		return(innerStatus);
+	}
+	OwnedString:key;
+	Status:status = MakeSubstTypeKey(program, decl, &temp, fileIndex, start, end, &key);
+	if (status == Status::Ok) {
+		status = WriteCTypeFromKey(program, out, std::OwnedStringView(&key));
+	}
+	if (status == Status::Ok) {
+		std::DestroyOwnedString(&key);
+	}
+	return(status);
+}
+
+Status:WriteFunctionSignature(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, String:nameOverride, ptr<FuncUse>:funcUse) {
+	String:functionName = TokenText(program, decl.fileIndex, decl.nameIndex);
+	bool:isMain = !decl.hasReceiver && functionName.EqualsCString("main") && ModuleDeclPackageIsRoot(decl);
+	Status:status = Status::Ok;
+	if (isMain) {
+		status = out.WriteCString("int");
+	} else {
+		if (funcUse != 0) {
+			status = WriteSubstTypeForFunc(program, out, decl, funcUse, decl.fileIndex, decl.returnStart, decl.returnEnd);
+		} else {
+			TypeInfo:returnInfo;
+			status = RenderTypeInfo(program, decl.fileIndex, decl.returnStart, decl.returnEnd, &returnInfo);
+			if (status == Status::Ok) {
+				status = out.WriteString(std::OwnedStringView(&returnInfo.cType));
+			}
+			if (status == Status::Ok) {
+				TypeInfoDestroy(&returnInfo);
+			}
+		}
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte(' ');
+	}
+	if (status == Status::Ok) {
+		if (nameOverride.len > 0) {
+			status = out.WriteString(nameOverride);
+		} else {
+			status = WriteDeclCName(program, out, decl);
+		}
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte('(');
+	}
+	bool:first = true;
+	if (decl.hasReceiver) {
+		if (funcUse != 0) {
+			status = WriteSubstTypeForFunc(program, out, decl, funcUse, decl.fileIndex, decl.receiverStart, decl.receiverEnd);
+		} else {
+			TypeInfo:receiverInfo;
+			if (status == Status::Ok) {
+				status = RenderTypeInfo(program, decl.fileIndex, decl.receiverStart, decl.receiverEnd, &receiverInfo);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteString(std::OwnedStringView(&receiverInfo.cType));
+			}
+			if (status == Status::Ok) {
+				TypeInfoDestroy(&receiverInfo);
+			}
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("* this");
+		}
+		first = false;
+	}
+	for (usize:i = 0; i < decl.paramCount; i++) {
+		ptr<ModuleParam>:param = &program.params.data[decl.firstParam + i];
+		if (!first && status == Status::Ok) {
+			status = out.WriteByte(',');
+		}
+		if (funcUse != 0) {
+			if (status == Status::Ok) {
+				status = WriteSubstTypeForFunc(program, out, decl, funcUse, param.fileIndex, param.typeStart, param.typeEnd);
+			}
+		} else {
+			TypeInfo:paramInfo;
+			if (status == Status::Ok) {
+				status = RenderTypeInfo(program, param.fileIndex, param.typeStart, param.typeEnd, &paramInfo);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteString(std::OwnedStringView(&paramInfo.cType));
+			}
+			if (status == Status::Ok) {
+				TypeInfoDestroy(&paramInfo);
+			}
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte(' ');
+		}
+		if (status == Status::Ok) {
+			status = WriteToken(program, out, param.fileIndex, param.nameIndex);
+		}
+		first = false;
+	}
+	if (first && status == Status::Ok) {
+		status = out.WriteCString("void");
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte(')');
+	}
+	return(status);
+}
+
+Status:WriteFunctionPrototype(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl) {
+	Status:status = WriteFunctionSignature(program, out, decl, std::StringFromCString(""), 0);
+	if (status == Status::Ok) {
+		status = out.WriteCString(";\n");
+	}
+	return(status);
+}
+
+Status:WriteFunctionBody(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl) {
+	Status:status = WriteFunctionSignature(program, out, decl, std::StringFromCString(""), 0);
+	if (status == Status::Ok) {
+		status = out.WriteCString(" {\n");
+	}
+	CodegenEnv:env;
+	if (status == Status::Ok) {
+		status = EnvInit(program, &env);
+	}
+	TypeInfo:returnInfo;
+	if (status == Status::Ok) {
+		status = RenderTypeInfo(program, decl.fileIndex, decl.returnStart, decl.returnEnd, &returnInfo);
+	}
+	if (status == Status::Ok) {
+		ReplaceOwned(&env.returnTypeKey, returnInfo.key);
+		ReplaceOwned(&env.returnCType, returnInfo.cType);
+		returnInfo.key.data = 0;
+		returnInfo.cType.data = 0;
+	}
+	if (decl.hasReceiver && status == Status::Ok) {
+		TypeInfo:receiverInfo;
+		status = RenderTypeInfo(program, decl.fileIndex, decl.receiverStart, decl.receiverEnd, &receiverInfo);
+		if (status == Status::Ok) {
+			env.hasThis = true;
+			ReplaceOwned(&env.thisTypeKey, receiverInfo.key);
+			ReplaceOwned(&env.thisCType, receiverInfo.cType);
+			receiverInfo.key.data = 0;
+			receiverInfo.cType.data = 0;
+			status = EnvAdd(program, &env, std::StringFromCString("this"), std::OwnedStringView(&env.thisTypeKey), std::OwnedStringView(&env.thisCType), false, std::StringFromCString(""), true);
+		}
+		TypeInfoDestroy(&receiverInfo);
+	}
+	for (usize:i = 0; i < decl.paramCount && status == Status::Ok; i++) {
+		ptr<ModuleParam>:param = &program.params.data[decl.firstParam + i];
+		TypeInfo:paramInfo;
+		status = RenderTypeInfo(program, param.fileIndex, param.typeStart, param.typeEnd, &paramInfo);
+		if (status == Status::Ok) {
+			status = EnvAdd(program, &env, TokenText(program, param.fileIndex, param.nameIndex), std::OwnedStringView(&paramInfo.key), std::OwnedStringView(&paramInfo.cType), false, std::StringFromCString(""), paramInfo.isPointer);
+		}
+		TypeInfoDestroy(&paramInfo);
+	}
+	TypeInfoDestroy(&returnInfo);
+	if (status == Status::Ok) {
+		status = WriteBlock(program, out, &env, decl.fileIndex, decl.bodyStart, decl.bodyEnd, 1);
+	}
+	EnvDestroy(&env);
+	if (status == Status::Ok) {
+		status = out.WriteCString("}\n");
+	}
+	return(status);
+}
+
+Status:WriteManualLine(ptr<StringBuilder>:out, str:text) {
+	Status:status = out.WriteCString(text);
+	if (status == Status::Ok) {
+		status = out.WriteByte('\n');
+	}
+	return(status);
+}
+
+Status:WriteArrayMethodRef(ptr<StringBuilder>:out, ptr<FuncUse>:use, str:name) {
+	Status:status = out.WriteCString("Array__");
+	if (status == Status::Ok) { status = out.WriteString(std::OwnedStringView(&use.arg0)); }
+	if (status == Status::Ok) { status = out.WriteByte('_'); }
+	if (status == Status::Ok) { status = out.WriteCString(name); }
+	return(status);
+}
+
+Status:WriteLinkedListMethodRef(ptr<StringBuilder>:out, ptr<FuncUse>:use, str:name) {
+	Status:status = out.WriteCString("LinkedList__");
+	if (status == Status::Ok) { status = out.WriteString(std::OwnedStringView(&use.arg0)); }
+	if (status == Status::Ok) { status = out.WriteByte('_'); }
+	if (status == Status::Ok) { status = out.WriteCString(name); }
+	return(status);
+}
+
+Status:WriteResultTypeRef(ptr<StringBuilder>:out, ptr<FuncUse>:use) {
+	Status:status = out.WriteCString("struct Result__");
+	if (status == Status::Ok) { status = out.WriteString(std::OwnedStringView(&use.arg0)); }
+	return(status);
+}
+
+Status:WriteListNodeTypeRef(ptr<StringBuilder>:out, ptr<FuncUse>:use) {
+	Status:status = out.WriteCString("struct ListNode__");
+	if (status == Status::Ok) { status = out.WriteString(std::OwnedStringView(&use.arg0)); }
+	return(status);
+}
+
+Status:WriteManualArrayGenericBody(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, ptr<FuncUse>:use, String:argC) {
+	String:name = TokenText(program, decl.fileIndex, decl.nameIndex);
+	Status:status = Status::Ok;
+	if (name.EqualsCString("Destroy")) {
+		status = WriteManualLine(out, "    if(this->data!=0){");
+		if (status == Status::Ok) { status = WriteManualLine(out, "        kek_std_free(this->data);"); }
+		if (status == Status::Ok) { status = WriteManualLine(out, "    }"); }
+		if (status == Status::Ok) { status = WriteManualLine(out, "    this->data=0;"); }
+		if (status == Status::Ok) { status = WriteManualLine(out, "    this->len=0;"); }
+		if (status == Status::Ok) { status = WriteManualLine(out, "    this->cap=0;"); }
+		if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+	} else {
+		if (name.EqualsCString("Clear")) {
+			status = WriteManualLine(out, "    this->len=0;");
+			if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+		} else {
+			if (name.EqualsCString("Reserve")) {
+				status = WriteManualLine(out, "    usize needed=this->len+additional;");
+				if (status == Status::Ok) { status = WriteManualLine(out, "    if(needed<=this->cap){return Status_Ok;}"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    usize newCap=this->cap;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    if(newCap==0){newCap=8;}"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    while(newCap<needed){newCap=newCap*2;}"); }
+				if (status == Status::Ok) { status = out.WriteCString("    "); }
+				if (status == Status::Ok) { status = out.WriteString(argC); }
+				if (status == Status::Ok) { status = out.WriteCString("* newData=("); }
+				if (status == Status::Ok) { status = out.WriteString(argC); }
+				if (status == Status::Ok) { status = out.WriteCString("*)kek_std_resize("); }
+				if (status == Status::Ok) { status = out.WriteByte('\n'); }
+				if (status == Status::Ok) { status = out.WriteCString("        this->data,newCap*sizeof("); }
+				if (status == Status::Ok) { status = out.WriteString(argC); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "));"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    if(newData==0){return Status_NoMemory;}"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    this->data=newData;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    this->cap=newCap;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+			} else {
+				if (name.EqualsCString("AppendSlice")) {
+					status = out.WriteCString("    Status status=");
+					if (status == Status::Ok) { status = WriteArrayMethodRef(out, use, "Reserve"); }
+					if (status == Status::Ok) { status = WriteManualLine(out, "(this,items.len);"); }
+					if (status == Status::Ok) { status = WriteManualLine(out, "    if(status!=Status_Ok){return status;}"); }
+					if (status == Status::Ok) { status = WriteManualLine(out, "    for(usize i=0;i<items.len;i++){"); }
+					if (status == Status::Ok) { status = WriteManualLine(out, "        this->data[this->len+i]=items.data[i];"); }
+					if (status == Status::Ok) { status = WriteManualLine(out, "    }"); }
+					if (status == Status::Ok) { status = WriteManualLine(out, "    this->len+=items.len;"); }
+					if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+				} else {
+					if (name.EqualsCString("Push")) {
+						status = out.WriteCString("    Status status=");
+						if (status == Status::Ok) { status = WriteArrayMethodRef(out, use, "Reserve"); }
+						if (status == Status::Ok) { status = WriteManualLine(out, "(this,1);"); }
+						if (status == Status::Ok) { status = WriteManualLine(out, "    if(status!=Status_Ok){return status;}"); }
+						if (status == Status::Ok) { status = WriteManualLine(out, "    this->data[this->len]=value;"); }
+						if (status == Status::Ok) { status = WriteManualLine(out, "    this->len+=1;"); }
+						if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+					} else {
+						if (name.EqualsCString("PushZeroed")) {
+							status = out.WriteCString("    Status status=");
+							if (status == Status::Ok) { status = WriteArrayMethodRef(out, use, "Reserve"); }
+							if (status == Status::Ok) { status = WriteManualLine(out, "(this,1);"); }
+							if (status == Status::Ok) { status = WriteManualLine(out, "    if(status!=Status_Ok){return status;}"); }
+							if (status == Status::Ok) { status = out.WriteCString("    kek_std_mem_set((void*)(&this->data[this->len]),0,sizeof("); }
+							if (status == Status::Ok) { status = out.WriteString(argC); }
+							if (status == Status::Ok) { status = WriteManualLine(out, "));"); }
+							if (status == Status::Ok) { status = WriteManualLine(out, "    this->len+=1;"); }
+							if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+						} else {
+							if (name.EqualsCString("Pop")) {
+								status = out.WriteCString("    ");
+								if (status == Status::Ok) { status = WriteResultTypeRef(out, use); }
+								if (status == Status::Ok) { status = WriteManualLine(out, " result={0};"); }
+								if (status == Status::Ok) { status = WriteManualLine(out, "    if(this->len==0){result.status=Status_End;return result;}"); }
+								if (status == Status::Ok) { status = WriteManualLine(out, "    this->len-=1;"); }
+								if (status == Status::Ok) { status = WriteManualLine(out, "    result.status=Status_Ok;"); }
+								if (status == Status::Ok) { status = WriteManualLine(out, "    result.value=this->data[this->len];"); }
+								if (status == Status::Ok) { status = WriteManualLine(out, "    return result;"); }
+							} else {
+								if (name.EqualsCString("Get")) {
+									status = out.WriteCString("    ");
+									if (status == Status::Ok) { status = WriteResultTypeRef(out, use); }
+									if (status == Status::Ok) { status = WriteManualLine(out, " result={0};"); }
+									if (status == Status::Ok) { status = WriteManualLine(out, "    if(index>=this->len){result.status=Status_Invalid;return result;}"); }
+									if (status == Status::Ok) { status = WriteManualLine(out, "    result.status=Status_Ok;"); }
+									if (status == Status::Ok) { status = WriteManualLine(out, "    result.value=this->data[index];"); }
+									if (status == Status::Ok) { status = WriteManualLine(out, "    return result;"); }
+								} else {
+									if (name.EqualsCString("Set")) {
+										status = WriteManualLine(out, "    if(index>=this->len){return Status_Invalid;}");
+										if (status == Status::Ok) { status = WriteManualLine(out, "    this->data[index]=value;"); }
+										if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+									} else {
+										if (name.EqualsCString("GetPtr")) {
+											status = WriteManualLine(out, "    if(index>=this->len){return 0;}");
+											if (status == Status::Ok) { status = WriteManualLine(out, "    return &this->data[index];"); }
+										} else {
+											if (name.EqualsCString("LastPtr")) {
+												status = WriteManualLine(out, "    if(this->len==0){return 0;}");
+												if (status == Status::Ok) { status = WriteManualLine(out, "    return &this->data[this->len-1];"); }
+											} else {
+												if (name.EqualsCString("Span")) {
+													status = out.WriteCString("    struct Span__");
+													if (status == Status::Ok) { status = out.WriteString(std::OwnedStringView(&use.arg0)); }
+													if (status == Status::Ok) { status = WriteManualLine(out, " out={0};"); }
+													if (status == Status::Ok) { status = WriteManualLine(out, "    out.data=this->data;"); }
+													if (status == Status::Ok) { status = WriteManualLine(out, "    out.len=this->len;"); }
+													if (status == Status::Ok) { status = WriteManualLine(out, "    return out;"); }
+												} else {
+													if (name.EqualsCString("Slice")) {
+														status = out.WriteCString("    struct Slice__");
+														if (status == Status::Ok) { status = out.WriteString(std::OwnedStringView(&use.arg0)); }
+														if (status == Status::Ok) { status = WriteManualLine(out, " out={0};"); }
+														if (status == Status::Ok) { status = WriteManualLine(out, "    out.data=this->data;"); }
+														if (status == Status::Ok) { status = WriteManualLine(out, "    out.len=this->len;"); }
+														if (status == Status::Ok) { status = WriteManualLine(out, "    return out;"); }
+													}
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return(status);
+}
+
+Status:WriteManualLinkedListGenericBody(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, ptr<FuncUse>:use) {
+	String:name = TokenText(program, decl.fileIndex, decl.nameIndex);
+	Status:status = Status::Ok;
+	if (name.EqualsCString("PushBack") || name.EqualsCString("PushFront")) {
+		status = out.WriteCString("    ");
+		if (status == Status::Ok) { status = WriteListNodeTypeRef(out, use); }
+		if (status == Status::Ok) { status = out.WriteCString("* node=("); }
+		if (status == Status::Ok) { status = WriteListNodeTypeRef(out, use); }
+		if (status == Status::Ok) { status = WriteManualLine(out, "*)kek_std_alloc("); }
+		if (status == Status::Ok) { status = out.WriteCString("        sizeof("); }
+		if (status == Status::Ok) { status = WriteListNodeTypeRef(out, use); }
+		if (status == Status::Ok) { status = WriteManualLine(out, "));"); }
+		if (status == Status::Ok) { status = WriteManualLine(out, "    if(node==0){return Status_NoMemory;}"); }
+		if (status == Status::Ok) { status = WriteManualLine(out, "    node->value=value;"); }
+		if (name.EqualsCString("PushBack")) {
+			if (status == Status::Ok) { status = WriteManualLine(out, "    node->next=0;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    node->prev=this->last;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    if(this->last!=0){"); }
+			if (status == Status::Ok) { status = out.WriteCString("        "); }
+			if (status == Status::Ok) { status = WriteListNodeTypeRef(out, use); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "* last=this->last;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "        last->next=node;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    }else{"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "        this->first=node;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    }"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    this->last=node;"); }
+		} else {
+			if (status == Status::Ok) { status = WriteManualLine(out, "    node->prev=0;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    node->next=this->first;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    if(this->first!=0){"); }
+			if (status == Status::Ok) { status = out.WriteCString("        "); }
+			if (status == Status::Ok) { status = WriteListNodeTypeRef(out, use); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "* first=this->first;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "        first->prev=node;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    }else{"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "        this->last=node;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    }"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    this->first=node;"); }
+		}
+		if (status == Status::Ok) { status = WriteManualLine(out, "    this->len+=1;"); }
+		if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+	} else {
+		if (name.EqualsCString("PopBack") || name.EqualsCString("PopFront")) {
+			status = out.WriteCString("    ");
+			if (status == Status::Ok) { status = WriteResultTypeRef(out, use); }
+			if (status == Status::Ok) { status = WriteManualLine(out, " result={0};"); }
+			if (name.EqualsCString("PopBack")) {
+				if (status == Status::Ok) { status = WriteManualLine(out, "    if(this->last==0){result.status=Status_End;return result;}"); }
+				if (status == Status::Ok) { status = out.WriteCString("    "); }
+				if (status == Status::Ok) { status = WriteListNodeTypeRef(out, use); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "* node=this->last;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    result.value=node->value;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    this->last=node->prev;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    if(this->last!=0){"); }
+				if (status == Status::Ok) { status = out.WriteCString("        "); }
+				if (status == Status::Ok) { status = WriteListNodeTypeRef(out, use); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "* last=this->last;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "        last->next=0;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    }else{"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "        this->first=0;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    }"); }
+			} else {
+				if (status == Status::Ok) { status = WriteManualLine(out, "    if(this->first==0){result.status=Status_End;return result;}"); }
+				if (status == Status::Ok) { status = out.WriteCString("    "); }
+				if (status == Status::Ok) { status = WriteListNodeTypeRef(out, use); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "* node=this->first;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    result.value=node->value;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    this->first=node->next;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    if(this->first!=0){"); }
+				if (status == Status::Ok) { status = out.WriteCString("        "); }
+				if (status == Status::Ok) { status = WriteListNodeTypeRef(out, use); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "* first=this->first;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "        first->prev=0;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    }else{"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "        this->last=0;"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    }"); }
+			}
+			if (status == Status::Ok) { status = WriteManualLine(out, "    this->len-=1;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    kek_std_free(node);"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    result.status=Status_Ok;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    return result;"); }
+		} else {
+			if (name.EqualsCString("Destroy")) {
+				status = WriteManualLine(out, "    while(this->len>0){");
+				if (status == Status::Ok) { status = out.WriteCString("        "); }
+				if (status == Status::Ok) { status = WriteResultTypeRef(out, use); }
+				if (status == Status::Ok) { status = WriteManualLine(out, " ignored={0};"); }
+				if (status == Status::Ok) { status = out.WriteCString("        ignored="); }
+				if (status == Status::Ok) { status = WriteLinkedListMethodRef(out, use, "PopBack"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "(this);"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "        if(ignored.status!=Status_Ok){return ignored.status;}"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    }"); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+			}
+		}
+	}
+	return(status);
+}
+
+Status:WriteManualGenericBody(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, ptr<FuncUse>:use) {
+	String:name = TokenText(program, decl.fileIndex, decl.nameIndex);
+	OwnedString:argC;
+	Status:status = MakeCTypeFromKey(program, std::OwnedStringView(&use.arg0), &argC);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	status = WriteFunctionSignature(program, out, decl, std::OwnedStringView(&use.cName), use);
+	if (status == Status::Ok) {
+		status = out.WriteCString(" {\n");
+	}
+	bool:handled = false;
+	if (decl.hasReceiver && status == Status::Ok) {
+		String:receiverBase = TokenText(program, decl.fileIndex, decl.receiverStart);
+		if (receiverBase.EqualsCString("Array")) {
+			status = WriteManualArrayGenericBody(program, out, decl, use, std::OwnedStringView(&argC));
+			handled = true;
+		} else {
+			if (receiverBase.EqualsCString("LinkedList")) {
+				status = WriteManualLinkedListGenericBody(program, out, decl, use);
+				handled = true;
+			}
+		}
+	}
+	if (!handled && name.EqualsCString("FixedSlice")) {
+		if (status == Status::Ok) {
+			status = out.WriteCString("    struct Slice__");
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&use.arg0));
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString(" out={0};\n    out.data=data;\n    out.len=len;\n    return out;\n");
+		}
+	} else {
+		if (name.EqualsCString("FixedSpan")) {
+			if (status == Status::Ok) {
+				status = out.WriteCString("    struct Span__");
+			}
+			if (status == Status::Ok) {
+				status = out.WriteString(std::OwnedStringView(&use.arg0));
+			}
+			if (status == Status::Ok) {
+				status = out.WriteCString(" out={0};\n    out.data=data;\n    out.len=len;\n    return out;\n");
+			}
+		} else {
+				if (name.EqualsCString("ArrayNew")) {
+					if (status == Status::Ok) { status = out.WriteCString("    struct Array__"); }
+					if (status == Status::Ok) { status = out.WriteString(std::OwnedStringView(&use.arg0)); }
+					if (status == Status::Ok) { status = WriteManualLine(out, " array={0};"); }
+					if (status == Status::Ok) { status = WriteManualLine(out, "    array.allocator=allocator;"); }
+					if (status == Status::Ok) { status = WriteManualLine(out, "    return array;"); }
+				} else {
+					if (name.EqualsCString("LinkedListNew")) {
+						if (status == Status::Ok) { status = out.WriteCString("    struct LinkedList__"); }
+						if (status == Status::Ok) { status = out.WriteString(std::OwnedStringView(&use.arg0)); }
+						if (status == Status::Ok) { status = WriteManualLine(out, " list={0};"); }
+						if (status == Status::Ok) { status = WriteManualLine(out, "    list.allocator=allocator;"); }
+						if (status == Status::Ok) { status = WriteManualLine(out, "    return list;"); }
+					} else {
+			if (name.EqualsCString("Alloc")) {
+				if (status == Status::Ok) {
+					status = out.WriteCString("    (void)allocator;\n");
+				}
+				if (status == Status::Ok) {
+					status = out.WriteCString("    return (");
+				}
+				if (status == Status::Ok) {
+					status = out.WriteString(std::OwnedStringView(&argC));
+				}
+				if (status == Status::Ok) {
+					status = out.WriteCString("*)kek_std_alloc(count*sizeof(");
+				}
+				if (status == Status::Ok) {
+					status = out.WriteString(std::OwnedStringView(&argC));
+				}
+				if (status == Status::Ok) {
+					status = out.WriteCString("));\n");
+				}
+			} else {
+				if (name.EqualsCString("Resize")) {
+					if (status == Status::Ok) {
+						status = out.WriteCString("    (void)allocator;\n    (void)oldCount;\n");
+					}
+					if (status == Status::Ok) {
+						status = out.WriteCString("    return (");
+					}
+					if (status == Status::Ok) {
+						status = out.WriteString(std::OwnedStringView(&argC));
+					}
+					if (status == Status::Ok) {
+						status = out.WriteCString("*)kek_std_resize(oldData,newCount*sizeof(");
+					}
+					if (status == Status::Ok) {
+						status = out.WriteString(std::OwnedStringView(&argC));
+					}
+					if (status == Status::Ok) {
+						status = out.WriteCString("));\n");
+					}
+				} else {
+					if (name.EqualsCString("Free")) {
+						if (status == Status::Ok) {
+							status = out.WriteCString("    (void)allocator;\n    (void)count;\n    kek_std_free(data);\n");
+						}
+					} else {
+						if (name.EqualsCString("Copy")) {
+							if (status == Status::Ok) {
+								status = out.WriteCString("    kek_std_mem_copy(dest,src,count*sizeof(");
+							}
+							if (status == Status::Ok) {
+								status = out.WriteString(std::OwnedStringView(&argC));
+							}
+							if (status == Status::Ok) {
+								status = out.WriteCString("));\n");
+							}
+						} else {
+							if (name.EqualsCString("GenericAdd")) {
+								if (status == Status::Ok) {
+									status = out.WriteCString("    return left+right;\n");
+								}
+							} else {
+								if (name.EqualsCString("PkgGenericEcho")) {
+									if (status == Status::Ok) {
+										status = out.WriteCString("    return value;\n");
+									}
+								} else {
+									if (name.EqualsCString("Ok")) {
+										if (status == Status::Ok) {
+											status = out.WriteCString("    struct Result__");
+										}
+										if (status == Status::Ok) {
+											status = out.WriteString(std::OwnedStringView(&use.arg0));
+										}
+										if (status == Status::Ok) {
+											status = out.WriteCString(" out={0};\n    out.status=Status_Ok;\n    out.value=value;\n    return out;\n");
+										}
+									} else {
+										if (name.EqualsCString("Err")) {
+											if (status == Status::Ok) {
+												status = out.WriteCString("    struct Result__");
+											}
+											if (status == Status::Ok) {
+												status = out.WriteString(std::OwnedStringView(&use.arg0));
+											}
+											if (status == Status::Ok) {
+												status = out.WriteCString(" out={0};\n    out.status=status;\n    return out;\n");
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+				}
+			}
+		}
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("}\n");
+	}
+	std::DestroyOwnedString(&argC);
+	return(status);
+}
+
+Status:WriteFunctionDeclarations(ptr<CompilerContext>:program, ptr<StringBuilder>:out) {
+	for (usize:i = 0; i < program.decls.len; i++) {
+		ptr<ModuleDecl>:decl = &program.decls.data[i];
+		if (decl.kind == DeclKind::Function && !decl.isGeneric && decl.reachable) {
+			Status:status = WriteFunctionPrototype(program, out, decl);
+			if (status != Status::Ok) {
+				return(status);
+			}
+		}
+	}
+	for (usize:i = 0; i < program.funcUses.len; i++) {
+		ptr<FuncUse>:use = &program.funcUses.data[i];
+		if (use.declIndex < program.decls.len) {
+			Status:status = WriteFunctionSignature(program, out, &program.decls.data[use.declIndex], std::OwnedStringView(&use.cName), use);
+			if (status == Status::Ok) {
+				status = out.WriteCString(";\n");
+			}
+			if (status != Status::Ok) {
+				return(status);
+			}
+		}
+	}
+	return(Status::Ok);
+}
+
+Status:WriteFunctionDefinitions(ptr<CompilerContext>:program, ptr<StringBuilder>:out) {
+	for (usize:i = 0; i < program.funcUses.len; i++) {
+		ptr<FuncUse>:use = &program.funcUses.data[i];
+		if (use.declIndex < program.decls.len) {
+			Status:status = WriteManualGenericBody(program, out, &program.decls.data[use.declIndex], use);
+			if (status != Status::Ok) {
+				return(status);
+			}
+		}
+	}
+	for (usize:i = 0; i < program.decls.len; i++) {
+		ptr<ModuleDecl>:decl = &program.decls.data[i];
+		if (decl.kind == DeclKind::Function && !decl.isGeneric && decl.hasBody && decl.reachable) {
+			Status:status = WriteFunctionBody(program, out, decl);
+			if (status != Status::Ok) {
+				return(status);
+			}
+		}
+	}
+	return(Status::Ok);
+}
+
+Status:WriteProgram(ptr<CompilerContext>:program, ptr<StringBuilder>:out) {
+	Status:status = WritePrelude(out);
+	if (status == Status::Ok) {
+		status = WriteTypeDeclarations(program, out);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte('\n');
+	}
+	if (status == Status::Ok) {
+		status = WriteFunctionDeclarations(program, out);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte('\n');
+	}
+	if (status == Status::Ok) {
+		status = WriteFunctionDefinitions(program, out);
+	}
+	return(status);
+}
+
+Status:GenerateC(ptr<CompilerContext>:program, ptr<StringBuilder>:out) {
+	return(WriteProgram(program, out));
+}
 
 Status:WriteGeneratedC(str:inputPath, Allocator:allocator, ptr<StringBuilder>:out) {
-	StringBuilder:generated = std::StringBuilderNew(allocator);
-	DiagnosticBag:diagnostics;
-	diagnostics::DiagnosticBagInit(&diagnostics, allocator);
-	Status:status = compiler::CompileToCString(inputPath, allocator, &generated, &diagnostics);
-	if (status == Status::Ok) {
-		String:view = generated.View();
-		status = out.WriteString(view);
+	CompilerContext:program;
+	Status:status = ProgramInit(&program, allocator);
+	if (status != Status::Ok) {
+		return(status);
 	}
-	generated.Destroy();
-	diagnostics::DiagnosticBagDestroy(&diagnostics);
+	status = LoadSyntaxPackage(inputPath, &program);
+	if (status == Status::Ok) {
+		status = BuildModule(&program);
+	}
+	if (status == Status::Ok) {
+		status = CheckModule(&program);
+	}
+	if (status == Status::Ok) {
+		status = GenerateC(&program, out);
+	}
+	ProgramDestroy(&program);
 	return(status);
 }

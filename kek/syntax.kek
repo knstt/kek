@@ -1,0 +1,647 @@
+#import(std/lib.kek);
+#import(std/thread.kek);
+#import(kek/diagnostics.kek);
+#import(kek/source.kek);
+#import(kek/tokenizer.kek);
+#import(kek/ast.kek);
+
+enum:u8:DeclKind {
+	Unknown,
+	Alias,
+	Struct,
+	Union,
+	Enum,
+	Function,
+	ExternC,
+};
+
+enum:u8:TypeKind {
+	Unknown,
+	Void,
+	Bool,
+	Integer,
+	Float,
+	Pointer,
+	Struct,
+	Union,
+	Enum,
+	Alias,
+};
+
+struct:SyntaxOptions {
+	bool:emitComments;
+	bool:parseAst;
+	bool:retainAst;
+};
+
+struct:SyntaxFile {
+	ptr<Token>:tokens;
+	usize:tokenLen;
+	usize:tokenCap;
+	String:sourceText;
+	String:path;
+	OwnedString:packageName;
+	OwnedString:moduleName;
+	usize:fileIndex;
+};
+
+struct:TokenizeJob {
+	Allocator:allocator;
+	ptr<SourceFile>:sourceFile;
+	ptr<SyntaxFile>:tokenFile;
+	DiagnosticBag:diagnostics;
+	usize:threadHandle;
+	Status:status;
+	usize:fileIndex;
+	bool:isRoot;
+	bool:threaded;
+};
+
+struct:TypeUse {
+	OwnedString:key;
+	OwnedString:cName;
+	OwnedString:baseName;
+	OwnedString:arg0;
+	OwnedString:arg1;
+	OwnedString:arg2;
+	usize:argCount;
+	bool:emitted;
+};
+
+struct:FuncUse {
+	usize:declIndex;
+	OwnedString:key;
+	OwnedString:cName;
+	OwnedString:arg0;
+	OwnedString:arg1;
+	OwnedString:arg2;
+	usize:argCount;
+	bool:emitted;
+};
+
+struct:ModuleParam {
+	usize:fileIndex;
+	usize:typeStart;
+	usize:typeEnd;
+	usize:nameIndex;
+	usize:defaultStart;
+	usize:defaultEnd;
+	bool:hasDefault;
+};
+
+struct:ModuleField {
+	usize:fileIndex;
+	usize:typeStart;
+	usize:typeEnd;
+	usize:nameIndex;
+	usize:defaultStart;
+	usize:defaultEnd;
+	usize:arrayStart;
+	usize:arrayEnd;
+	bool:hasDefault;
+	bool:isArray;
+	bool:isNestedStruct;
+	usize:nestedBodyStart;
+	usize:nestedBodyEnd;
+};
+
+struct:ModuleDecl {
+	DeclKind:kind;
+	usize:fileIndex;
+	usize:start;
+	usize:end;
+	usize:nameIndex;
+	usize:returnStart;
+	usize:returnEnd;
+	usize:receiverStart;
+	usize:receiverEnd;
+	bool:hasReceiver;
+	bool:isOperator;
+	u8:operatorCode;
+	usize:genericStart;
+	usize:genericEnd;
+	bool:isGeneric;
+	usize:paramStart;
+	usize:paramEnd;
+	usize:bodyStart;
+	usize:bodyEnd;
+	bool:hasBody;
+	usize:firstParam;
+	usize:paramCount;
+	usize:firstField;
+	usize:fieldCount;
+	OwnedString:packageName;
+	OwnedString:moduleName;
+	usize:docStart;
+	usize:docEnd;
+	bool:hasDocComment;
+	bool:emitted;
+	bool:reachable;
+};
+
+struct:Local {
+	OwnedString:name;
+	OwnedString:typeKey;
+	OwnedString:cType;
+	OwnedString:arrayLen;
+	bool:isArray;
+	bool:isPointer;
+};
+
+struct:CodegenEnv {
+	Array<Local>:locals;
+	OwnedString:returnTypeKey;
+	OwnedString:returnCType;
+	OwnedString:thisTypeKey;
+	OwnedString:thisCType;
+	bool:hasThis;
+	usize:deferCounter;
+	usize:eachCounter;
+};
+
+struct:Expr {
+	OwnedString:text;
+	OwnedString:typeKey;
+	OwnedString:cType;
+	OwnedString:arrayLen;
+	bool:isArray;
+	bool:isLvalue;
+	bool:isPointer;
+};
+
+struct:ExprParser {
+	ptr<CompilerContext>:program;
+	ptr<CodegenEnv>:env;
+	usize:fileIndex;
+	usize:pos;
+	usize:end;
+	OwnedString:expectedTypeKey;
+	OwnedString:expectedCType;
+	bool:expectedIsArray;
+};
+
+struct:SyntaxPackage {
+	Allocator:allocator;
+	DiagnosticBag:diagnostics;
+	FileTable:files;
+	Array<SyntaxFile>:tokenFiles;
+};
+
+struct:Module {
+	Allocator:allocator;
+	ptr<SyntaxPackage>:syntax;
+	Array<ModuleDecl>:decls;
+	Array<ModuleParam>:params;
+	Array<ModuleField>:fields;
+};
+
+struct:CheckedModule {
+	ptr<Module>:module;
+	Array<TypeUse>:typeUses;
+	Array<FuncUse>:funcUses;
+};
+
+struct:TypeInfo {
+	OwnedString:key;
+	OwnedString:cType;
+	OwnedString:baseName;
+	OwnedString:arg0;
+	OwnedString:arg1;
+	OwnedString:arg2;
+	usize:argCount;
+	bool:isPointer;
+};
+
+struct:CompilerContext {
+	Allocator:allocator;
+	DiagnosticBag:diagnostics;
+	FileTable:files;
+	Array<SyntaxFile>:tokenFiles;
+	Array<ModuleDecl>:decls;
+	Array<ModuleParam>:params;
+	Array<ModuleField>:fields;
+	Array<TypeUse>:typeUses;
+	Array<FuncUse>:funcUses;
+};
+
+bool:IsOk(Status:status) {
+	return(status == Status::Ok);
+}
+
+String:TokenText(ptr<CompilerContext>:program, usize:fileIndex, usize:tokenIndex) {
+	ptr<SyntaxFile>:file = &program.tokenFiles.data[fileIndex];
+	Token:token = file.tokens[tokenIndex];
+	String:sourceText = file.sourceText;
+	return(sourceText.Slice(token.offset, token.length));
+}
+
+bool:TokenEquals(ptr<CompilerContext>:program, usize:fileIndex, usize:tokenIndex, str:text) {
+	String:value = TokenText(program, fileIndex, tokenIndex);
+	return(value.EqualsCString(text));
+}
+
+bool:StringEquals(String:value, str:text) {
+	return(value.EqualsCString(text));
+}
+
+bool:IsTokenKind(ptr<CompilerContext>:program, usize:fileIndex, usize:tokenIndex, TokenKind:kind) {
+	return(program.tokenFiles.data[fileIndex].tokens[tokenIndex].kind == kind);
+}
+
+bool:IsPunctuation(ptr<CompilerContext>:program, usize:fileIndex, usize:tokenIndex, PunctuationKind:kind) {
+	Token:token = program.tokenFiles.data[fileIndex].tokens[tokenIndex];
+	return(token.kind == TokenKind::Punctuation && token.subkind == cast<u64>(kind));
+}
+
+bool:IsOperator(ptr<CompilerContext>:program, usize:fileIndex, usize:tokenIndex, OperatorKind:kind) {
+	Token:token = program.tokenFiles.data[fileIndex].tokens[tokenIndex];
+	return(token.kind == TokenKind::Operator && token.subkind == cast<u64>(kind));
+}
+
+bool:IsKeyword(ptr<CompilerContext>:program, usize:fileIndex, usize:tokenIndex, KeywordKind:kind) {
+	Token:token = program.tokenFiles.data[fileIndex].tokens[tokenIndex];
+	return(token.kind == TokenKind::Keyword && token.subkind == cast<u64>(kind));
+}
+
+bool:IsIdentifierText(ptr<CompilerContext>:program, usize:fileIndex, usize:tokenIndex, str:text) {
+	Token:token = program.tokenFiles.data[fileIndex].tokens[tokenIndex];
+	if (!(token.kind == TokenKind::Identifier || token.kind == TokenKind::Keyword)) {
+		return(false);
+	}
+	return(TokenEquals(program, fileIndex, tokenIndex, text));
+}
+
+bool:IsEof(ptr<CompilerContext>:program, usize:fileIndex, usize:tokenIndex) {
+	return(program.tokenFiles.data[fileIndex].tokens[tokenIndex].kind == TokenKind::Eof);
+}
+
+usize:FileTokenCount(ptr<CompilerContext>:program, usize:fileIndex) {
+	return(program.tokenFiles.data[fileIndex].tokenLen);
+}
+
+Status:Write(ptr<StringBuilder>:out, str:text) {
+	return(out.WriteCString(text));
+}
+
+Status:WriteString(ptr<StringBuilder>:out, String:text) {
+	return(out.WriteString(text));
+}
+
+Status:WriteToken(ptr<CompilerContext>:program, ptr<StringBuilder>:out, usize:fileIndex, usize:tokenIndex) {
+	return(out.WriteString(TokenText(program, fileIndex, tokenIndex)));
+}
+
+Status:CloneContextCString(ptr<CompilerContext>:program, str:text, ptr<OwnedString>:out) {
+	return(std::CloneCString(text, program.allocator, out));
+}
+
+Status:CloneContextString(ptr<CompilerContext>:program, String:text, ptr<OwnedString>:out) {
+	return(std::CloneString(text, program.allocator, out));
+}
+
+String:OwnedView(ptr<OwnedString>:value) {
+	return(std::OwnedStringView(value));
+}
+
+bool:OwnedEqualsCString(ptr<OwnedString>:value, str:text) {
+	String:view = std::OwnedStringView(value);
+	return(view.EqualsCString(text));
+}
+
+bool:OwnedEquals(ptr<OwnedString>:left, ptr<OwnedString>:right) {
+	String:leftView = std::OwnedStringView(left);
+	String:rightView = std::OwnedStringView(right);
+	return(leftView.Equals(rightView));
+}
+
+Status:DetachBuilder(ptr<StringBuilder>:builder, ptr<OwnedString>:out) {
+	Result<OwnedString>:detached = builder.Detach();
+	if (detached.status != Status::Ok) {
+		return(detached.status);
+	}
+	out.data = detached.value.data;
+	out.len = detached.value.len;
+	out.cap = detached.value.cap;
+	out.allocator = detached.value.allocator;
+	return(Status::Ok);
+}
+
+Status:MakeOwnedEmpty(ptr<CompilerContext>:program, ptr<OwnedString>:out) {
+	return(CloneContextCString(program, "", out));
+}
+
+Status:WriteOwned(ptr<StringBuilder>:out, ptr<OwnedString>:text) {
+	return(out.WriteString(std::OwnedStringView(text)));
+}
+
+usize:StringLastSlash(String:path) {
+	usize:last = path.len;
+	for (usize:i = 0; i < path.len; i++) {
+		if (path.data[i] == '/') {
+			last = i;
+		}
+	}
+	return(last);
+}
+
+Status:PackageNameFromPath(String:path, Allocator:allocator, ptr<OwnedString>:out) {
+	usize:lastSlash = StringLastSlash(path);
+	if (lastSlash == path.len) {
+		return(std::CloneCString("", allocator, out));
+	}
+	usize:segmentStart = 0;
+	for (usize:i = 0; i < lastSlash; i++) {
+		if (path.data[i] == '/') {
+			segmentStart = i + 1;
+		}
+	}
+	return(std::CloneString(path.Slice(segmentStart, lastSlash - segmentStart), allocator, out));
+}
+
+Status:ModuleNameFromPath(String:path, Allocator:allocator, ptr<OwnedString>:out) {
+	usize:lastSlash = StringLastSlash(path);
+	if (lastSlash == path.len) {
+		return(std::CloneCString("", allocator, out));
+	}
+	String:name = path.Slice(lastSlash + 1, path.len - lastSlash - 1);
+	if (name.EndsWith(std::StringFromCString(".kek"))) {
+		return(std::CloneString(name.Slice(0, name.len - 4), allocator, out));
+	}
+	return(std::CloneString(name, allocator, out));
+}
+
+Status:InitTokenFileSlot(Allocator:allocator, ptr<SyntaxFile>:tokenFile, usize:fileIndex) {
+	tokenFile.tokens = 0;
+	tokenFile.tokenLen = 0;
+	tokenFile.tokenCap = 0;
+	tokenFile.sourceText = std::StringFromCString("");
+	tokenFile.path = std::StringFromCString("");
+	tokenFile.fileIndex = fileIndex;
+	Status:status = std::CloneCString("", allocator, &tokenFile.packageName);
+	if (status == Status::Ok) {
+		status = std::CloneCString("", allocator, &tokenFile.moduleName);
+	}
+	return(status);
+}
+
+Status:SetTokenFileNames(Allocator:allocator, ptr<SyntaxFile>:tokenFile, bool:isRoot) {
+	std::DestroyOwnedString(&tokenFile.packageName);
+	std::DestroyOwnedString(&tokenFile.moduleName);
+	if (isRoot) {
+		Status:status = std::CloneCString("", allocator, &tokenFile.packageName);
+		if (status == Status::Ok) {
+			status = std::CloneCString("", allocator, &tokenFile.moduleName);
+		}
+		return(status);
+	}
+	Status:status = PackageNameFromPath(tokenFile.path, allocator, &tokenFile.packageName);
+	if (status == Status::Ok) {
+		status = ModuleNameFromPath(tokenFile.path, allocator, &tokenFile.moduleName);
+	}
+	return(status);
+}
+
+Status:TokenizeSourceFile(Allocator:allocator, ptr<SourceFile>:sourceFile, ptr<SyntaxFile>:tokenFile, usize:fileIndex, bool:isRoot, ptr<DiagnosticBag>:diagnostics) {
+	tokenFile.sourceText = std::OwnedStringView(&sourceFile.content);
+	tokenFile.path = std::OwnedStringView(&sourceFile.path);
+	tokenFile.fileIndex = fileIndex;
+	Status:status = SetTokenFileNames(allocator, tokenFile, isRoot);
+	if (status != Status::Ok) {
+		return(status);
+	}
+
+	Array<Token>:tokens;
+	status = tokenizer::TokenizeToArray(tokenFile.sourceText, false, allocator, &tokens);
+	if (status != Status::Ok) {
+		tokens.Destroy();
+		return(status);
+	}
+	tokenFile.tokens = tokens.data;
+	tokenFile.tokenLen = tokens.len;
+	tokenFile.tokenCap = tokens.cap;
+
+	AstTree:tree;
+	status = ast::ParseTokens(tokenFile.tokens, tokenFile.tokenLen, tokenFile.sourceText, cast<i64>(fileIndex), allocator, diagnostics, &tree);
+	if (status == Status::Ok) {
+		ast::AstTreeDestroy(&tree);
+	}
+	return(status);
+}
+
+void:TokenizeJobRun(ptr<TokenizeJob>:job) {
+	job.status = TokenizeSourceFile(job.allocator, job.sourceFile, job.tokenFile, job.fileIndex, job.isRoot, &job.diagnostics);
+}
+
+ptr:TokenizeFileThreadEntry(ptr:arg) {
+	ptr<TokenizeJob>:job = cast<ptr<TokenizeJob>>(arg);
+	TokenizeJobRun(job);
+	return(0);
+}
+
+Status:MergeDiagnostics(ptr<DiagnosticBag>:target, ptr<DiagnosticBag>:source) {
+	for (usize:i = 0; i < source.items.len; i++) {
+		ptr<Diagnostic>:item = &source.items.data[i];
+		Status:status = diagnostics::DiagnosticAdd(target, item.severity, item.phase, item.fileIndex, item.location, std::OwnedStringView(&item.message));
+		if (status != Status::Ok) {
+			return(status);
+		}
+	}
+	return(Status::Ok);
+}
+
+Status:ProgramInit(ptr<CompilerContext>:program, Allocator:allocator) {
+	program.allocator = allocator;
+	diagnostics::DiagnosticBagInit(&program.diagnostics, allocator);
+	source::FileTableInit(&program.files, allocator);
+	program.tokenFiles = std::ArrayNew<SyntaxFile>(allocator);
+	program.decls = std::ArrayNew<ModuleDecl>(allocator);
+	program.params = std::ArrayNew<ModuleParam>(allocator);
+	program.fields = std::ArrayNew<ModuleField>(allocator);
+	program.typeUses = std::ArrayNew<TypeUse>(allocator);
+	program.funcUses = std::ArrayNew<FuncUse>(allocator);
+	return(Status::Ok);
+}
+
+Status:ProgramDestroy(ptr<CompilerContext>:program) {
+	for (usize:i = 0; i < program.tokenFiles.len; i++) {
+		Array<Token>:tokens;
+		tokens.data = program.tokenFiles.data[i].tokens;
+		tokens.len = program.tokenFiles.data[i].tokenLen;
+		tokens.cap = program.tokenFiles.data[i].tokenCap;
+		tokens.allocator = program.allocator;
+		tokens.Destroy();
+		std::DestroyOwnedString(&program.tokenFiles.data[i].packageName);
+		std::DestroyOwnedString(&program.tokenFiles.data[i].moduleName);
+	}
+	for (usize:i = 0; i < program.decls.len; i++) {
+		std::DestroyOwnedString(&program.decls.data[i].packageName);
+		std::DestroyOwnedString(&program.decls.data[i].moduleName);
+	}
+	for (usize:i = 0; i < program.typeUses.len; i++) {
+		std::DestroyOwnedString(&program.typeUses.data[i].key);
+		std::DestroyOwnedString(&program.typeUses.data[i].cName);
+		std::DestroyOwnedString(&program.typeUses.data[i].baseName);
+		std::DestroyOwnedString(&program.typeUses.data[i].arg0);
+		std::DestroyOwnedString(&program.typeUses.data[i].arg1);
+		std::DestroyOwnedString(&program.typeUses.data[i].arg2);
+	}
+	for (usize:i = 0; i < program.funcUses.len; i++) {
+		std::DestroyOwnedString(&program.funcUses.data[i].key);
+		std::DestroyOwnedString(&program.funcUses.data[i].cName);
+		std::DestroyOwnedString(&program.funcUses.data[i].arg0);
+		std::DestroyOwnedString(&program.funcUses.data[i].arg1);
+		std::DestroyOwnedString(&program.funcUses.data[i].arg2);
+	}
+	Array<SyntaxFile>:tokenFiles = program.tokenFiles;
+	Status:status = tokenFiles.Destroy();
+	program.tokenFiles = tokenFiles;
+	Array<ModuleDecl>:decls = program.decls;
+	if (status == Status::Ok) { status = decls.Destroy(); }
+	program.decls = decls;
+	Array<ModuleParam>:params = program.params;
+	if (status == Status::Ok) { status = params.Destroy(); }
+	program.params = params;
+	Array<ModuleField>:fields = program.fields;
+	if (status == Status::Ok) { status = fields.Destroy(); }
+	program.fields = fields;
+	Array<TypeUse>:typeUses = program.typeUses;
+	if (status == Status::Ok) { status = typeUses.Destroy(); }
+	program.typeUses = typeUses;
+	Array<FuncUse>:funcUses = program.funcUses;
+	if (status == Status::Ok) { status = funcUses.Destroy(); }
+	program.funcUses = funcUses;
+	if (status == Status::Ok) { status = source::FileTableDestroy(&program.files); }
+	if (status == Status::Ok) { status = diagnostics::DiagnosticBagDestroy(&program.diagnostics); }
+	return(status);
+}
+
+Status:AddDiagnostic(ptr<CompilerContext>:program, str:message) {
+	return(diagnostics::DiagnosticAddCString(&program.diagnostics, DiagnosticSeverity::Error, DiagnosticPhase::Semantic, -1, diagnostics::SourceLocationNew(0, 0, 0, 0), message));
+}
+
+Status:ReserveTokenFiles(ptr<CompilerContext>:program, usize:additional) {
+	Array<SyntaxFile>:tokenFiles = program.tokenFiles;
+	Status:status = tokenFiles.Reserve(additional);
+	program.tokenFiles = tokenFiles;
+	return(status);
+}
+
+Status:ReserveDecls(ptr<CompilerContext>:program, usize:additional) {
+	Array<ModuleDecl>:decls = program.decls;
+	Status:status = decls.Reserve(additional);
+	program.decls = decls;
+	return(status);
+}
+
+Status:ReserveParams(ptr<CompilerContext>:program, usize:additional) {
+	Array<ModuleParam>:params = program.params;
+	Status:status = params.Reserve(additional);
+	program.params = params;
+	return(status);
+}
+
+Status:ReserveFields(ptr<CompilerContext>:program, usize:additional) {
+	Array<ModuleField>:fields = program.fields;
+	Status:status = fields.Reserve(additional);
+	program.fields = fields;
+	return(status);
+}
+
+Status:ReserveTypeUses(ptr<CompilerContext>:program, usize:additional) {
+	Array<TypeUse>:typeUses = program.typeUses;
+	Status:status = typeUses.Reserve(additional);
+	program.typeUses = typeUses;
+	return(status);
+}
+
+Status:ReserveFuncUses(ptr<CompilerContext>:program, usize:additional) {
+	Array<FuncUse>:funcUses = program.funcUses;
+	Status:status = funcUses.Reserve(additional);
+	program.funcUses = funcUses;
+	return(status);
+}
+
+Status:ReserveLocals(ptr<CodegenEnv>:env, usize:additional) {
+	Array<Local>:locals = env.locals;
+	Status:status = locals.Reserve(additional);
+	env.locals = locals;
+	return(status);
+}
+
+Status:LoadAndTokenize(ptr<CompilerContext>:program, str:entryPath) {
+	Status:status = source::LoadCompilationSources(entryPath, program.allocator, &program.files, &program.diagnostics);
+	if (status != Status::Ok) {
+		return(status);
+	}
+
+	status = ReserveTokenFiles(program, program.files.files.len);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	for (usize:i = 0; i < program.files.files.len; i++) {
+		status = InitTokenFileSlot(program.allocator, &program.tokenFiles.data[i], i);
+		if (status != Status::Ok) {
+			program.tokenFiles.len = i;
+			return(status);
+		}
+	}
+	program.tokenFiles.len = program.files.files.len;
+
+	Array<TokenizeJob>:jobs = std::ArrayNew<TokenizeJob>(program.allocator);
+	if (program.files.files.len > 0) {
+		status = jobs.Reserve(program.files.files.len);
+		if (status != Status::Ok) {
+			return(status);
+		}
+		jobs.len = program.files.files.len;
+	}
+	for (usize:i = 0; i < program.files.files.len; i++) {
+		ptr<TokenizeJob>:job = &jobs.data[i];
+		job.allocator = program.allocator;
+		job.sourceFile = &program.files.files.data[i];
+		job.tokenFile = &program.tokenFiles.data[i];
+		diagnostics::DiagnosticBagInit(&job.diagnostics, program.allocator);
+		job.status = Status::Ok;
+		job.fileIndex = i;
+		job.isRoot = i == 0;
+		job.threaded = false;
+		Status:startStatus = std::ThreadHandleStart(&job.threadHandle, cast<ptr>(TokenizeFileThreadEntry), cast<ptr>(job));
+		if (startStatus == Status::Ok) {
+			job.threaded = true;
+		} else {
+			TokenizeJobRun(job);
+		}
+	}
+
+	Status:firstStatus = Status::Ok;
+	for (usize:i = 0; i < program.files.files.len; i++) {
+		ptr<TokenizeJob>:job = &jobs.data[i];
+		if (job.threaded) {
+			Status:joinStatus = std::ThreadHandleJoin(&job.threadHandle);
+			if (joinStatus != Status::Ok && job.status == Status::Ok) {
+				job.status = joinStatus;
+			}
+		}
+		Status:mergeStatus = MergeDiagnostics(&program.diagnostics, &job.diagnostics);
+		if (firstStatus == Status::Ok && mergeStatus != Status::Ok) {
+			firstStatus = mergeStatus;
+		}
+		if (firstStatus == Status::Ok && job.status != Status::Ok) {
+			firstStatus = job.status;
+		}
+		diagnostics::DiagnosticBagDestroy(&job.diagnostics);
+	}
+	Status:jobsStatus = jobs.Destroy();
+	if (firstStatus == Status::Ok && jobsStatus != Status::Ok) {
+		firstStatus = jobsStatus;
+	}
+	return(firstStatus);
+}
+
+Status:LoadSyntaxPackage(str:entryPath, ptr<CompilerContext>:program) {
+	return(LoadAndTokenize(program, entryPath));
+}
+
+Status:SyntaxPackageDestroy(ptr<CompilerContext>:program) {
+	return(ProgramDestroy(program));
+}
