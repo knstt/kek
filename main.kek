@@ -1,0 +1,10 @@
+#import(std);
+#import(self/diagnostics);
+#import(self/source);
+#import(self/tokenizer);
+#import(self/ast);
+#import(self/compiler);
+
+int:main(int:argc, ptr<str>:argv) {
+	return(compiler::SelfCompilerMain(argc, argv));
+}

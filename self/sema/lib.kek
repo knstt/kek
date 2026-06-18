@@ -1,50 +1,23 @@
-Status:SelfBuildSemanticCommand(str:inputPath, ptr<StringBuilder>:out) {
-	Status:status = out.WriteCString("bin/kek build ");
-	if (status == Status::Ok) {
-		status = out.WriteCString(inputPath);
-	}
-	if (status == Status::Ok) {
-		status = out.WriteCString(" -o out/self_semantic_tmp.c");
-	}
-	if (status == Status::Ok) {
-		status = out.WriteCString(" --ast-json out/self_semantic_tmp.json");
-	}
-	if (status == Status::Ok) {
-		status = out.WriteCString(" --summary out/self_semantic_tmp.txt");
-	}
-	if (status == Status::Ok) {
-		status = out.WriteCString(" > out/self_semantic_tmp.stdout");
-	}
-	if (status == Status::Ok) {
-		status = out.WriteCString(" 2> out/self_semantic_tmp.stderr");
-	}
-	return(status);
-}
+#import(self/diagnostics);
+#import(self/compiler);
 
 Status:SelfWriteSemanticDiagnostics(str:inputPath, Allocator:allocator, ptr<StringBuilder>:out) {
-	StringBuilder:command = std::StringBuilderNew(allocator);
-	Status:status = SelfBuildSemanticCommand(inputPath, &command);
-	if (status != Status::Ok) {
-		command.Destroy();
-		return(status);
+	StringBuilder:generated = std::StringBuilderNew(allocator);
+	SelfDiagnosticBag:diagnostics;
+	diagnostics::SelfDiagnosticBagInit(&diagnostics, allocator);
+	Status:status = compiler::SelfCompileToCString(inputPath, allocator, &generated, &diagnostics);
+	Status:writeStatus = Status::Ok;
+	if (diagnostics.count > 0) {
+		writeStatus = diagnostics::SelfWriteDiagnosticDump(&diagnostics, out);
+	} else {
+		if (status != Status::Ok) {
+			writeStatus = out.WriteCString("diag|2|4|-1|0|0|0|0|compile failed\n");
+		}
 	}
-	status = command.WriteByte(0);
-	if (status != Status::Ok) {
-		command.Destroy();
-		return(status);
+	generated.Destroy();
+	diagnostics::SelfDiagnosticBagDestroy(&diagnostics);
+	if (writeStatus != Status::Ok) {
+		return(writeStatus);
 	}
-
-	String:commandView = command.View();
-	std::ProcessRun(cast<str>(commandView.data));
-	command.Destroy();
-
-	OwnedString:diagnostics;
-	status = std::ReadFileToOwnedString("out/self_semantic_tmp.stderr", allocator, &diagnostics);
-	if (status != Status::Ok) {
-		return(status);
-	}
-	String:diagnosticsView = diagnostics.View();
-	status = out.WriteString(diagnosticsView);
-	diagnostics.Destroy();
-	return(status);
+	return(Status::Ok);
 }

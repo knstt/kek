@@ -103,13 +103,18 @@ Status:SelfNormalizePath(String:path, Allocator:allocator, ptr<OwnedString>:out)
 		previousSlash = c == '/';
 		i += 1;
 	}
+	Status:termStatus = builder.WriteByte(0);
+	if (termStatus != Status::Ok) {
+		builder.Destroy();
+		return(termStatus);
+	}
 	Result<OwnedString>:detached = builder.Detach();
 	if (detached.status != Status::Ok) {
 		builder.Destroy();
 		return(detached.status);
 	}
 	out.data = detached.value.data;
-	out.len = detached.value.len;
+	out.len = detached.value.len - 1;
 	out.cap = detached.value.cap;
 	out.allocator = detached.value.allocator;
 	return(Status::Ok);
@@ -181,6 +186,9 @@ Status:SelfBuildPath(String:directory, String:name, Allocator:allocator, ptr<Own
 	if (status == Status::Ok) {
 		status = builder.WriteString(name);
 	}
+	if (status == Status::Ok) {
+		status = builder.WriteByte(0);
+	}
 	if (status != Status::Ok) {
 		builder.Destroy();
 		return(status);
@@ -191,7 +199,7 @@ Status:SelfBuildPath(String:directory, String:name, Allocator:allocator, ptr<Own
 		return(detached.status);
 	}
 	out.data = detached.value.data;
-	out.len = detached.value.len;
+	out.len = detached.value.len - 1;
 	out.cap = detached.value.cap;
 	out.allocator = detached.value.allocator;
 	return(Status::Ok);
@@ -324,9 +332,9 @@ Status:SelfLoadImportDirectory(ptr<SelfFileTable>:table, String:path, ptr<SelfDi
 
 Status:SelfLoadImports(ptr<SelfFileTable>:table, ptr<SelfSourceFile>:file, ptr<SelfDiagnosticBag>:diagnostics) {
 	String:source = std::OwnedStringView(&file.content);
-	String:prefix = std::StringFromCString("#import(");
+	String:prefix = std::StringFromCString("#import");
 	usize:cursor = 0;
-	while (cursor + prefix.len <= source.len) {
+	while (cursor + prefix.len + 1 <= source.len) {
 		bool:matched = true;
 		for (usize:i = 0; i < prefix.len; i++) {
 			if (source.data[cursor + i] != prefix.data[i]) {
@@ -339,7 +347,12 @@ Status:SelfLoadImports(ptr<SelfFileTable>:table, ptr<SelfSourceFile>:file, ptr<S
 			continue;
 		}
 
-		usize:start = cursor + prefix.len;
+		if (source.data[cursor + prefix.len] != '(') {
+			cursor += 1;
+			continue;
+		}
+
+		usize:start = cursor + prefix.len + 1;
 		usize:end = start;
 		while (end < source.len && source.data[end] != ')') {
 			end += 1;
@@ -368,7 +381,15 @@ Status:SelfLoadCompilationSources(str:entryPath, Allocator:allocator, ptr<SelfFi
 	if (status != Status::Ok) {
 		return(status);
 	}
-	return(SelfLoadImports(table, &table.files[0], diagnostics));
+	usize:nextImportScan = 0;
+	while (nextImportScan < table.count) {
+		status = SelfLoadImports(table, &table.files[nextImportScan], diagnostics);
+		if (status != Status::Ok) {
+			return(status);
+		}
+		nextImportScan += 1;
+	}
+	return(Status::Ok);
 }
 
 Status:SelfWriteSourceDump(ptr<SelfFileTable>:table, ptr<SelfDiagnosticBag>:diagnostics, ptr<StringBuilder>:out) {

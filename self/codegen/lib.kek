@@ -1,56 +1,16 @@
-Status:SelfBuildCodegenCommand(str:inputPath, str:cPath, ptr<StringBuilder>:out) {
-	Status:status = out.WriteCString("bin/kek build ");
-	if (status == Status::Ok) {
-		status = out.WriteCString(inputPath);
-	}
-	if (status == Status::Ok) {
-		status = out.WriteCString(" -o ");
-	}
-	if (status == Status::Ok) {
-		status = out.WriteCString(cPath);
-	}
-	if (status == Status::Ok) {
-		status = out.WriteCString(" --ast-json out/self_codegen_tmp.json");
-	}
-	if (status == Status::Ok) {
-		status = out.WriteCString(" --summary out/self_codegen_tmp.txt");
-	}
-	if (status == Status::Ok) {
-		status = out.WriteCString(" > out/self_codegen_tmp.stdout");
-	}
-	if (status == Status::Ok) {
-		status = out.WriteCString(" 2> out/self_codegen_tmp.stderr");
-	}
-	return(status);
-}
+#import(self/diagnostics);
+#import(self/compiler);
 
 Status:SelfWriteGeneratedC(str:inputPath, Allocator:allocator, ptr<StringBuilder>:out) {
-	str:cPath = "out/self_codegen_tmp.c";
-	StringBuilder:command = std::StringBuilderNew(allocator);
-	Status:status = SelfBuildCodegenCommand(inputPath, cPath, &command);
-	if (status != Status::Ok) {
-		command.Destroy();
-		return(status);
+	StringBuilder:generated = std::StringBuilderNew(allocator);
+	SelfDiagnosticBag:diagnostics;
+	diagnostics::SelfDiagnosticBagInit(&diagnostics, allocator);
+	Status:status = compiler::SelfCompileToCString(inputPath, allocator, &generated, &diagnostics);
+	if (status == Status::Ok) {
+		String:view = generated.View();
+		status = out.WriteString(view);
 	}
-	status = command.WriteByte(0);
-	if (status != Status::Ok) {
-		command.Destroy();
-		return(status);
-	}
-	String:commandView = command.View();
-	if (std::ProcessRun(cast<str>(commandView.data)) != 0) {
-		command.Destroy();
-		return(Status::Invalid);
-	}
-	command.Destroy();
-
-	OwnedString:generated;
-	status = std::ReadFileToOwnedString(cPath, allocator, &generated);
-	if (status != Status::Ok) {
-		return(status);
-	}
-	String:generatedView = generated.View();
-	status = out.WriteString(generatedView);
 	generated.Destroy();
+	diagnostics::SelfDiagnosticBagDestroy(&diagnostics);
 	return(status);
 }
