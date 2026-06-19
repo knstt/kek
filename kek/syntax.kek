@@ -97,6 +97,8 @@ struct:ModuleField {
 	bool:isNestedStruct;
 	usize:nestedBodyStart;
 	usize:nestedBodyEnd;
+	usize:nestedFirstField;
+	usize:nestedFieldCount;
 };
 
 struct:ModuleDecl {

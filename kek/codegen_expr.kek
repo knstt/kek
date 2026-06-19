@@ -176,21 +176,87 @@ ptr<ModuleDecl>:FindFieldDecl(ptr<CompilerContext>:program, String:typeKey) {
 	return(0);
 }
 
+Status:NestedFieldTypeKey(ptr<CompilerContext>:program, usize:fieldIndex, ptr<OwnedString>:out) {
+	StringBuilder:builder = std::StringBuilderNew(program.allocator);
+	Status:status = std::FormatU64ToBuilder(&builder, cast<u64>(fieldIndex), 10);
+	if (status == Status::Ok) {
+		status = DetachBuilder(&builder, out);
+	}
+	builder.Destroy();
+	return(status);
+}
+
+bool:NestedFieldIndexFromKey(String:typeKey, ptr<usize>:out) {
+	if (typeKey.len == 0 || typeKey.data[0] < '0' || typeKey.data[0] > '9') {
+		return(false);
+	}
+	usize:value = 0;
+	for (usize:i = 0; i < typeKey.len; i++) {
+		byte:c = typeKey.data[i];
+		if (c < '0' || c > '9') {
+			return(false);
+		}
+		value = value * 10 + cast<usize>(c - '0');
+	}
+	out[0] = value;
+	return(true);
+}
+
+ptr<TypeUse>:FindTypeUse(ptr<CompilerContext>:program, String:typeKey) {
+	for (usize:i = 0; i < program.typeUses.len; i++) {
+		String:useKey = std::OwnedStringView(&program.typeUses.data[i].key);
+		if (useKey.Equals(typeKey)) {
+			return(&program.typeUses.data[i]);
+		}
+	}
+	return(0);
+}
+
 Status:ModuleFieldType(ptr<CompilerContext>:program, String:typeKey, String:fieldName, ptr<TypeInfo>:outInfo) {
 	TypeInfoInitEmpty(program, outInfo);
-	ptr<ModuleDecl>:decl = FindFieldDecl(program, typeKey);
-	if (decl == 0) {
-		return(Status::Ok);
+	usize:firstField = 0;
+	usize:fieldCount = 0;
+	usize:nestedIndex = 0;
+	if (NestedFieldIndexFromKey(typeKey, &nestedIndex)) {
+		if (nestedIndex >= program.fields.len || !program.fields.data[nestedIndex].isNestedStruct) {
+			return(Status::Ok);
+		}
+		firstField = program.fields.data[nestedIndex].nestedFirstField;
+		fieldCount = program.fields.data[nestedIndex].nestedFieldCount;
+	} else {
+		ptr<ModuleDecl>:fieldDecl = FindFieldDecl(program, typeKey);
+		if (fieldDecl == 0) {
+			return(Status::Ok);
+		}
+		firstField = fieldDecl.firstField;
+		fieldCount = fieldDecl.fieldCount;
 	}
-	for (usize:i = 0; i < decl.fieldCount; i++) {
-		ptr<ModuleField>:field = &program.fields.data[decl.firstField + i];
+	ptr<TypeUse>:use = FindTypeUse(program, typeKey);
+	ptr<ModuleDecl>:decl = 0;
+	if (use != 0) {
+		decl = FindTypeDecl(program, std::OwnedStringView(&use.baseName));
+	}
+	for (usize:i = 0; i < fieldCount; i++) {
+		usize:fieldIndex = firstField + i;
+		ptr<ModuleField>:field = &program.fields.data[fieldIndex];
 		String:fieldToken = TokenText(program, field.fileIndex, field.nameIndex);
 		if (fieldToken.Equals(fieldName)) {
+			if (field.isNestedStruct) {
+				OwnedString:key;
+				Status:status = NestedFieldTypeKey(program, fieldIndex, &key);
+				if (status == Status::Ok) {
+					status = ReplaceOwned(&outInfo.key, key);
+				}
+				return(status);
+			}
 			TypeInfoDestroy(outInfo);
+			if (use != 0 && decl != 0) {
+				return(MakeSubstTypeInfo(program, decl, use, field.fileIndex, field.typeStart, field.typeEnd, outInfo));
+			}
 			return(RenderTypeInfo(program, field.fileIndex, field.typeStart, field.typeEnd, outInfo));
 		}
 	}
-	return(Status::Ok);
+	return(ModuleError(program, "unknown struct field"));
 }
 
 ptr<ModuleDecl>:FindMethod(ptr<CompilerContext>:program, String:receiverType, String:name, bool:isOperator, u8:operatorCode, usize:argCount) {

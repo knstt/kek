@@ -48,18 +48,7 @@ Status:WriteFields(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<Mod
 				return(status);
 			}
 			ModuleDecl:nested;
-			nested.kind = DeclKind::Struct;
-			nested.fileIndex = field.fileIndex;
-			nested.bodyStart = field.nestedBodyStart;
-			nested.bodyEnd = field.nestedBodyEnd;
-			nested.firstField = program.fields.len;
-			nested.fieldCount = 0;
-			nested.nameIndex = field.nameIndex;
-			nested.isGeneric = false;
-			Status:parseNested = ParseFields(program, &nested, field.fileIndex, field.nestedBodyStart, field.nestedBodyEnd);
-			if (parseNested != Status::Ok) {
-				return(parseNested);
-			}
+			InitNestedStructDecl(&nested, field, field.nestedFirstField, decl);
 			status = WriteFields(program, out, &nested);
 			if (status != Status::Ok) {
 				return(status);
@@ -177,48 +166,65 @@ Status:MakeSubstTypeKey(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, ptr<
 	return(status);
 }
 
+Status:MakeSubstTypeInfo(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, ptr<TypeUse>:use, usize:fileIndex, usize:start, usize:end, ptr<TypeInfo>:info) {
+	Status:status = TypeInfoInitEmpty(program, info);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	String:first = TokenText(program, fileIndex, start);
+	OwnedString:key;
+	if (first.EqualsCString("ptr") && start + 1 < end && IsOperator(program, fileIndex, start + 1, OperatorKind::Less)) {
+		usize:genericEnd = FindMatching(program, fileIndex, start + 1);
+		OwnedString:innerKey;
+		innerKey.data = 0;
+		status = MakeSubstTypeKey(program, decl, use, fileIndex, start + 2, genericEnd, &innerKey);
+		StringBuilder:builder = std::StringBuilderNew(program.allocator);
+		if (status == Status::Ok) {
+			status = builder.WriteString(std::OwnedStringView(&innerKey));
+		}
+		if (status == Status::Ok) {
+			status = builder.WriteByte('*');
+		}
+		if (status == Status::Ok) {
+			status = DetachBuilder(&builder, &key);
+		}
+		builder.Destroy();
+		if (innerKey.data != 0) {
+			std::DestroyOwnedString(&innerKey);
+		}
+	} else {
+		status = MakeSubstTypeKey(program, decl, use, fileIndex, start, end, &key);
+	}
+	if (status == Status::Ok) {
+		status = ReplaceOwned(&info.key, key);
+	}
+	OwnedString:cOwned;
+	if (status == Status::Ok) {
+		status = MakeCTypeFromKey(program, std::OwnedStringView(&info.key), &cOwned);
+	}
+	if (status == Status::Ok) {
+		status = ReplaceOwned(&info.cType, cOwned);
+	}
+	if (status == Status::Ok) {
+		String:keyView = std::OwnedStringView(&info.key);
+		Result<usize>:ptrMarker = keyView.FindByte('*');
+		info.isPointer = ptrMarker.status == Status::Ok;
+	}
+	return(status);
+}
+
 Status:MakeSubstTypeInfoForFunc(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, ptr<FuncUse>:funcUse, usize:fileIndex, usize:start, usize:end, ptr<OwnedString>:outKey, ptr<OwnedString>:outCType, ptr<bool>:outIsPointer) {
 	TypeUse:temp;
 	FuncUseTempTypeUse(funcUse, &temp);
-	String:firstTypeToken = TokenText(program, fileIndex, start);
-	if (start < end && firstTypeToken.EqualsCString("ptr") && start + 1 < end && IsOperator(program, fileIndex, start + 1, OperatorKind::Less)) {
-		usize:genericEnd = FindMatching(program, fileIndex, start + 1);
-		OwnedString:innerKey;
-		Status:status = MakeSubstTypeKey(program, decl, &temp, fileIndex, start + 2, genericEnd, &innerKey);
-		StringBuilder:key = std::StringBuilderNew(program.allocator);
-		if (status == Status::Ok) {
-			status = key.WriteString(std::OwnedStringView(&innerKey));
-		}
-		if (status == Status::Ok) {
-			status = key.WriteByte('*');
-		}
-		if (status == Status::Ok) {
-			status = DetachBuilder(&key, outKey);
-		}
-		key.Destroy();
-		StringBuilder:cType = std::StringBuilderNew(program.allocator);
-		if (status == Status::Ok) {
-			status = WriteCTypeFromKey(program, &cType, std::OwnedStringView(&innerKey));
-		}
-		if (status == Status::Ok) {
-			status = cType.WriteByte('*');
-		}
-		if (status == Status::Ok) {
-			status = DetachBuilder(&cType, outCType);
-		}
-		cType.Destroy();
-		std::DestroyOwnedString(&innerKey);
-		outIsPointer[0] = true;
-		return(status);
-	}
-	Status:status = MakeSubstTypeKey(program, decl, &temp, fileIndex, start, end, outKey);
+	TypeInfo:info;
+	Status:status = MakeSubstTypeInfo(program, decl, &temp, fileIndex, start, end, &info);
 	if (status == Status::Ok) {
-		status = MakeCTypeFromKey(program, std::OwnedStringView(outKey), outCType);
-	}
-	if (status == Status::Ok) {
-		String:keyView = std::OwnedStringView(outKey);
-		Result<usize>:ptrMarker = keyView.FindByte('*');
-		outIsPointer[0] = ptrMarker.status == Status::Ok;
+		outKey[0] = info.key;
+		outCType[0] = info.cType;
+		outIsPointer[0] = info.isPointer;
+		info.key.data = 0;
+		info.cType.data = 0;
+		TypeInfoDestroy(&info);
 	}
 	return(status);
 }
@@ -274,7 +280,22 @@ Status:WriteFieldsSubst(ptr<CompilerContext>:program, ptr<StringBuilder>:out, pt
 	for (usize:i = 0; i < decl.fieldCount; i++) {
 		ptr<ModuleField>:field = &program.fields.data[decl.firstField + i];
 		Status:status = out.WriteCString("    ");
-		if (status == Status::Ok) {
+		if (field.isNestedStruct) {
+			if (status == Status::Ok) {
+				status = out.WriteCString("struct {\n");
+			}
+			ModuleDecl:nested;
+			InitNestedStructDecl(&nested, field, field.nestedFirstField, decl);
+			if (status == Status::Ok) {
+				status = WriteFieldsSubst(program, out, &nested, use);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteCString("    } ");
+			}
+			if (status == Status::Ok) {
+				status = WriteToken(program, out, field.fileIndex, field.nameIndex);
+			}
+		} else {
 			status = WriteDeclaratorSubst(program, out, decl, use, field.fileIndex, field.typeStart, field.typeEnd, field.nameIndex, field.isArray, field.arrayStart, field.arrayEnd);
 		}
 		if (status == Status::Ok) {
@@ -546,151 +567,139 @@ bool:ShouldWritePlainTypeDecl(ptr<ModuleDecl>:decl) {
 		|| decl.kind == DeclKind::Enum);
 }
 
-bool:TypeKeyReady(ptr<CompilerContext>:program, String:key) {
-	String:name = key;
-	while (name.len > 0 && name.data[name.len - 1] == '*') {
-		name = name.Slice(0, name.len - 1);
+Status:WritePlainTypeDeclaration(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl) {
+	Status:status = Status::Ok;
+	if (decl.kind == DeclKind::Alias) {
+		status = WriteAliasDecl(program, out, decl);
 	}
-	ptr<ModuleDecl>:decl = FindTypeDecl(program, name);
-	if (decl != 0 && !decl.isGeneric) {
-		return(decl.emitted);
+	if (decl.kind == DeclKind::Struct && !decl.isGeneric) {
+		status = WriteStructDecl(program, out, decl, std::StringFromCString(""));
 	}
-	for (usize:i = 0; i < program.typeUses.len; i++) {
-		String:useKey = std::OwnedStringView(&program.typeUses.data[i].key);
-		if (useKey.Equals(name)) {
-			return(program.typeUses.data[i].emitted);
-		}
+	if (decl.kind == DeclKind::Union) {
+		status = WriteUnionDecl(program, out, decl);
 	}
-	return(true);
+	if (decl.kind == DeclKind::Enum) {
+		status = WriteEnumDecl(program, out, decl);
+	}
+	if (status == Status::Ok) {
+		decl.emitted = true;
+	}
+	return(status);
 }
 
-bool:TypeRangeReady(ptr<CompilerContext>:program, usize:fileIndex, usize:start, usize:end) {
-	for (usize:i = start; i < end; i++) {
-		Token:token = program.tokenFiles.data[fileIndex].tokens[i];
-		if (!(token.kind == TokenKind::Identifier || token.kind == TokenKind::Keyword)) {
-			continue;
-		}
-		ptr<ModuleDecl>:decl = FindTypeDecl(program, TokenText(program, fileIndex, i));
-		if (decl != 0 && decl.isGeneric && i + 1 < end && IsOperator(program, fileIndex, i + 1, OperatorKind::Less)) {
-			usize:genericEnd = FindMatching(program, fileIndex, i + 1);
-			OwnedString:key;
-			Status:status = BuildTypeKey(program, fileIndex, i, genericEnd + 1, &key);
-			if (status == Status::Ok) {
-				bool:ready = TypeKeyReady(program, std::OwnedStringView(&key));
-				std::DestroyOwnedString(&key);
-				if (!ready) {
-					return(false);
-				}
-			}
-			i = genericEnd;
-			continue;
-		}
-		if (decl == 0 || decl.isGeneric) {
-			continue;
-		}
-		if (!decl.emitted) {
-			return(false);
-		}
+Status:WriteTypeKeyDependencies(ptr<CompilerContext>:program, ptr<StringBuilder>:out, String:key);
+Status:WriteTypeDeclarationWithDependencies(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl);
+Status:WriteFieldTypeDependencies(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleField>:field) {
+	if (field.isNestedStruct) {
+		return(WriteTypeRangeDependencies(program, out, field.fileIndex, field.nestedBodyStart, field.nestedBodyEnd));
 	}
-	return(true);
+	return(WriteTypeRangeDependencies(program, out, field.fileIndex, field.typeStart, field.typeEnd));
 }
 
-bool:TypeUseRangeReady(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, ptr<TypeUse>:use, usize:fileIndex, usize:start, usize:end) {
+Status:WriteTypeRangeDependencies(ptr<CompilerContext>:program, ptr<StringBuilder>:out, usize:fileIndex, usize:start, usize:end) {
 	for (usize:i = start; i < end; i++) {
 		Token:token = program.tokenFiles.data[fileIndex].tokens[i];
 		if (!(token.kind == TokenKind::Identifier || token.kind == TokenKind::Keyword)) {
 			continue;
 		}
 		String:name = TokenText(program, fileIndex, i);
-		bool:genericParam = false;
-		for (usize:argIndex = 0; argIndex < use.args.len; argIndex++) {
-			if (GenericParamEquals(program, decl, argIndex, name)) {
-				if (!TypeKeyReady(program, std::OwnedStringView(&use.args.data[argIndex]))) {
-					return(false);
+		if (name.EqualsCString("ptr") && i + 1 < end && IsOperator(program, fileIndex, i + 1, OperatorKind::Less)) {
+			usize:genericEnd = FindMatching(program, fileIndex, i + 1);
+			if (i + 3 == genericEnd) {
+				ptr<ModuleDecl>:inner = FindTypeDecl(program, TokenText(program, fileIndex, i + 2));
+				if (inner != 0 && inner.kind != DeclKind::Struct && ShouldWritePlainTypeDecl(inner) && !inner.emitted) {
+					Status:status = WriteTypeDeclarationWithDependencies(program, out, inner);
+					if (status != Status::Ok) {
+						return(status);
+					}
 				}
-				genericParam = true;
-				break;
 			}
-		}
-		if (genericParam) {
+			i = genericEnd;
 			continue;
 		}
-		ptr<ModuleDecl>:typeDecl = FindTypeDecl(program, name);
-		if (typeDecl == 0 || typeDecl.isGeneric) {
+		if (i + 1 < end && IsOperator(program, fileIndex, i + 1, OperatorKind::Less)) {
+			usize:genericEnd = FindMatching(program, fileIndex, i + 1);
+			OwnedString:key;
+			Status:status = BuildTypeKey(program, fileIndex, i, genericEnd + 1, &key);
+			if (status == Status::Ok) {
+				status = WriteTypeKeyDependencies(program, out, std::OwnedStringView(&key));
+			}
+			std::DestroyOwnedString(&key);
+			if (status != Status::Ok) {
+				return(status);
+			}
+			i = genericEnd;
 			continue;
 		}
-		if (!typeDecl.emitted) {
-			return(false);
-		}
-	}
-	return(true);
-}
-
-bool:TypeDeclDependenciesReady(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl) {
-	if (decl.kind == DeclKind::Alias) {
-		return(TypeRangeReady(program, decl.fileIndex, decl.returnStart, decl.returnEnd));
-	}
-	if (decl.kind == DeclKind::Struct || decl.kind == DeclKind::Union) {
-		for (usize:i = 0; i < decl.fieldCount; i++) {
-			ptr<ModuleField>:field = &program.fields.data[decl.firstField + i];
-			if (field.isNestedStruct) {
-				if (!TypeRangeReady(program, field.fileIndex, field.nestedBodyStart, field.nestedBodyEnd)) {
-					return(false);
-				}
-			} else {
-				if (!TypeRangeReady(program, field.fileIndex, field.typeStart, field.typeEnd)) {
-					return(false);
-				}
+		ptr<ModuleDecl>:decl = FindTypeDecl(program, name);
+		if (decl != 0 && ShouldWritePlainTypeDecl(decl) && !decl.emitted) {
+			Status:status = WriteTypeDeclarationWithDependencies(program, out, decl);
+			if (status != Status::Ok) {
+				return(status);
 			}
 		}
 	}
-	return(true);
+	return(Status::Ok);
 }
 
-bool:TypeUseDependenciesReady(ptr<CompilerContext>:program, ptr<TypeUse>:use) {
+Status:WriteTypeUseWithDependencies(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<TypeUse>:use) {
+	if (use.emitted) {
+		return(Status::Ok);
+	}
 	for (usize:i = 0; i < use.args.len; i++) {
-		if (!TypeKeyReady(program, std::OwnedStringView(&use.args.data[i]))) {
-			return(false);
+		Status:status = WriteTypeKeyDependencies(program, out, std::OwnedStringView(&use.args.data[i]));
+		if (status != Status::Ok) {
+			return(status);
 		}
 	}
 	ptr<ModuleDecl>:decl = FindTypeDecl(program, std::OwnedStringView(&use.baseName));
-	if (decl == 0 || decl.kind != DeclKind::Struct) {
-		return(true);
-	}
-	for (usize:i = 0; i < decl.fieldCount; i++) {
-		ptr<ModuleField>:field = &program.fields.data[decl.firstField + i];
-		if (field.isNestedStruct) {
-			if (!TypeUseRangeReady(program, decl, use, field.fileIndex, field.nestedBodyStart, field.nestedBodyEnd)) {
-				return(false);
-			}
-		} else {
-			if (!TypeUseRangeReady(program, decl, use, field.fileIndex, field.typeStart, field.typeEnd)) {
-				return(false);
+	if (decl != 0 && decl.kind == DeclKind::Struct) {
+		for (usize:i = 0; i < decl.fieldCount; i++) {
+			Status:status = WriteFieldTypeDependencies(program, out, &program.fields.data[decl.firstField + i]);
+			if (status != Status::Ok) {
+				return(status);
 			}
 		}
 	}
-	return(true);
+	return(WriteTypeUseDeclaration(program, out, use));
 }
 
-Status:WritePlainTypeDeclaration(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl) {
+Status:WriteTypeKeyDependencies(ptr<CompilerContext>:program, ptr<StringBuilder>:out, String:key) {
+	String:name = key;
+	while (name.len > 0 && name.data[name.len - 1] == '*') {
+		name = name.Slice(0, name.len - 1);
+	}
+	ptr<ModuleDecl>:decl = FindTypeDecl(program, name);
+	if (decl != 0 && ShouldWritePlainTypeDecl(decl) && !decl.emitted) {
+		return(WriteTypeDeclarationWithDependencies(program, out, decl));
+	}
+	for (usize:i = 0; i < program.typeUses.len; i++) {
+		String:useKey = std::OwnedStringView(&program.typeUses.data[i].key);
+		if (useKey.Equals(name)) {
+			return(WriteTypeUseWithDependencies(program, out, &program.typeUses.data[i]));
+		}
+	}
+	return(Status::Ok);
+}
+
+Status:WriteTypeDeclarationWithDependencies(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl) {
+	if (decl.emitted) {
+		return(Status::Ok);
+	}
 	Status:status = Status::Ok;
 	if (decl.kind == DeclKind::Alias) {
-		status = WriteAliasDecl(program, out, decl);
-	} else {
-		if (decl.kind == DeclKind::Struct && !decl.isGeneric) {
-			status = WriteStructDecl(program, out, decl, std::StringFromCString(""));
-		} else {
-			if (decl.kind == DeclKind::Union) {
-				status = WriteUnionDecl(program, out, decl);
-			} else {
-				if (decl.kind == DeclKind::Enum) {
-					status = WriteEnumDecl(program, out, decl);
-				}
+		status = WriteTypeRangeDependencies(program, out, decl.fileIndex, decl.returnStart, decl.returnEnd);
+	}
+	if (decl.kind == DeclKind::Struct || decl.kind == DeclKind::Union) {
+		for (usize:i = 0; i < decl.fieldCount; i++) {
+			status = WriteFieldTypeDependencies(program, out, &program.fields.data[decl.firstField + i]);
+			if (status != Status::Ok) {
+				return(status);
 			}
 		}
 	}
 	if (status == Status::Ok) {
-		decl.emitted = true;
+		status = WritePlainTypeDeclaration(program, out, decl);
 	}
 	return(status);
 }
@@ -706,41 +715,10 @@ Status:WriteTypeDeclarations(ptr<CompilerContext>:program, ptr<StringBuilder>:ou
 			decl.emitted = true;
 		}
 	}
-	bool:progress = true;
-	while (progress) {
-		progress = false;
-		for (usize:i = 0; i < program.decls.len; i++) {
-			ptr<ModuleDecl>:decl = &program.decls.data[i];
-			if (!decl.reachable || decl.emitted || !ShouldWritePlainTypeDecl(decl)) {
-				continue;
-			}
-			if (!TypeDeclDependenciesReady(program, decl)) {
-				continue;
-			}
-			Status:status = WritePlainTypeDeclaration(program, out, decl);
-			if (status != Status::Ok) {
-				return(status);
-			}
-			progress = true;
-		}
-		for (usize:i = 0; i < program.typeUses.len; i++) {
-			ptr<TypeUse>:use = &program.typeUses.data[i];
-			if (use.emitted || !TypeUseDependenciesReady(program, use)) {
-				continue;
-			}
-			Status:status = WriteTypeUseDeclaration(program, out, use);
-			if (status != Status::Ok) {
-				return(status);
-			}
-			if (use.emitted) {
-				progress = true;
-			}
-		}
-	}
 	for (usize:i = 0; i < program.decls.len; i++) {
 		ptr<ModuleDecl>:decl = &program.decls.data[i];
 		if (decl.reachable && !decl.emitted && ShouldWritePlainTypeDecl(decl)) {
-			Status:status = WritePlainTypeDeclaration(program, out, decl);
+			Status:status = WriteTypeDeclarationWithDependencies(program, out, decl);
 			if (status != Status::Ok) {
 				return(status);
 			}
@@ -748,7 +726,7 @@ Status:WriteTypeDeclarations(ptr<CompilerContext>:program, ptr<StringBuilder>:ou
 	}
 	for (usize:i = 0; i < program.typeUses.len; i++) {
 		ptr<TypeUse>:use = &program.typeUses.data[i];
-		Status:status = WriteTypeUseDeclaration(program, out, use);
+		Status:status = WriteTypeUseWithDependencies(program, out, use);
 		if (status != Status::Ok) {
 			return(status);
 		}
