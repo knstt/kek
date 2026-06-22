@@ -69,6 +69,29 @@ i64:main() {
 	assert(owned.Destroy() == Status::Ok);
 	assert(builder.Destroy() == Status::Ok);
 
+	String:multi = std::StringFromCString("""alpha
+"beta"\gamma""");
+	assert(multi.len == 18);
+	assert(multi.data[5] == '\n');
+	assert(multi.data[6] == '"');
+	assert(multi.data[12] == '\\');
+
+	TemplateArg:templateArgs[1] = {
+		std::TemplateArgNew(std::StringFromCString("greeting"), std::StringFromCString("hello")),
+	};
+	String:templatePositional[1] = {
+		std::StringFromCString("world"),
+	};
+	TemplateContext:templateCtx = std::TemplateContextNew(templateArgs, len(templateArgs), templatePositional, len(templatePositional));
+	StringBuilder:templateBuilder = std::StringBuilderNew(allocator);
+	assert(std::RenderTemplateToBuilder(&templateBuilder, std::StringFromCString("""{greeting}, {0}! {{ok}}"""), templateCtx) == Status::Ok);
+	String:templateView = templateBuilder.View();
+	assert(templateView.EqualsCString("hello, world! {ok}"));
+	assert(templateBuilder.Destroy() == Status::Ok);
+	StringBuilder:missingTemplateBuilder = std::StringBuilderNew(allocator);
+	assert(std::RenderTemplateToBuilder(&missingTemplateBuilder, std::StringFromCString("{missing}"), templateCtx) == Status::Invalid);
+	assert(missingTemplateBuilder.Destroy() == Status::Ok);
+
 	StringBuilder:methodBuilder = std::StringBuilderNew(allocator);
 	assert(methodBuilder.WriteCString("hi") == Status::Ok);
 	assert(methodBuilder.WriteByte('!') == Status::Ok);

@@ -13,16 +13,23 @@ struct:SourceFile {
 
 struct:FileTable {
 	Array<SourceFile>:files;
+	OwnedString:importRoot;
+	bool:hasImportRoot;
 };
 
 void:FileTableInit(ptr<FileTable>:table, Allocator:allocator) {
 	table.files = std::ArrayNew<SourceFile>(allocator);
+	table.hasImportRoot = false;
 }
 
 Status:FileTableDestroy(ptr<FileTable>:table) {
 	for (usize:i = 0; i < table.files.len; i++) {
 		std::DestroyOwnedString(&table.files.data[i].path);
 		std::DestroyOwnedString(&table.files.data[i].content);
+	}
+	if (table.hasImportRoot) {
+		std::DestroyOwnedString(&table.importRoot);
+		table.hasImportRoot = false;
 	}
 	Array<SourceFile>:files = table.files;
 	Status:status = files.Destroy();
@@ -33,6 +40,55 @@ Status:FileTableDestroy(ptr<FileTable>:table) {
 bool:StringEndsWithCString(String:text, str:suffixText) {
 	String:suffix = std::StringFromCString(suffixText);
 	return(text.EndsWith(suffix));
+}
+
+bool:PathIsAbsolute(String:path) {
+	return(path.len > 0 && path.data[0] == '/');
+}
+
+usize:LastPathSeparator(String:path, usize:end) {
+	usize:i = end;
+	while (i > 0) {
+		byte:c = path.data[i - 1];
+		if (c == '/' || c == '\\') {
+			return(i - 1);
+		}
+		i -= 1;
+	}
+	return(path.len);
+}
+
+Status:DirectoryPrefix(String:path, Allocator:allocator, ptr<OwnedString>:out) {
+	usize:separator = LastPathSeparator(path, path.len);
+	if (separator >= path.len) {
+		return(std::CloneCString("", allocator, out));
+	}
+	return(std::CloneString(path.Slice(0, separator + 1), allocator, out));
+}
+
+Status:JoinPath(String:root, String:path, Allocator:allocator, ptr<OwnedString>:out) {
+	StringBuilder:builder = std::StringBuilderNew(allocator);
+	Status:status = builder.WriteString(root);
+	if (status == Status::Ok) {
+		status = builder.WriteString(path);
+	}
+	if (status == Status::Ok) {
+		status = builder.WriteByte(0);
+	}
+	if (status != Status::Ok) {
+		builder.Destroy();
+		return(status);
+	}
+	Result<OwnedString>:detached = builder.Detach();
+	if (detached.status != Status::Ok) {
+		builder.Destroy();
+		return(detached.status);
+	}
+	out.data = detached.value.data;
+	out.len = detached.value.len - 1;
+	out.cap = detached.value.cap;
+	out.allocator = detached.value.allocator;
+	return(Status::Ok);
 }
 
 Status:NormalizePath(String:path, Allocator:allocator, ptr<OwnedString>:out) {
@@ -75,6 +131,23 @@ Status:NormalizePath(String:path, Allocator:allocator, ptr<OwnedString>:out) {
 	out.cap = detached.value.cap;
 	out.allocator = detached.value.allocator;
 	return(Status::Ok);
+}
+
+bool:FileReadable(String:path, Allocator:allocator) {
+	OwnedString:normalized;
+	Status:status = NormalizePath(path, allocator, &normalized);
+	if (status != Status::Ok) {
+		return(false);
+	}
+	Result<File>:opened = std::FileOpen(cast<str>(normalized.data), FileMode::Read);
+	if (opened.status != Status::Ok) {
+		std::DestroyOwnedString(&normalized);
+		return(false);
+	}
+	File:file = opened.value;
+	file.Close();
+	std::DestroyOwnedString(&normalized);
+	return(true);
 }
 
 bool:FileAlreadyLoaded(ptr<FileTable>:table, String:path) {
@@ -146,6 +219,57 @@ Status:ReadFile(String:path, ptr<FileTable>:table, ptr<DiagnosticBag>:diagnostic
 	return(Status::Ok);
 }
 
+Status:SetImportRoot(ptr<FileTable>:table, String:entryPath) {
+	OwnedString:normalized;
+	Status:status = NormalizePath(entryPath, table.files.allocator, &normalized);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	String:normalizedPath = std::OwnedStringView(&normalized);
+	OwnedString:root;
+	status = DirectoryPrefix(normalizedPath, table.files.allocator, &root);
+	std::DestroyOwnedString(&normalized);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	table.importRoot = root;
+	table.hasImportRoot = true;
+	return(Status::Ok);
+}
+
+Status:ReadResolvedImportFile(ptr<FileTable>:table, String:path, ptr<DiagnosticBag>:diagnostics) {
+	if (PathIsAbsolute(path) || FileReadable(path, table.files.allocator) || !table.hasImportRoot) {
+		return(ReadFile(path, table, diagnostics));
+	}
+
+	String:root = std::OwnedStringView(&table.importRoot);
+	while (root.len > 0) {
+		OwnedString:candidate;
+		Status:joinStatus = JoinPath(root, path, table.files.allocator, &candidate);
+		if (joinStatus != Status::Ok) {
+			return(joinStatus);
+		}
+		String:candidatePath = std::OwnedStringView(&candidate);
+		if (FileReadable(candidatePath, table.files.allocator)) {
+			Status:status = ReadFile(candidatePath, table, diagnostics);
+			std::DestroyOwnedString(&candidate);
+			return(status);
+		}
+		std::DestroyOwnedString(&candidate);
+
+		if (root.len <= 1) {
+			break;
+		}
+		usize:separator = LastPathSeparator(root, root.len - 1);
+		if (separator >= root.len) {
+			break;
+		}
+		root = root.Slice(0, separator + 1);
+	}
+
+	return(ReadFile(path, table, diagnostics));
+}
+
 bool:ImportDirectiveAt(String:source, usize:cursor) {
 	usize:lineStart = cursor;
 	while (lineStart > 0 && source.data[lineStart - 1] != '\n' && source.data[lineStart - 1] != '\r') {
@@ -165,7 +289,7 @@ Status:LoadImportFile(ptr<FileTable>:table, String:path, ptr<DiagnosticBag>:diag
 		return(diagnostics::DiagnosticAddPathMessage(diagnostics, DiagnosticSeverity::Error, DiagnosticPhase::Source, fileIndex, location, "import path must name a .kek file ", path));
 	}
 	usize:before = table.files.len;
-	Status:status = ReadFile(path, table, diagnostics);
+	Status:status = ReadResolvedImportFile(table, path, diagnostics);
 	if (status != Status::Ok) {
 		return(status);
 	}
@@ -228,6 +352,10 @@ Status:LoadImports(ptr<FileTable>:table, ptr<SourceFile>:file, ptr<DiagnosticBag
 
 Status:LoadCompilationSources(str:entryPath, Allocator:allocator, ptr<FileTable>:table, ptr<DiagnosticBag>:diagnostics) {
 	FileTableInit(table, allocator);
+	Status:rootStatus = SetImportRoot(table, std::StringFromCString(entryPath));
+	if (rootStatus != Status::Ok) {
+		return(rootStatus);
+	}
 	Status:status = ReadFile(std::StringFromCString(entryPath), table, diagnostics);
 	if (status != Status::Ok) {
 		return(status);

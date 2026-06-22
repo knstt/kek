@@ -74,11 +74,11 @@ Status:AstTreeDestroy(ptr<AstTree>:tree) {
 }
 
 bool:IsPunctuationToken(ptr<Token>:token, PunctuationKind:punctuation) {
-	return(token.kind == TokenKind::Punctuation && token.subkind == cast<u64>(punctuation));
+	return(token.payload.tag == TokenPayloadTag_Punctuation && token.payload.data.Punctuation == punctuation);
 }
 
 bool:IsOperatorToken(ptr<Token>:token, OperatorKind:operatorKind) {
-	return(token.kind == TokenKind::Operator && token.subkind == cast<u64>(operatorKind));
+	return(token.payload.tag == TokenPayloadTag_Operator && token.payload.data.Operator == operatorKind);
 }
 
 bool:IsTriviaToken(ptr<Token>:token) {

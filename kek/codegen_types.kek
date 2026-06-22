@@ -15,59 +15,50 @@ Status:WriteDeclarator(ptr<CompilerContext>:program, ptr<StringBuilder>:out, usi
 	if (status != Status::Ok) {
 		return(status);
 	}
-	status = out.WriteString(std::OwnedStringView(&info.cType));
-	if (status == Status::Ok) {
-		status = out.WriteByte(' ');
-	}
-	if (status == Status::Ok) {
-		status = WriteToken(program, out, fileIndex, nameIndex);
-	}
-	if (status == Status::Ok && isArray) {
-		status = out.WriteByte('[');
-		if (status == Status::Ok) {
-			status = WriteTokenRangeRaw(program, out, fileIndex, arrayStart, arrayEnd);
-		}
-		if (status == Status::Ok) {
-			status = out.WriteByte(']');
-		}
+	CodeWriter:w = CodeWriterNew(out);
+	w.String(std::OwnedStringView(&info.cType));
+	w.Byte(' ');
+	w.Token(program, fileIndex, nameIndex);
+	if (isArray) {
+		w.Byte('[');
+		w.TokenRangeRaw(program, fileIndex, arrayStart, arrayEnd);
+		w.Byte(']');
 	}
 	TypeInfoDestroy(&info);
-	return(status);
+	return(w.status);
 }
 
 Status:WriteFields(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl) {
 	for (usize:i = 0; i < decl.fieldCount; i++) {
 		ptr<ModuleField>:field = &program.fields.data[decl.firstField + i];
-		Status:status = out.WriteCString("    ");
-		if (status != Status::Ok) {
-			return(status);
+		CodeWriter:w = CodeWriterNew(out);
+		w.CString("    ");
+		if (w.status != Status::Ok) {
+			return(w.status);
 		}
 		if (field.isNestedStruct) {
-			status = out.WriteCString("struct {\n");
-			if (status != Status::Ok) {
-				return(status);
+			w.CString("struct {\n");
+			if (w.status != Status::Ok) {
+				return(w.status);
 			}
 			ModuleDecl:nested;
 			InitNestedStructDecl(&nested, field, field.nestedFirstField, decl);
-			status = WriteFields(program, out, &nested);
+			Status:status = WriteFields(program, out, &nested);
 			if (status != Status::Ok) {
 				return(status);
 			}
-			status = out.WriteCString("    } ");
-			if (status == Status::Ok) {
-				status = WriteToken(program, out, field.fileIndex, field.nameIndex);
-			}
-			if (status == Status::Ok) {
-				status = out.WriteCString(";\n");
-			}
-			if (status != Status::Ok) {
-				return(status);
+			w.CString("    } ");
+			w.Token(program, field.fileIndex, field.nameIndex);
+			w.CString(";\n");
+			if (w.status != Status::Ok) {
+				return(w.status);
 			}
 			continue;
 		}
-		status = WriteDeclarator(program, out, field.fileIndex, field.typeStart, field.typeEnd, field.nameIndex, field.isArray, field.arrayStart, field.arrayEnd);
+		Status:status = WriteDeclarator(program, out, field.fileIndex, field.typeStart, field.typeEnd, field.nameIndex, field.isArray, field.arrayStart, field.arrayEnd);
 		if (status == Status::Ok) {
-			status = out.WriteCString(";\n");
+			w.CString(";\n");
+			status = w.status;
 		}
 		if (status != Status::Ok) {
 			return(status);
@@ -279,28 +270,29 @@ Status:WriteDeclaratorSubst(ptr<CompilerContext>:program, ptr<StringBuilder>:out
 Status:WriteFieldsSubst(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, ptr<TypeUse>:use) {
 	for (usize:i = 0; i < decl.fieldCount; i++) {
 		ptr<ModuleField>:field = &program.fields.data[decl.firstField + i];
-		Status:status = out.WriteCString("    ");
+		CodeWriter:w = CodeWriterNew(out);
+		w.CString("    ");
+		Status:status = w.status;
 		if (field.isNestedStruct) {
-			if (status == Status::Ok) {
-				status = out.WriteCString("struct {\n");
-			}
+			w.CString("struct {\n");
+			status = w.status;
 			ModuleDecl:nested;
 			InitNestedStructDecl(&nested, field, field.nestedFirstField, decl);
 			if (status == Status::Ok) {
 				status = WriteFieldsSubst(program, out, &nested, use);
 			}
-			if (status == Status::Ok) {
-				status = out.WriteCString("    } ");
-			}
-			if (status == Status::Ok) {
-				status = WriteToken(program, out, field.fileIndex, field.nameIndex);
-			}
+			w.status = status;
+			w.CString("    } ");
+			w.Token(program, field.fileIndex, field.nameIndex);
+			status = w.status;
 		} else {
-			status = WriteDeclaratorSubst(program, out, decl, use, field.fileIndex, field.typeStart, field.typeEnd, field.nameIndex, field.isArray, field.arrayStart, field.arrayEnd);
+			if (status == Status::Ok) {
+				status = WriteDeclaratorSubst(program, out, decl, use, field.fileIndex, field.typeStart, field.typeEnd, field.nameIndex, field.isArray, field.arrayStart, field.arrayEnd);
+			}
 		}
-		if (status == Status::Ok) {
-			status = out.WriteCString(";\n");
-		}
+		w.status = status;
+		w.CString(";\n");
+		status = w.status;
 		if (status != Status::Ok) {
 			return(status);
 		}
@@ -381,24 +373,150 @@ Status:WriteStructDecl(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr
 }
 
 Status:WriteUnionDecl(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl) {
-	Status:status = out.WriteCString("typedef union ");
+	CodeWriter:w = CodeWriterNew(out);
+	w.CString("typedef union ");
+	w.Token(program, decl.fileIndex, decl.nameIndex);
+	w.CString(" {\n");
+	Status:status = w.status;
+	if (status == Status::Ok) {
+		status = WriteFields(program, out, decl);
+	}
+	w.status = status;
+	w.CString("} ");
+	w.Token(program, decl.fileIndex, decl.nameIndex);
+	w.CString(";\n");
+	return(w.status);
+}
+
+Status:WriteTaggedUnionTagName(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl) {
+	CodeWriter:w = CodeWriterNew(out);
+	w.Token(program, decl.fileIndex, decl.nameIndex);
+	w.CString("Tag");
+	return(w.status);
+}
+
+Status:WriteTaggedUnionVariantName(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, ptr<ModuleField>:field) {
+	Status:status = WriteTaggedUnionTagName(program, out, decl);
+	CodeWriter:w = CodeWriterNew(out);
+	w.status = status;
+	w.Byte('_');
+	w.Token(program, field.fileIndex, field.nameIndex);
+	return(w.status);
+}
+
+Status:WriteTaggedUnionConstructorName(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, ptr<ModuleField>:field) {
+	CodeWriter:w = CodeWriterNew(out);
+	w.Token(program, decl.fileIndex, decl.nameIndex);
+	w.Byte('_');
+	w.Token(program, field.fileIndex, field.nameIndex);
+	return(w.status);
+}
+
+Status:WriteTaggedUnionDecl(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl) {
+	Status:status = out.WriteCString("typedef enum ");
+	if (status == Status::Ok) {
+		status = WriteTaggedUnionTagName(program, out, decl);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(" {\n");
+	}
+	for (usize:i = 0; i < decl.fieldCount; i++) {
+		ptr<ModuleField>:field = &program.fields.data[decl.firstField + i];
+		if (status == Status::Ok) {
+			status = out.WriteCString("    ");
+		}
+		if (status == Status::Ok) {
+			status = WriteTaggedUnionVariantName(program, out, decl, field);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString(",\n");
+		}
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("} ");
+	}
+	if (status == Status::Ok) {
+		status = WriteTaggedUnionTagName(program, out, decl);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(";\n");
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("typedef struct ");
+	}
 	if (status == Status::Ok) {
 		status = WriteToken(program, out, decl.fileIndex, decl.nameIndex);
 	}
 	if (status == Status::Ok) {
-		status = out.WriteCString(" {\n");
+		status = out.WriteCString(" {\n    ");
+	}
+	if (status == Status::Ok) {
+		status = WriteTaggedUnionTagName(program, out, decl);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(" tag;\n    union {\n");
 	}
 	if (status == Status::Ok) {
 		status = WriteFields(program, out, decl);
 	}
 	if (status == Status::Ok) {
-		status = out.WriteCString("} ");
+		status = out.WriteCString("    } data;\n} ");
 	}
 	if (status == Status::Ok) {
 		status = WriteToken(program, out, decl.fileIndex, decl.nameIndex);
 	}
 	if (status == Status::Ok) {
 		status = out.WriteCString(";\n");
+	}
+	for (usize:i = 0; i < decl.fieldCount; i++) {
+		ptr<ModuleField>:field = &program.fields.data[decl.firstField + i];
+		TypeInfo:fieldType;
+		if (status == Status::Ok) {
+			status = RenderTypeInfo(program, field.fileIndex, field.typeStart, field.typeEnd, &fieldType);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("static inline ");
+		}
+		if (status == Status::Ok) {
+			status = WriteToken(program, out, decl.fileIndex, decl.nameIndex);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte(' ');
+		}
+		if (status == Status::Ok) {
+			status = WriteTaggedUnionConstructorName(program, out, decl, field);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteByte('(');
+		}
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&fieldType.cType));
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString(" value) {\n    ");
+		}
+		if (status == Status::Ok) {
+			status = WriteToken(program, out, decl.fileIndex, decl.nameIndex);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString(" out;\n    out.tag = ");
+		}
+		if (status == Status::Ok) {
+			status = WriteTaggedUnionVariantName(program, out, decl, field);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString(";\n    out.data.");
+		}
+		if (status == Status::Ok) {
+			status = WriteToken(program, out, field.fileIndex, field.nameIndex);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString(" = value;\n    return out;\n}\n");
+		}
+		TypeInfoDestroy(&fieldType);
+		if (status != Status::Ok) {
+			return(status);
+		}
 	}
 	return(status);
 }
@@ -575,8 +693,11 @@ Status:WritePlainTypeDeclaration(ptr<CompilerContext>:program, ptr<StringBuilder
 	if (decl.kind == DeclKind::Struct && !decl.isGeneric) {
 		status = WriteStructDecl(program, out, decl, std::StringFromCString(""));
 	}
-	if (decl.kind == DeclKind::Union) {
+	if (decl.kind == DeclKind::Union && !decl.isTagged) {
 		status = WriteUnionDecl(program, out, decl);
+	}
+	if (decl.kind == DeclKind::Union && decl.isTagged) {
+		status = WriteTaggedUnionDecl(program, out, decl);
 	}
 	if (decl.kind == DeclKind::Enum) {
 		status = WriteEnumDecl(program, out, decl);

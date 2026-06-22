@@ -60,6 +60,7 @@ enum:u8:KeywordKind {
 	Struct,
 	Union,
 	Switch,
+	Select,
 	Case,
 	Default,
 	Each,
@@ -88,9 +89,17 @@ enum:u8:PunctuationKind {
 	Hash,
 };
 
+[tagged]union: TokenPayload {
+	u64:None;
+	OperatorKind:Operator;
+	KeywordKind:Keyword;
+	PunctuationKind:Punctuation;
+};
+
 struct:Token {
 	TokenKind:kind;
 	u64:subkind;
+	TokenPayload:payload;
 	usize:line;
 	usize:column;
 	usize:offset;
@@ -116,6 +125,16 @@ Token:TokenNew(TokenKind:kind, u64:subkind, usize:line, usize:column, usize:offs
 	Token:token;
 	token.kind = kind;
 	token.subkind = subkind;
+	token.payload = TokenPayload::None(subkind);
+	if (kind == TokenKind::Operator) {
+		token.payload = TokenPayload::Operator(cast<OperatorKind>(subkind));
+	}
+	if (kind == TokenKind::Keyword) {
+		token.payload = TokenPayload::Keyword(cast<KeywordKind>(subkind));
+	}
+	if (kind == TokenKind::Punctuation) {
+		token.payload = TokenPayload::Punctuation(cast<PunctuationKind>(subkind));
+	}
 	token.line = line;
 	token.column = column;
 	token.offset = offset;
@@ -131,79 +150,42 @@ Tokenizer:TokenizerNew(String:source, bool:emitComments) {
 }
 
 bool:Tokenizer::AtEnd() {
-	return(this.cursor.pos >= this.cursor.input.len);
+	return(this.cursor.AtEnd());
 }
 
 byte:Tokenizer::Peek() {
-	if (this.AtEnd()) {
-		return(0);
-	}
-	return(this.cursor.input.data[this.cursor.pos]);
+	return(this.cursor.Peek());
 }
 
 byte:Tokenizer::PeekAt(usize:offset) {
-	usize:target = this.cursor.pos + offset;
-	if (target >= this.cursor.input.len) {
-		return(0);
-	}
-	return(this.cursor.input.data[target]);
+	return(this.cursor.PeekAt(offset));
 }
 
 byte:Tokenizer::Advance() {
-	byte:value = this.Peek();
-	if (this.AtEnd()) {
-		return(0);
-	}
-	this.cursor.pos += 1;
-	if (value == '\n') {
-		this.cursor.line += 1;
-		this.cursor.column = 1;
-	} else {
-		this.cursor.column += 1;
-	}
-	return(value);
+	return(this.cursor.Advance());
 }
 
 bool:TextAtEquals(str:text, String:source, usize:start, usize:length) {
-	usize:textLength = 0;
-	while (text[textLength] != 0) {
-		textLength += 1;
-	}
-	if (textLength != length) {
-		return(false);
-	}
 	if (start + length > source.len) {
 		return(false);
 	}
-	for (usize:i = 0; i < length; i++) {
-		if (source.data[start + i] != text[i]) {
-			return(false);
-		}
-	}
-	return(true);
+	String:slice = source.Slice(start, length);
+	return(slice.EqualsCString(text));
 }
 
 bool:Tokenizer::StartsWith(str:text) {
-	usize:i = 0;
-	while (text[i] != 0) {
-		if (this.PeekAt(i) != text[i]) {
-			return(false);
-		}
-		i += 1;
-	}
-	return(true);
+	String:rest = this.cursor.input.Slice(this.cursor.pos, this.cursor.input.len - this.cursor.pos);
+	return(rest.StartsWith(std::StringFromCString(text)));
 }
 
 void:Tokenizer::AdvanceMany(usize:count) {
 	for (usize:i = 0; i < count; i++) {
-		this.Advance();
+		this.cursor.Advance();
 	}
 }
 
 void:Tokenizer::SkipWhitespace() {
-	while (!this.AtEnd() && std::IsAsciiSpace(this.Peek())) {
-		this.Advance();
-	}
+	this.cursor.SkipAsciiWhitespace();
 }
 
 void:Tokenizer::SkipWhitespaceAndComments() {
@@ -308,6 +290,9 @@ u64:KeywordSubkind(String:source, usize:start, usize:length) {
 	if (TextAtEquals("switch", source, start, length)) {
 		return(cast<u64>(KeywordKind::Switch));
 	}
+	if (TextAtEquals("select", source, start, length)) {
+		return(cast<u64>(KeywordKind::Select));
+	}
 	if (TextAtEquals("case", source, start, length)) {
 		return(cast<u64>(KeywordKind::Case));
 	}
@@ -389,6 +374,21 @@ Token:Tokenizer::ReadDelimited(TokenKind:kind, byte:delimiter) {
 		this.Advance();
 	}
 	return(TokenNew(kind, 0, line, column, start, this.cursor.pos - start));
+}
+
+Token:Tokenizer::ReadTripleQuotedString() {
+	usize:start = this.cursor.pos;
+	usize:line = this.cursor.line;
+	usize:column = this.cursor.column;
+	this.AdvanceMany(3);
+	while (!this.AtEnd()) {
+		if (this.StartsWith("\"\"\"")) {
+			this.AdvanceMany(3);
+			break;
+		}
+		this.Advance();
+	}
+	return(TokenNew(TokenKind::String, 0, line, column, start, this.cursor.pos - start));
 }
 
 bool:Tokenizer::ReadOperator(ptr<Token>:out, usize:start, usize:line, usize:column) {
@@ -592,6 +592,9 @@ Token:Tokenizer::Next() {
 	}
 	if (std::IsAsciiDigit(c)) {
 		return(this.ReadNumber());
+	}
+	if (this.StartsWith("\"\"\"")) {
+		return(this.ReadTripleQuotedString());
 	}
 	if (c == '"') {
 		return(this.ReadDelimited(TokenKind::String, '"'));

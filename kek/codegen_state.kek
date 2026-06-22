@@ -20,6 +20,7 @@ struct:CodegenEnv {
 	bool:hasThis;
 	usize:deferCounter;
 	usize:eachCounter;
+	usize:selectCounter;
 };
 
 struct:Expr {
@@ -55,6 +56,7 @@ Status:EnvInit(ptr<CompilerContext>:program, ptr<CodegenEnv>:env) {
 	env.hasThis = false;
 	env.deferCounter = 0;
 	env.eachCounter = 0;
+	env.selectCounter = 0;
 	Status:status = MakeOwnedEmpty(program, &env.returnTypeKey);
 	if (status == Status::Ok) {
 		status = MakeOwnedEmpty(program, &env.returnCType);

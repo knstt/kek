@@ -273,31 +273,35 @@ Status:WriteFunctionBody(ptr<CompilerContext>:program, ptr<StringBuilder>:out, p
 }
 
 Status:WriteArrayMethodRef(ptr<StringBuilder>:out, ptr<FuncUse>:use, str:name) {
-	Status:status = out.WriteCString("Array__");
-	if (status == Status::Ok) { status = out.WriteString(OwnedStringArrayGet(&use.args, 0)); }
-	if (status == Status::Ok) { status = out.WriteByte('_'); }
-	if (status == Status::Ok) { status = out.WriteCString(name); }
-	return(status);
+	CodeWriter:w = CodeWriterNew(out);
+	w.CString("Array__");
+	w.String(OwnedStringArrayGet(&use.args, 0));
+	w.Byte('_');
+	w.CString(name);
+	return(w.status);
 }
 
 Status:WriteLinkedListMethodRef(ptr<StringBuilder>:out, ptr<FuncUse>:use, str:name) {
-	Status:status = out.WriteCString("LinkedList__");
-	if (status == Status::Ok) { status = out.WriteString(OwnedStringArrayGet(&use.args, 0)); }
-	if (status == Status::Ok) { status = out.WriteByte('_'); }
-	if (status == Status::Ok) { status = out.WriteCString(name); }
-	return(status);
+	CodeWriter:w = CodeWriterNew(out);
+	w.CString("LinkedList__");
+	w.String(OwnedStringArrayGet(&use.args, 0));
+	w.Byte('_');
+	w.CString(name);
+	return(w.status);
 }
 
 Status:WriteResultTypeRef(ptr<StringBuilder>:out, ptr<FuncUse>:use) {
-	Status:status = out.WriteCString("struct Result__");
-	if (status == Status::Ok) { status = out.WriteString(OwnedStringArrayGet(&use.args, 0)); }
-	return(status);
+	CodeWriter:w = CodeWriterNew(out);
+	w.CString("struct Result__");
+	w.String(OwnedStringArrayGet(&use.args, 0));
+	return(w.status);
 }
 
 Status:WriteListNodeTypeRef(ptr<StringBuilder>:out, ptr<FuncUse>:use) {
-	Status:status = out.WriteCString("struct ListNode__");
-	if (status == Status::Ok) { status = out.WriteString(OwnedStringArrayGet(&use.args, 0)); }
-	return(status);
+	CodeWriter:w = CodeWriterNew(out);
+	w.CString("struct ListNode__");
+	w.String(OwnedStringArrayGet(&use.args, 0));
+	return(w.status);
 }
 
 Status:WriteManualArrayGenericBody(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, ptr<FuncUse>:use, String:argC) {

@@ -133,6 +133,7 @@ struct:ModuleDecl {
 	bool:hasDocComment;
 	bool:emitted;
 	bool:reachable;
+	bool:isTagged;
 };
 
 struct:SyntaxPackage {
@@ -220,17 +221,17 @@ bool:IsTokenKind(ptr<CompilerContext>:program, usize:fileIndex, usize:tokenIndex
 
 bool:IsPunctuation(ptr<CompilerContext>:program, usize:fileIndex, usize:tokenIndex, PunctuationKind:kind) {
 	Token:token = program.tokenFiles.data[fileIndex].tokens[tokenIndex];
-	return(token.kind == TokenKind::Punctuation && token.subkind == cast<u64>(kind));
+	return(token.payload.tag == TokenPayloadTag_Punctuation && token.payload.data.Punctuation == kind);
 }
 
 bool:IsOperator(ptr<CompilerContext>:program, usize:fileIndex, usize:tokenIndex, OperatorKind:kind) {
 	Token:token = program.tokenFiles.data[fileIndex].tokens[tokenIndex];
-	return(token.kind == TokenKind::Operator && token.subkind == cast<u64>(kind));
+	return(token.payload.tag == TokenPayloadTag_Operator && token.payload.data.Operator == kind);
 }
 
 bool:IsKeyword(ptr<CompilerContext>:program, usize:fileIndex, usize:tokenIndex, KeywordKind:kind) {
 	Token:token = program.tokenFiles.data[fileIndex].tokens[tokenIndex];
-	return(token.kind == TokenKind::Keyword && token.subkind == cast<u64>(kind));
+	return(token.payload.tag == TokenPayloadTag_Keyword && token.payload.data.Keyword == kind);
 }
 
 bool:IsIdentifierText(ptr<CompilerContext>:program, usize:fileIndex, usize:tokenIndex, str:text) {

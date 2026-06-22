@@ -1,0 +1,33 @@
+#import(std/lib.kek);
+
+[tagged]union: Value {
+	i64:Number;
+	bool:Flag;
+};
+
+i64:ReadValue(Value:value) {
+	select (value) {
+		Value::Number(n): {
+			return(n);
+		}
+		Value::Flag(flag): {
+			if (flag) {
+				return(1);
+			}
+			return(0);
+		}
+	}
+	return(-1);
+}
+
+i64:main() {
+	Value:number = Value::Number(42);
+	Value:flag = Value::Flag(true);
+	assert(number.tag == ValueTag_Number);
+	assert(number.data.Number == 42);
+	assert(flag.tag == ValueTag_Flag);
+	assert(flag.data.Flag);
+	assert(ReadValue(number) == 42);
+	assert(ReadValue(flag) == 1);
+	return(0);
+}

@@ -281,6 +281,31 @@ void:InitNestedStructDecl(ptr<ModuleDecl>:nested, ptr<ModuleField>:field, usize:
 	nested.nameIndex = field.nameIndex;
 	nested.emitted = false;
 	nested.reachable = true;
+	nested.isTagged = false;
+}
+
+bool:AttributeListHasTagged(ptr<CompilerContext>:program, usize:fileIndex, usize:start, usize:end) {
+	for (usize:i = start; i < end; i++) {
+		if (IsKeyword(program, fileIndex, i, KeywordKind::Tagged) || IsIdentifierText(program, fileIndex, i, "tagged")) {
+			return(true);
+		}
+	}
+	return(false);
+}
+
+bool:DeclHasTaggedAttribute(ptr<CompilerContext>:program, usize:fileIndex, usize:start) {
+	usize:index = start;
+	while (index < FileTokenCount(program, fileIndex) && IsPunctuation(program, fileIndex, index, PunctuationKind::LeftBracket)) {
+		usize:end = FindMatching(program, fileIndex, index);
+		if (end >= FileTokenCount(program, fileIndex)) {
+			return(false);
+		}
+		if (AttributeListHasTagged(program, fileIndex, index + 1, end)) {
+			return(true);
+		}
+		index = end + 1;
+	}
+	return(false);
 }
 
 Status:ParseParams(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, usize:fileIndex, usize:start, usize:end) {
@@ -540,6 +565,7 @@ Status:ParseAliasDecl(ptr<CompilerContext>:program, usize:fileIndex, usize:start
 	decl.hasDocComment = false;
 	decl.emitted = false;
 	decl.reachable = false;
+	decl.isTagged = false;
 	Status:clone = CloneContextString(program, std::OwnedStringView(&program.tokenFiles.data[fileIndex].packageName), &decl.packageName);
 	if (clone != Status::Ok) {
 		return(clone);
@@ -560,7 +586,7 @@ Status:ParseAliasDecl(ptr<CompilerContext>:program, usize:fileIndex, usize:start
 	return(status);
 }
 
-Status:ParseTypeDecl(ptr<CompilerContext>:program, usize:fileIndex, usize:start, DeclKind:kind, ptr<usize>:outEnd) {
+Status:ParseTypeDecl(ptr<CompilerContext>:program, usize:fileIndex, usize:start, DeclKind:kind, bool:isTagged, ptr<usize>:outEnd) {
 	usize:count = FileTokenCount(program, fileIndex);
 	usize:colon = start + 1;
 	usize:nameIndex = colon + 1;
@@ -610,6 +636,7 @@ Status:ParseTypeDecl(ptr<CompilerContext>:program, usize:fileIndex, usize:start,
 	decl.hasDocComment = false;
 	decl.emitted = false;
 	decl.reachable = false;
+	decl.isTagged = isTagged;
 	Status:clone = CloneContextString(program, std::OwnedStringView(&program.tokenFiles.data[fileIndex].packageName), &decl.packageName);
 	if (clone != Status::Ok) {
 		return(clone);
@@ -666,6 +693,7 @@ Status:ParseExternDecl(ptr<CompilerContext>:program, usize:fileIndex, usize:star
 	decl.hasDocComment = false;
 	decl.emitted = false;
 	decl.reachable = false;
+	decl.isTagged = false;
 	Status:clone = CloneContextString(program, std::OwnedStringView(&program.tokenFiles.data[fileIndex].packageName), &decl.packageName);
 	if (clone != Status::Ok) {
 		return(clone);
@@ -729,6 +757,7 @@ Status:ParseFunctionDecl(ptr<CompilerContext>:program, usize:fileIndex, usize:st
 	decl.hasDocComment = false;
 	decl.emitted = false;
 	decl.reachable = false;
+	decl.isTagged = false;
 	Status:clone = CloneContextString(program, std::OwnedStringView(&program.tokenFiles.data[fileIndex].packageName), &decl.packageName);
 	if (clone != Status::Ok) {
 		return(clone);
@@ -793,6 +822,7 @@ Status:ParseDeclarations(ptr<CompilerContext>:program) {
 				}
 				index += 1;
 			}
+			bool:isTagged = DeclHasTaggedAttribute(program, fileIndex, index);
 			index = SkipAttributes(program, fileIndex, index);
 			if (index >= count || IsEof(program, fileIndex, index)) {
 				break;
@@ -816,13 +846,13 @@ Status:ParseDeclarations(ptr<CompilerContext>:program) {
 						status = ParseAliasDecl(program, fileIndex, index, &next);
 					} else {
 						if (IsKeyword(program, fileIndex, index, KeywordKind::Struct) || IsIdentifierText(program, fileIndex, index, "struct")) {
-							status = ParseTypeDecl(program, fileIndex, index, DeclKind::Struct, &next);
+							status = ParseTypeDecl(program, fileIndex, index, DeclKind::Struct, false, &next);
 						} else {
 							if (IsKeyword(program, fileIndex, index, KeywordKind::Union) || IsIdentifierText(program, fileIndex, index, "union")) {
-								status = ParseTypeDecl(program, fileIndex, index, DeclKind::Union, &next);
+								status = ParseTypeDecl(program, fileIndex, index, DeclKind::Union, isTagged, &next);
 							} else {
 								if (IsKeyword(program, fileIndex, index, KeywordKind::Enum) || IsIdentifierText(program, fileIndex, index, "enum")) {
-									status = ParseTypeDecl(program, fileIndex, index, DeclKind::Enum, &next);
+									status = ParseTypeDecl(program, fileIndex, index, DeclKind::Enum, false, &next);
 								} else {
 									status = ParseFunctionDecl(program, fileIndex, index, &next);
 								}

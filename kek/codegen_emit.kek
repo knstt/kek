@@ -1,41 +1,77 @@
 #import(kek/codegen_state.kek);
 
+struct:CodeWriter {
+	ptr<StringBuilder>:out;
+	Status:status;
+};
+
+CodeWriter:CodeWriterNew(ptr<StringBuilder>:out) {
+	CodeWriter:writer;
+	writer.out = out;
+	writer.status = Status::Ok;
+	return(writer);
+}
+
+void:CodeWriter::CString(str:text) {
+	if (this.status == Status::Ok) {
+		this.status = this.out.WriteCString(text);
+	}
+}
+
+void:CodeWriter::String(String:text) {
+	if (this.status == Status::Ok) {
+		this.status = this.out.WriteString(text);
+	}
+}
+
+void:CodeWriter::Byte(byte:value) {
+	if (this.status == Status::Ok) {
+		this.status = this.out.WriteByte(value);
+	}
+}
+
+void:CodeWriter::Indent(usize:indent) {
+	if (this.status == Status::Ok) {
+		this.status = WriteIndent(this.out, indent);
+	}
+}
+
+void:CodeWriter::Token(ptr<CompilerContext>:program, usize:fileIndex, usize:index) {
+	if (this.status == Status::Ok) {
+		this.status = WriteToken(program, this.out, fileIndex, index);
+	}
+}
+
+void:CodeWriter::TokenRangeRaw(ptr<CompilerContext>:program, usize:fileIndex, usize:start, usize:end) {
+	if (this.status == Status::Ok) {
+		this.status = WriteTokenRangeRaw(program, this.out, fileIndex, start, end);
+	}
+}
+
 Status:WritePrelude(ptr<StringBuilder>:out) {
-	Status:status = out.WriteCString("#include <assert.h>");
-	if (status == Status::Ok) { status = out.WriteByte(10); }
-	if (status == Status::Ok) { status = out.WriteCString("#include <stdint.h>"); }
-	if (status == Status::Ok) { status = out.WriteByte(10); }
-	if (status == Status::Ok) { status = out.WriteCString("#include <stddef.h>"); }
-	if (status == Status::Ok) { status = out.WriteByte(10); }
-	if (status == Status::Ok) { status = out.WriteCString("#include <stdbool.h>"); }
-	if (status == Status::Ok) { status = out.WriteByte(10); }
-	if (status == Status::Ok) { status = out.WriteByte(10); }
-	if (status == Status::Ok) { status = out.WriteCString("typedef uint8_t u8;"); }
-	if (status == Status::Ok) { status = out.WriteByte(10); }
-	if (status == Status::Ok) { status = out.WriteCString("typedef uint16_t u16;"); }
-	if (status == Status::Ok) { status = out.WriteByte(10); }
-	if (status == Status::Ok) { status = out.WriteCString("typedef uint32_t u32;"); }
-	if (status == Status::Ok) { status = out.WriteByte(10); }
-	if (status == Status::Ok) { status = out.WriteCString("typedef uint64_t u64;"); }
-	if (status == Status::Ok) { status = out.WriteByte(10); }
-	if (status == Status::Ok) { status = out.WriteCString("typedef int8_t i8;"); }
-	if (status == Status::Ok) { status = out.WriteByte(10); }
-	if (status == Status::Ok) { status = out.WriteCString("typedef int16_t i16;"); }
-	if (status == Status::Ok) { status = out.WriteByte(10); }
-	if (status == Status::Ok) { status = out.WriteCString("typedef int32_t i32;"); }
-	if (status == Status::Ok) { status = out.WriteByte(10); }
-	if (status == Status::Ok) { status = out.WriteCString("typedef int64_t i64;"); }
-	if (status == Status::Ok) { status = out.WriteByte(10); }
-	if (status == Status::Ok) { status = out.WriteCString("typedef float f32;"); }
-	if (status == Status::Ok) { status = out.WriteByte(10); }
-	if (status == Status::Ok) { status = out.WriteCString("typedef double f64;"); }
-	if (status == Status::Ok) { status = out.WriteByte(10); }
-	if (status == Status::Ok) { status = out.WriteCString("typedef void* ptr;"); }
-	if (status == Status::Ok) { status = out.WriteByte(10); }
-	if (status == Status::Ok) { status = out.WriteCString("typedef const char* str;"); }
-	if (status == Status::Ok) { status = out.WriteByte(10); }
-	if (status == Status::Ok) { status = out.WriteByte(10); }
-	return(status);
+	TemplateArg:args[1] = {
+		std::TemplateArgNew(std::StringFromCString("ptr_type"), std::StringFromCString("void*")),
+	};
+	TemplateContext:ctx = std::TemplateContextNew(args, len(args), 0, 0);
+	return(std::RenderTemplateToBuilder(out, std::StringFromCString("""#include <assert.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
+
+typedef uint8_t u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+typedef uint64_t u64;
+typedef int8_t i8;
+typedef int16_t i16;
+typedef int32_t i32;
+typedef int64_t i64;
+typedef float f32;
+typedef double f64;
+typedef {ptr_type} ptr;
+typedef const char* str;
+
+"""), ctx));
 }
 
 Status:WriteIndent(ptr<StringBuilder>:out, usize:indent) {
@@ -43,9 +79,8 @@ Status:WriteIndent(ptr<StringBuilder>:out, usize:indent) {
 }
 
 Status:WriteManualLine(ptr<StringBuilder>:out, str:text) {
-	Status:status = out.WriteCString(text);
-	if (status == Status::Ok) {
-		status = out.WriteByte('\n');
-	}
-	return(status);
+	CodeWriter:w = CodeWriterNew(out);
+	w.CString(text);
+	w.Byte('\n');
+	return(w.status);
 }

@@ -1,0 +1,19 @@
+#import(std/lib.kek);
+
+[tagged]union: SelectMissingValue {
+	i64:Number;
+	bool:Flag;
+};
+
+i64:ReadMissing(SelectMissingValue:value) {
+	select (value) {
+		SelectMissingValue::Number(n): {
+			return(n);
+		}
+	}
+	return(-1);
+}
+
+i64:main() {
+	return(ReadMissing(SelectMissingValue::Number(1)));
+}

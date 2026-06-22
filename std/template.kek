@@ -1,0 +1,131 @@
+#import(std/core.kek);
+#import(std/string.kek);
+
+struct:TemplateArg {
+	String:name;
+	String:value;
+};
+
+struct:TemplateContext {
+	ptr<TemplateArg>:named;
+	usize:namedLen;
+	ptr<String>:positional;
+	usize:positionalLen;
+};
+
+TemplateContext:TemplateContextEmpty() {
+	TemplateContext:ctx;
+	ctx.named = 0;
+	ctx.namedLen = 0;
+	ctx.positional = 0;
+	ctx.positionalLen = 0;
+	return(ctx);
+}
+
+TemplateContext:TemplateContextNew(ptr<TemplateArg>:named, usize:namedLen, ptr<String>:positional, usize:positionalLen) {
+	TemplateContext:ctx;
+	ctx.named = named;
+	ctx.namedLen = namedLen;
+	ctx.positional = positional;
+	ctx.positionalLen = positionalLen;
+	return(ctx);
+}
+
+TemplateArg:TemplateArgNew(String:name, String:value) {
+	TemplateArg:arg;
+	arg.name = name;
+	arg.value = value;
+	return(arg);
+}
+
+Result<String>:TemplateFindNamed(TemplateContext:ctx, String:name) {
+	for (usize:i = 0; i < ctx.namedLen; i++) {
+		if (ctx.named[i].name.Equals(name)) {
+			return(Ok<String>(ctx.named[i].value));
+		}
+	}
+	return(Err<String>(Status::NotFound));
+}
+
+Result<usize>:TemplateParseIndex(String:text) {
+	Result<usize>:result;
+	result.status = Status::Invalid;
+	result.value = 0;
+	if (text.len == 0) {
+		return(result);
+	}
+	usize:value = 0;
+	for (usize:i = 0; i < text.len; i++) {
+		byte:c = text.data[i];
+		if (!IsAsciiDigit(c)) {
+			return(result);
+		}
+		value = value * 10 + cast<usize>(c - '0');
+	}
+	result.status = Status::Ok;
+	result.value = value;
+	return(result);
+}
+
+Status:TemplateWritePlaceholder(ptr<StringBuilder>:out, String:name, TemplateContext:ctx) {
+	Result<usize>:index = TemplateParseIndex(name);
+	if (index.status == Status::Ok) {
+		if (index.value >= ctx.positionalLen) {
+			return(Status::Invalid);
+		}
+		return(out.WriteString(ctx.positional[index.value]));
+	}
+	Result<String>:named = TemplateFindNamed(ctx, name);
+	if (named.status != Status::Ok) {
+		return(Status::Invalid);
+	}
+	return(out.WriteString(named.value));
+}
+
+Status:RenderTemplateToBuilder(ptr<StringBuilder>:out, String:templateText, TemplateContext:ctx) {
+	usize:i = 0;
+	while (i < templateText.len) {
+		byte:c = templateText.data[i];
+		if (c == '{') {
+			if (i + 1 < templateText.len && templateText.data[i + 1] == '{') {
+				Status:status = out.WriteByte('{');
+				if (status != Status::Ok) {
+					return(status);
+				}
+				i += 2;
+				continue;
+			}
+			usize:start = i + 1;
+			usize:end = start;
+			while (end < templateText.len && templateText.data[end] != '}') {
+				end += 1;
+			}
+			if (end >= templateText.len) {
+				return(Status::Invalid);
+			}
+			Status:status = TemplateWritePlaceholder(out, templateText.Slice(start, end - start), ctx);
+			if (status != Status::Ok) {
+				return(status);
+			}
+			i = end + 1;
+			continue;
+		}
+		if (c == '}') {
+			if (i + 1 < templateText.len && templateText.data[i + 1] == '}') {
+				Status:status = out.WriteByte('}');
+				if (status != Status::Ok) {
+					return(status);
+				}
+				i += 2;
+				continue;
+			}
+			return(Status::Invalid);
+		}
+		Status:status = out.WriteByte(c);
+		if (status != Status::Ok) {
+			return(status);
+		}
+		i += 1;
+	}
+	return(Status::Ok);
+}

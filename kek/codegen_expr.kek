@@ -43,6 +43,79 @@ Status:ExprSetCString(ptr<CompilerContext>:program, ptr<Expr>:expr, str:text) {
 	return(ReplaceOwned(&expr.text, owned));
 }
 
+bool:IsTripleQuotedString(String:text) {
+	if (text.len < 6) {
+		return(false);
+	}
+	return(text.data[0] == '"'
+		&& text.data[1] == '"'
+		&& text.data[2] == '"'
+		&& text.data[text.len - 3] == '"'
+		&& text.data[text.len - 2] == '"'
+		&& text.data[text.len - 1] == '"');
+}
+
+Status:WriteOctalEscape(ptr<StringBuilder>:out, byte:value) {
+	Status:status = out.WriteByte('\\');
+	if (status == Status::Ok) {
+		status = out.WriteByte('0' + value / 64);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte('0' + (value / 8) % 8);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte('0' + value % 8);
+	}
+	return(status);
+}
+
+Status:WriteCStringEscapedByte(ptr<StringBuilder>:out, byte:value) {
+	if (value == '\n') {
+		return(out.WriteCString("\\n"));
+	}
+	if (value == '\r') {
+		return(out.WriteCString("\\r"));
+	}
+	if (value == '\t') {
+		return(out.WriteCString("\\t"));
+	}
+	if (value == '"') {
+		return(out.WriteCString("\\\""));
+	}
+	if (value == '\\') {
+		return(out.WriteCString("\\\\"));
+	}
+	if (value < 32 || value >= 127) {
+		return(WriteOctalEscape(out, value));
+	}
+	return(out.WriteByte(value));
+}
+
+Status:WriteStringLiteralToken(ptr<CompilerContext>:program, ptr<StringBuilder>:out, usize:fileIndex, usize:index) {
+	String:text = TokenText(program, fileIndex, index);
+	if (!IsTripleQuotedString(text)) {
+		return(out.WriteString(text));
+	}
+	Status:status = out.WriteByte('"');
+	for (usize:i = 3; i + 3 < text.len && status == Status::Ok; i++) {
+		status = WriteCStringEscapedByte(out, text.data[i]);
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte('"');
+	}
+	return(status);
+}
+
+Status:ExprSetStringLiteralToken(ptr<CompilerContext>:program, ptr<Expr>:expr, usize:fileIndex, usize:index) {
+	StringBuilder:builder = std::StringBuilderNew(program.allocator);
+	Status:status = WriteStringLiteralToken(program, &builder, fileIndex, index);
+	if (status == Status::Ok) {
+		status = ExprFromBuilder(expr, &builder);
+	}
+	builder.Destroy();
+	return(status);
+}
+
 Status:ExprSetType(ptr<CompilerContext>:program, ptr<Expr>:expr, String:key, String:cType, bool:isPointer) {
 	OwnedString:keyOwned;
 	Status:status = CloneContextString(program, key, &keyOwned);
@@ -227,6 +300,28 @@ Status:ModuleFieldType(ptr<CompilerContext>:program, String:typeKey, String:fiel
 		ptr<ModuleDecl>:fieldDecl = FindFieldDecl(program, typeKey);
 		if (fieldDecl == 0) {
 			return(Status::Ok);
+		}
+		if (fieldDecl.kind == DeclKind::Union && fieldDecl.isTagged) {
+			if (fieldName.EqualsCString("tag")) {
+				StringBuilder:tagKey = std::StringBuilderNew(program.allocator);
+				Status:status = WriteToken(program, &tagKey, fieldDecl.fileIndex, fieldDecl.nameIndex);
+				if (status == Status::Ok) {
+					status = tagKey.WriteCString("Tag");
+				}
+				OwnedString:key;
+				if (status == Status::Ok) {
+					status = DetachBuilder(&tagKey, &key);
+				}
+				tagKey.Destroy();
+				if (status == Status::Ok) {
+					status = TypeInfoFromKey(program, std::OwnedStringView(&key), outInfo);
+				}
+				std::DestroyOwnedString(&key);
+				return(status);
+			}
+			if (fieldName.EqualsCString("data")) {
+				return(TypeInfoFromKey(program, typeKey, outInfo));
+			}
 		}
 		firstField = fieldDecl.firstField;
 		fieldCount = fieldDecl.fieldCount;
@@ -436,7 +531,11 @@ Status:CompilePrimary(ptr<ExprParser>:parser, ptr<Expr>:out) {
 		return(status);
 	}
 	if (token.kind == TokenKind::String || token.kind == TokenKind::Char) {
-		status = ExprSetText(parser.program, out, TokenText(parser.program, parser.fileIndex, index));
+		if (token.kind == TokenKind::String) {
+			status = ExprSetStringLiteralToken(parser.program, out, parser.fileIndex, index);
+		} else {
+			status = ExprSetText(parser.program, out, TokenText(parser.program, parser.fileIndex, index));
+		}
 		if (status == Status::Ok) {
 			if (token.kind == TokenKind::String) {
 				status = ExprSetType(parser.program, out, std::StringFromCString("str"), std::StringFromCString("str"), true);
