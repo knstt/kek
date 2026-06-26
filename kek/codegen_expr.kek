@@ -331,6 +331,47 @@ Status:ModuleFieldType(ptr<CompilerContext>:program, String:typeKey, String:fiel
 	if (use != 0) {
 		decl = FindTypeDecl(program, std::OwnedStringView(&use.baseName));
 	}
+	if (use != 0 && use.args.len >= 1) {
+		String:baseName = std::OwnedStringView(&use.baseName);
+		if (baseName.EqualsCString("Soa")) {
+			ptr<ModuleDecl>:itemDecl = FindTypeDecl(program, std::OwnedStringView(&use.args.data[0]));
+			if (itemDecl != 0 && itemDecl.kind == DeclKind::Struct) {
+				for (usize:i = 0; i < itemDecl.fieldCount; i++) {
+					usize:fieldIndex = itemDecl.firstField + i;
+					ptr<ModuleField>:field = &program.fields.data[fieldIndex];
+					String:fieldToken = TokenText(program, field.fileIndex, field.nameIndex);
+					if (fieldToken.Equals(fieldName)) {
+						if (SoaFieldUnsupported(program, field)) {
+							return(Status::Unsupported);
+						}
+						TypeInfo:fieldInfo;
+						TypeInfoDestroy(outInfo);
+						Status:status = RenderTypeInfo(program, field.fileIndex, field.typeStart, field.typeEnd, &fieldInfo);
+						if (status != Status::Ok) {
+							return(status);
+						}
+						StringBuilder:key = std::StringBuilderNew(program.allocator);
+						status = key.WriteString(std::OwnedStringView(&fieldInfo.key));
+						if (status == Status::Ok) {
+							status = key.WriteByte('*');
+						}
+						OwnedString:keyOwned;
+						keyOwned.data = 0;
+						if (status == Status::Ok) {
+							status = DetachBuilder(&key, &keyOwned);
+						}
+						key.Destroy();
+						if (status == Status::Ok) {
+							status = TypeInfoFromKey(program, std::OwnedStringView(&keyOwned), outInfo);
+						}
+						std::DestroyOwnedString(&keyOwned);
+						TypeInfoDestroy(&fieldInfo);
+						return(status);
+					}
+				}
+			}
+		}
+	}
 	for (usize:i = 0; i < fieldCount; i++) {
 		usize:fieldIndex = firstField + i;
 		ptr<ModuleField>:field = &program.fields.data[fieldIndex];
@@ -826,6 +867,36 @@ Status:CompilePrimary(ptr<ExprParser>:parser, ptr<Expr>:out) {
 						status = ExprFromBuilder(out, &functionName);
 					}
 					functionName.Destroy();
+				} else {
+					if (IsIdentifierText(parser.program, parser.fileIndex, index, "SoaNew")
+						&& index + 1 < parser.end
+						&& IsOperator(parser.program, parser.fileIndex, index + 1, OperatorKind::Less)) {
+						usize:genericEnd = FindMatching(parser.program, parser.fileIndex, index + 1);
+						StringBuilder:keyBuilder = std::StringBuilderNew(parser.program[0].allocator);
+						if (status == Status::Ok) {
+							status = keyBuilder.WriteCString("Soa__");
+						}
+						if (status == Status::Ok) {
+							status = WriteTypeSuffixFromRange(parser.program, &keyBuilder, parser.fileIndex, index + 2, genericEnd);
+						}
+						OwnedString:keyOwned;
+						keyOwned.data = 0;
+						if (status == Status::Ok) {
+							status = DetachBuilder(&keyBuilder, &keyOwned);
+						}
+						keyBuilder.Destroy();
+						TypeInfo:typeInfo;
+						if (status == Status::Ok) {
+							status = TypeInfoFromKey(parser.program, std::OwnedStringView(&keyOwned), &typeInfo);
+						}
+						if (status == Status::Ok) {
+							status = ExprSetType(parser.program, out, std::OwnedStringView(&typeInfo.key), std::OwnedStringView(&typeInfo.cType), typeInfo.isPointer);
+						}
+						if (status == Status::Ok) {
+							TypeInfoDestroy(&typeInfo);
+						}
+						std::DestroyOwnedString(&keyOwned);
+					}
 				}
 			}
 		}
@@ -1084,6 +1155,43 @@ Status:ApplyPostfix(ptr<ExprParser>:parser, ptr<Expr>:expr) {
 					}
 					if (status == Status::Ok) {
 						TypeInfoDestroy(&returnInfo);
+					}
+				} else {
+					ptr<TypeUse>:receiverUse = FindTypeUse(parser.program, methodReceiverKey);
+					if (receiverUse != 0) {
+						String:baseName = std::OwnedStringView(&receiverUse.baseName);
+						if (baseName.EqualsCString("Soa")) {
+							if (fieldName.EqualsCString("Get")) {
+								StringBuilder:returnKey = std::StringBuilderNew(parser.program[0].allocator);
+								if (status == Status::Ok) {
+									status = returnKey.WriteCString("Result__");
+								}
+								if (status == Status::Ok) {
+									status = returnKey.WriteString(OwnedStringArrayGet(&receiverUse.args, 0));
+								}
+								OwnedString:keyOwned;
+								keyOwned.data = 0;
+								if (status == Status::Ok) {
+									status = DetachBuilder(&returnKey, &keyOwned);
+								}
+								returnKey.Destroy();
+								TypeInfo:returnInfo;
+								if (status == Status::Ok) {
+									status = TypeInfoFromKey(parser.program, std::OwnedStringView(&keyOwned), &returnInfo);
+								}
+								if (status == Status::Ok) {
+									status = ExprSetType(parser.program, expr, std::OwnedStringView(&returnInfo.key), std::OwnedStringView(&returnInfo.cType), returnInfo.isPointer);
+								}
+								if (status == Status::Ok) {
+									TypeInfoDestroy(&returnInfo);
+								}
+								std::DestroyOwnedString(&keyOwned);
+							} else {
+								if (fieldName.EqualsCString("Destroy") || fieldName.EqualsCString("Clear") || fieldName.EqualsCString("Reserve") || fieldName.EqualsCString("Push") || fieldName.EqualsCString("Set")) {
+									status = ExprSetType(parser.program, expr, std::StringFromCString("Status"), std::StringFromCString("Status"), false);
+								}
+							}
+						}
 					}
 				}
 				parser.pos = groupEnd + 1;

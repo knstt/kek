@@ -685,6 +685,14 @@ Status:WriteCTypeFromKey(ptr<CompilerContext>:program, ptr<StringBuilder>:out, S
 	for (usize:i = 0; i < program.typeUses.len; i++) {
 		String:useKey = std::OwnedStringView(&program.typeUses.data[i].key);
 		if (useKey.Equals(key)) {
+			String:base = std::OwnedStringView(&program.typeUses.data[i].baseName);
+			if (base.EqualsCString("Soa")) {
+				Status:status = out.WriteCString("struct ");
+				if (status == Status::Ok) {
+					status = out.WriteString(key);
+				}
+				return(status);
+			}
 			ptr<ModuleDecl>:baseDecl = FindTypeDecl(program, std::OwnedStringView(&program.typeUses.data[i].baseName));
 			if (baseDecl != 0 && baseDecl.kind == DeclKind::Struct) {
 				Status:status = out.WriteCString("struct ");
@@ -936,7 +944,7 @@ Status:CollectTypeUsesInRange(ptr<CompilerContext>:program, usize:fileIndex, usi
 		if (i + 1 < end && IsOperator(program, fileIndex, i + 1, OperatorKind::Less)) {
 			String:name = TokenText(program, fileIndex, i);
 			ptr<ModuleDecl>:decl = FindTypeDecl(program, name);
-			if (decl != 0 && decl.isGeneric) {
+			if ((decl != 0 && decl.isGeneric) || name.EqualsCString("Soa")) {
 				usize:genericEnd = FindMatching(program, fileIndex, i + 1);
 				TypeInfo:info;
 				Status:status = RenderTypeInfo(program, fileIndex, i, genericEnd + 1, &info);
@@ -1279,6 +1287,10 @@ Status:CollectGenericCollectionMethods(ptr<CompilerContext>:program) {
 			if (status == Status::Ok && arraySpanUsed) { status = AddGenericMethodUseByName(program, use, "Span"); }
 			if (status == Status::Ok && arraySliceUsed) { status = AddGenericMethodUseByName(program, use, "Slice"); }
 		} else {
+			if (base.EqualsCString("Soa")) {
+				String:firstArg = OwnedStringArrayGet(&use.args, 0);
+				status = AddTypeUseFromBaseArg(program, "Result", firstArg);
+			} else {
 			if (base.EqualsCString("LinkedList")) {
 				String:firstArg = OwnedStringArrayGet(&use.args, 0);
 				status = AddTypeUseFromBaseArg(program, "ListNode", firstArg);
@@ -1288,6 +1300,7 @@ Status:CollectGenericCollectionMethods(ptr<CompilerContext>:program) {
 				if (status == Status::Ok) { status = AddGenericMethodUseByName(program, use, "PopBack"); }
 				if (status == Status::Ok) { status = AddGenericMethodUseByName(program, use, "Destroy"); }
 				if (status == Status::Ok) { status = AddGenericMethodUseByName(program, use, "PopFront"); }
+			}
 			}
 		}
 		if (status != Status::Ok) {

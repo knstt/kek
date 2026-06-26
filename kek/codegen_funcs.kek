@@ -697,6 +697,261 @@ Status:WriteManualGenericBody(ptr<CompilerContext>:program, ptr<StringBuilder>:o
 	return(status);
 }
 
+bool:TypeUseBaseEquals(ptr<TypeUse>:use, str:name) {
+	String:base = std::OwnedStringView(&use.baseName);
+	return(base.EqualsCString(name));
+}
+
+bool:CStringEquals(str:value, str:expected) {
+	String:text = std::StringFromCString(value);
+	return(text.EqualsCString(expected));
+}
+
+Status:WriteSoaTypeRef(ptr<StringBuilder>:out, ptr<TypeUse>:use) {
+	Status:status = out.WriteCString("struct Soa__");
+	if (status == Status::Ok) {
+		status = out.WriteString(OwnedStringArrayGet(&use.args, 0));
+	}
+	return(status);
+}
+
+Status:WriteSoaResultTypeRef(ptr<StringBuilder>:out, ptr<TypeUse>:use) {
+	Status:status = out.WriteCString("struct Result__");
+	if (status == Status::Ok) {
+		status = out.WriteString(OwnedStringArrayGet(&use.args, 0));
+	}
+	return(status);
+}
+
+Status:WriteSoaFunctionName(ptr<StringBuilder>:out, ptr<TypeUse>:use, str:name) {
+	Status:status = Status::Ok;
+	if (CStringEquals(name, "New")) {
+		status = out.WriteCString("SoaNew__");
+		if (status == Status::Ok) {
+			status = out.WriteString(OwnedStringArrayGet(&use.args, 0));
+		}
+		return(status);
+	}
+	status = out.WriteCString("Soa__");
+	if (status == Status::Ok) {
+		status = out.WriteString(OwnedStringArrayGet(&use.args, 0));
+	}
+	if (status == Status::Ok) {
+		status = out.WriteByte('_');
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString(name);
+	}
+	return(status);
+}
+
+Status:WriteSoaFunctionSignature(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<TypeUse>:use, str:name) {
+	OwnedString:itemC;
+	Status:status = MakeCTypeFromKey(program, OwnedStringArrayGet(&use.args, 0), &itemC);
+	if (status != Status::Ok) {
+		return(status);
+	}
+	if (CStringEquals(name, "New")) {
+		status = WriteSoaTypeRef(out, use);
+		if (status == Status::Ok) { status = out.WriteByte(' '); }
+		if (status == Status::Ok) { status = WriteSoaFunctionName(out, use, name); }
+		if (status == Status::Ok) { status = out.WriteCString("(struct Allocator allocator)"); }
+	} else {
+		if (CStringEquals(name, "Get")) {
+			status = WriteSoaResultTypeRef(out, use);
+		} else {
+			status = out.WriteCString("Status");
+		}
+		if (status == Status::Ok) { status = out.WriteByte(' '); }
+		if (status == Status::Ok) { status = WriteSoaFunctionName(out, use, name); }
+		if (status == Status::Ok) { status = out.WriteByte('('); }
+		if (status == Status::Ok) { status = WriteSoaTypeRef(out, use); }
+		if (status == Status::Ok) { status = out.WriteCString("* this"); }
+		if (status == Status::Ok && CStringEquals(name, "Reserve")) {
+			status = out.WriteCString(",usize additional");
+		}
+		if (status == Status::Ok && CStringEquals(name, "Push")) {
+			status = out.WriteCString(",");
+			if (status == Status::Ok) { status = out.WriteString(std::OwnedStringView(&itemC)); }
+			if (status == Status::Ok) { status = out.WriteCString(" value"); }
+		}
+		if (status == Status::Ok && CStringEquals(name, "Get")) {
+			status = out.WriteCString(",usize index");
+		}
+		if (status == Status::Ok && CStringEquals(name, "Set")) {
+			status = out.WriteCString(",usize index,");
+			if (status == Status::Ok) { status = out.WriteString(std::OwnedStringView(&itemC)); }
+			if (status == Status::Ok) { status = out.WriteCString(" value"); }
+		}
+		if (status == Status::Ok) { status = out.WriteByte(')'); }
+	}
+	std::DestroyOwnedString(&itemC);
+	return(status);
+}
+
+Status:WriteSoaFunctionPrototype(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<TypeUse>:use, str:name) {
+	Status:status = WriteSoaFunctionSignature(program, out, use, name);
+	if (status == Status::Ok) {
+		status = out.WriteCString(";\n");
+	}
+	return(status);
+}
+
+Status:WriteSoaFunctionBody(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<TypeUse>:use, str:name) {
+	ptr<ModuleDecl>:itemDecl = FindTypeDecl(program, OwnedStringArrayGet(&use.args, 0));
+	if (itemDecl == 0 || itemDecl.kind != DeclKind::Struct || itemDecl.isGeneric) {
+		return(Status::Unsupported);
+	}
+	Status:status = WriteSoaFunctionSignature(program, out, use, name);
+	if (status == Status::Ok) {
+		status = out.WriteCString(" {\n");
+	}
+	if (CStringEquals(name, "New")) {
+		if (status == Status::Ok) { status = out.WriteCString("    "); }
+		if (status == Status::Ok) { status = WriteSoaTypeRef(out, use); }
+		if (status == Status::Ok) { status = WriteManualLine(out, " array={0};"); }
+		if (status == Status::Ok) { status = WriteManualLine(out, "    array.allocator=allocator;"); }
+		if (status == Status::Ok) { status = WriteManualLine(out, "    return array;"); }
+	} else {
+		if (CStringEquals(name, "Destroy")) {
+			for (usize:i = 0; i < itemDecl.fieldCount && status == Status::Ok; i++) {
+				ptr<ModuleField>:field = &program.fields.data[itemDecl.firstField + i];
+				if (SoaFieldUnsupported(program, field)) { return(Status::Unsupported); }
+				status = out.WriteCString("    if(this->allocator.context==0&&this->");
+				if (status == Status::Ok) { status = WriteToken(program, out, field.fileIndex, field.nameIndex); }
+				if (status == Status::Ok) { status = out.WriteCString("!=0){kek_std_free(this->"); }
+				if (status == Status::Ok) { status = WriteToken(program, out, field.fileIndex, field.nameIndex); }
+				if (status == Status::Ok) { status = WriteManualLine(out, ");}"); }
+				if (status == Status::Ok) { status = out.WriteCString("    this->"); }
+				if (status == Status::Ok) { status = WriteToken(program, out, field.fileIndex, field.nameIndex); }
+				if (status == Status::Ok) { status = WriteManualLine(out, "=0;"); }
+			}
+			if (status == Status::Ok) { status = WriteManualLine(out, "    this->len=0;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    this->cap=0;"); }
+			if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+		} else {
+			if (CStringEquals(name, "Clear")) {
+				status = WriteManualLine(out, "    this->len=0;");
+				if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+			} else {
+				if (CStringEquals(name, "Reserve")) {
+					status = WriteManualLine(out, "    usize needed=this->len+additional;");
+					if (status == Status::Ok) { status = WriteManualLine(out, "    if(needed<=this->cap){return Status_Ok;}"); }
+					if (status == Status::Ok) { status = WriteManualLine(out, "    usize newCap=this->cap;"); }
+					if (status == Status::Ok) { status = WriteManualLine(out, "    if(newCap==0){newCap=8;}"); }
+					if (status == Status::Ok) { status = WriteManualLine(out, "    while(newCap<needed){newCap=newCap*2;}"); }
+					for (usize:i = 0; i < itemDecl.fieldCount && status == Status::Ok; i++) {
+						ptr<ModuleField>:field = &program.fields.data[itemDecl.firstField + i];
+						if (SoaFieldUnsupported(program, field)) { return(Status::Unsupported); }
+						TypeInfo:fieldInfo;
+						status = RenderTypeInfo(program, field.fileIndex, field.typeStart, field.typeEnd, &fieldInfo);
+						if (status == Status::Ok) { status = out.WriteCString("    "); }
+						if (status == Status::Ok) { status = out.WriteString(std::OwnedStringView(&fieldInfo.cType)); }
+						if (status == Status::Ok) { status = out.WriteCString("* new_"); }
+						if (status == Status::Ok) { status = WriteToken(program, out, field.fileIndex, field.nameIndex); }
+						if (status == Status::Ok) { status = out.WriteCString("=("); }
+						if (status == Status::Ok) { status = out.WriteString(std::OwnedStringView(&fieldInfo.cType)); }
+						if (status == Status::Ok) { status = out.WriteCString("*)kek_std_allocator_resize(this->allocator.context,this->"); }
+						if (status == Status::Ok) { status = WriteToken(program, out, field.fileIndex, field.nameIndex); }
+						if (status == Status::Ok) { status = out.WriteCString(",this->cap*sizeof("); }
+						if (status == Status::Ok) { status = out.WriteString(std::OwnedStringView(&fieldInfo.cType)); }
+						if (status == Status::Ok) { status = out.WriteCString("),newCap*sizeof("); }
+						if (status == Status::Ok) { status = out.WriteString(std::OwnedStringView(&fieldInfo.cType)); }
+						if (status == Status::Ok) { status = WriteManualLine(out, "));"); }
+						if (status == Status::Ok) { status = out.WriteCString("    if(new_"); }
+						if (status == Status::Ok) { status = WriteToken(program, out, field.fileIndex, field.nameIndex); }
+						if (status == Status::Ok) { status = WriteManualLine(out, "==0){return Status_NoMemory;}"); }
+						if (status == Status::Ok) { status = out.WriteCString("    this->"); }
+						if (status == Status::Ok) { status = WriteToken(program, out, field.fileIndex, field.nameIndex); }
+						if (status == Status::Ok) { status = out.WriteCString("=new_"); }
+						if (status == Status::Ok) { status = WriteToken(program, out, field.fileIndex, field.nameIndex); }
+						if (status == Status::Ok) { status = WriteManualLine(out, ";"); }
+						TypeInfoDestroy(&fieldInfo);
+					}
+					if (status == Status::Ok) { status = WriteManualLine(out, "    this->cap=newCap;"); }
+					if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+				} else {
+					if (CStringEquals(name, "Push")) {
+						status = out.WriteCString("    Status status=");
+						if (status == Status::Ok) { status = WriteSoaFunctionName(out, use, "Reserve"); }
+						if (status == Status::Ok) { status = WriteManualLine(out, "(this,1);"); }
+						if (status == Status::Ok) { status = WriteManualLine(out, "    if(status!=Status_Ok){return status;}"); }
+						for (usize:i = 0; i < itemDecl.fieldCount && status == Status::Ok; i++) {
+							ptr<ModuleField>:field = &program.fields.data[itemDecl.firstField + i];
+							if (SoaFieldUnsupported(program, field)) { return(Status::Unsupported); }
+							status = out.WriteCString("    this->");
+							if (status == Status::Ok) { status = WriteToken(program, out, field.fileIndex, field.nameIndex); }
+							if (status == Status::Ok) { status = out.WriteCString("[this->len]=value."); }
+							if (status == Status::Ok) { status = WriteToken(program, out, field.fileIndex, field.nameIndex); }
+							if (status == Status::Ok) { status = WriteManualLine(out, ";"); }
+						}
+						if (status == Status::Ok) { status = WriteManualLine(out, "    this->len+=1;"); }
+						if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+					} else {
+						if (CStringEquals(name, "Get")) {
+							status = out.WriteCString("    ");
+							if (status == Status::Ok) { status = WriteSoaResultTypeRef(out, use); }
+							if (status == Status::Ok) { status = WriteManualLine(out, " result={0};"); }
+							if (status == Status::Ok) { status = WriteManualLine(out, "    if(index>=this->len){result.status=Status_Invalid;return result;}"); }
+							for (usize:i = 0; i < itemDecl.fieldCount && status == Status::Ok; i++) {
+								ptr<ModuleField>:field = &program.fields.data[itemDecl.firstField + i];
+								if (SoaFieldUnsupported(program, field)) { return(Status::Unsupported); }
+								status = out.WriteCString("    result.value.");
+								if (status == Status::Ok) { status = WriteToken(program, out, field.fileIndex, field.nameIndex); }
+								if (status == Status::Ok) { status = out.WriteCString("=this->"); }
+								if (status == Status::Ok) { status = WriteToken(program, out, field.fileIndex, field.nameIndex); }
+								if (status == Status::Ok) { status = WriteManualLine(out, "[index];"); }
+							}
+							if (status == Status::Ok) { status = WriteManualLine(out, "    result.status=Status_Ok;"); }
+							if (status == Status::Ok) { status = WriteManualLine(out, "    return result;"); }
+						} else {
+							if (CStringEquals(name, "Set")) {
+								status = WriteManualLine(out, "    if(index>=this->len){return Status_Invalid;}");
+								for (usize:i = 0; i < itemDecl.fieldCount && status == Status::Ok; i++) {
+									ptr<ModuleField>:field = &program.fields.data[itemDecl.firstField + i];
+									if (SoaFieldUnsupported(program, field)) { return(Status::Unsupported); }
+									status = out.WriteCString("    this->");
+									if (status == Status::Ok) { status = WriteToken(program, out, field.fileIndex, field.nameIndex); }
+									if (status == Status::Ok) { status = out.WriteCString("[index]=value."); }
+									if (status == Status::Ok) { status = WriteToken(program, out, field.fileIndex, field.nameIndex); }
+									if (status == Status::Ok) { status = WriteManualLine(out, ";"); }
+								}
+								if (status == Status::Ok) { status = WriteManualLine(out, "    return Status_Ok;"); }
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	if (status == Status::Ok) {
+		status = out.WriteCString("}\n");
+	}
+	return(status);
+}
+
+Status:WriteSoaFunctionSetDeclarations(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<TypeUse>:use) {
+	Status:status = WriteSoaFunctionPrototype(program, out, use, "New");
+	if (status == Status::Ok) { status = WriteSoaFunctionPrototype(program, out, use, "Destroy"); }
+	if (status == Status::Ok) { status = WriteSoaFunctionPrototype(program, out, use, "Clear"); }
+	if (status == Status::Ok) { status = WriteSoaFunctionPrototype(program, out, use, "Reserve"); }
+	if (status == Status::Ok) { status = WriteSoaFunctionPrototype(program, out, use, "Push"); }
+	if (status == Status::Ok) { status = WriteSoaFunctionPrototype(program, out, use, "Get"); }
+	if (status == Status::Ok) { status = WriteSoaFunctionPrototype(program, out, use, "Set"); }
+	return(status);
+}
+
+Status:WriteSoaFunctionSetDefinitions(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<TypeUse>:use) {
+	Status:status = WriteSoaFunctionBody(program, out, use, "New");
+	if (status == Status::Ok) { status = WriteSoaFunctionBody(program, out, use, "Destroy"); }
+	if (status == Status::Ok) { status = WriteSoaFunctionBody(program, out, use, "Clear"); }
+	if (status == Status::Ok) { status = WriteSoaFunctionBody(program, out, use, "Reserve"); }
+	if (status == Status::Ok) { status = WriteSoaFunctionBody(program, out, use, "Push"); }
+	if (status == Status::Ok) { status = WriteSoaFunctionBody(program, out, use, "Get"); }
+	if (status == Status::Ok) { status = WriteSoaFunctionBody(program, out, use, "Set"); }
+	return(status);
+}
+
 Status:WriteFunctionDeclarations(ptr<CompilerContext>:program, ptr<StringBuilder>:out) {
 	for (usize:i = 0; i < program.decls.len; i++) {
 		ptr<ModuleDecl>:decl = &program.decls.data[i];
@@ -719,10 +974,28 @@ Status:WriteFunctionDeclarations(ptr<CompilerContext>:program, ptr<StringBuilder
 			}
 		}
 	}
+	for (usize:i = 0; i < program.typeUses.len; i++) {
+		ptr<TypeUse>:use = &program.typeUses.data[i];
+		if (TypeUseBaseEquals(use, "Soa")) {
+			Status:status = WriteSoaFunctionSetDeclarations(program, out, use);
+			if (status != Status::Ok) {
+				return(status);
+			}
+		}
+	}
 	return(Status::Ok);
 }
 
 Status:WriteFunctionDefinitions(ptr<CompilerContext>:program, ptr<StringBuilder>:out) {
+	for (usize:i = 0; i < program.typeUses.len; i++) {
+		ptr<TypeUse>:use = &program.typeUses.data[i];
+		if (TypeUseBaseEquals(use, "Soa")) {
+			Status:status = WriteSoaFunctionSetDefinitions(program, out, use);
+			if (status != Status::Ok) {
+				return(status);
+			}
+		}
+	}
 	for (usize:i = 0; i < program.funcUses.len; i++) {
 		ptr<FuncUse>:use = &program.funcUses.data[i];
 		if (use.declIndex < program.decls.len) {

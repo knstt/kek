@@ -3,6 +3,7 @@
 extern "C" {
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 static void* kek_std_alloc(size_t size) {
 	return malloc(size);
@@ -23,6 +24,61 @@ static void* kek_std_mem_copy(void* dest, const void* src, size_t count) {
 static void* kek_std_mem_set(void* dest, int value, size_t count) {
 	return memset(dest, value, count);
 }
+
+typedef struct KekFixedAllocator {
+	size_t cap;
+	size_t used;
+	unsigned char data[];
+} KekFixedAllocator;
+
+static void* kek_std_fixed_allocator_init(void* memory, size_t size) {
+	if (memory == 0 || size <= sizeof(KekFixedAllocator)) {
+		return 0;
+	}
+	KekFixedAllocator* fixed = (KekFixedAllocator*)memory;
+	fixed->cap = size - sizeof(KekFixedAllocator);
+	fixed->used = 0;
+	return fixed;
+}
+
+static size_t kek_std_align_up(size_t value, size_t align) {
+	return (value + align - 1) & ~(align - 1);
+}
+
+static void* kek_std_allocator_alloc(void* context, size_t size) {
+	if (context == 0) {
+		return kek_std_alloc(size);
+	}
+	KekFixedAllocator* fixed = (KekFixedAllocator*)context;
+	size_t start = kek_std_align_up(fixed->used, 8);
+	if (start + size > fixed->cap) {
+		return 0;
+	}
+	void* out = fixed->data + start;
+	fixed->used = start + size;
+	return out;
+}
+
+static void* kek_std_allocator_resize(void* context, void* oldData, size_t oldSize, size_t newSize) {
+	if (context == 0) {
+		return kek_std_resize(oldData, newSize);
+	}
+	void* newData = kek_std_allocator_alloc(context, newSize);
+	if (newData == 0) {
+		return 0;
+	}
+	if (oldData != 0 && oldSize != 0) {
+		size_t copySize = oldSize < newSize ? oldSize : newSize;
+		memcpy(newData, oldData, copySize);
+	}
+	return newData;
+}
+
+static void kek_std_allocator_free(void* context, void* data) {
+	if (context == 0) {
+		kek_std_free(data);
+	}
+}
 }
 
 struct:Allocator {
@@ -33,26 +89,24 @@ Allocator:DefaultAllocator() {
 	return(Allocator:{ context = 0 });
 }
 
+Allocator:FixedAllocator(ptr<byte>:memory, usize:size) {
+	Allocator:allocator;
+	allocator.context = ::kek_std_fixed_allocator_init(memory, size);
+	return(allocator);
+}
+
 ptr<T>:Alloc<T>(Allocator:allocator, usize:count) {
-	if (allocator.context != 0) {
-	}
-	return(::kek_std_alloc(count * sizeof(T)));
+	return(::kek_std_allocator_alloc(allocator.context, count * sizeof(T)));
 }
 
 ptr<T>:Resize<T>(Allocator:allocator, ptr<T>:oldData, usize:oldCount, usize:newCount) {
-	if (allocator.context != 0) {
-	}
-	if (oldCount == 0) {
-	}
-	return(::kek_std_resize(oldData, newCount * sizeof(T)));
+	return(::kek_std_allocator_resize(allocator.context, oldData, oldCount * sizeof(T), newCount * sizeof(T)));
 }
 
 void:Free<T>(Allocator:allocator, ptr<T>:data, usize:count) {
-	if (allocator.context != 0) {
-	}
 	if (count == 0) {
 	}
-	::kek_std_free(data);
+	::kek_std_allocator_free(allocator.context, data);
 }
 
 void:Copy<T>(ptr<T>:dest, ptr<T>:src, usize:count) {

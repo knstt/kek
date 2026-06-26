@@ -1,0 +1,64 @@
+#import(std/lib.kek);
+
+struct:Point {
+	i32:x;
+	i32:y;
+};
+
+i64:main() {
+	Allocator:allocator = std::DefaultAllocator();
+	Soa<Point>:points = SoaNew<Point>(allocator);
+	assert(points.Reserve(2) == Status::Ok);
+	assert(points.len == 0);
+	assert(points.cap >= 2);
+
+	Point:first;
+	first.x = 3;
+	first.y = 4;
+	assert(points.Push(first) == Status::Ok);
+	assert(points.len == 1);
+	assert(points.x[0] == 3);
+	assert(points.y[0] == 4);
+
+	Point:second;
+	second.x = 7;
+	second.y = 9;
+	assert(points.Push(second) == Status::Ok);
+	assert(points.x[1] == 7);
+	assert(points.y[1] == 9);
+
+	Result<Point>:got = points.Get(1);
+	assert(got.status == Status::Ok);
+	assert(got.value.x == 7);
+	assert(got.value.y == 9);
+
+	Point:replacement;
+	replacement.x = 11;
+	replacement.y = 13;
+	assert(points.Set(0, replacement) == Status::Ok);
+	assert(points.x[0] == 11);
+	assert(points.y[0] == 13);
+
+	assert(points.Clear() == Status::Ok);
+	assert(points.len == 0);
+	assert(points.Destroy() == Status::Ok);
+
+	usize:arenaWords[32] = {0};
+	Allocator:fixed = std::FixedAllocator(cast<ptr<byte>>(arenaWords), len(arenaWords) * sizeof(usize));
+	Soa<Point>:fixedPoints = SoaNew<Point>(fixed);
+	assert(fixedPoints.Reserve(4) == Status::Ok);
+	assert(fixedPoints.Push(first) == Status::Ok);
+	assert(fixedPoints.Push(second) == Status::Ok);
+	assert(fixedPoints.x[0] == 3);
+	assert(fixedPoints.y[1] == 9);
+	Result<Point>:fixedGot = fixedPoints.Get(0);
+	assert(fixedGot.status == Status::Ok);
+	assert(fixedGot.value.x == 3);
+	assert(fixedPoints.Destroy() == Status::Ok);
+
+	usize:smallArenaWords[6] = {0};
+	Allocator:smallFixed = std::FixedAllocator(cast<ptr<byte>>(smallArenaWords), len(smallArenaWords) * sizeof(usize));
+	Soa<Point>:tooSmall = SoaNew<Point>(smallFixed);
+	assert(tooSmall.Reserve(8) == Status::NoMemory);
+	return(0);
+}

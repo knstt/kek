@@ -566,6 +566,22 @@ Status:WriteEnumDecl(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<M
 	return(status);
 }
 
+bool:SoaFieldUnsupported(ptr<CompilerContext>:program, ptr<ModuleField>:field) {
+	if (field.isNestedStruct || field.isArray) {
+		return(true);
+	}
+	if (TokenEquals(program, field.fileIndex, field.nameIndex, "len")) {
+		return(true);
+	}
+	if (TokenEquals(program, field.fileIndex, field.nameIndex, "cap")) {
+		return(true);
+	}
+	if (TokenEquals(program, field.fileIndex, field.nameIndex, "allocator")) {
+		return(true);
+	}
+	return(false);
+}
+
 Status:WriteAliasDecl(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl) {
 	TypeInfo:info;
 	Status:status = RenderTypeInfo(program, decl.fileIndex, decl.returnStart, decl.returnEnd, &info);
@@ -626,6 +642,51 @@ Status:WriteExternDecl(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr
 Status:WriteTypeUseDeclaration(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<TypeUse>:use) {
 	if (use.emitted) {
 		return(Status::Ok);
+	}
+	String:baseName = std::OwnedStringView(&use.baseName);
+	if (baseName.EqualsCString("Soa") && use.args.len >= 1) {
+		ptr<ModuleDecl>:itemDecl = FindTypeDecl(program, std::OwnedStringView(&use.args.data[0]));
+		if (itemDecl == 0 || itemDecl.kind != DeclKind::Struct || itemDecl.isGeneric) {
+			return(Status::Unsupported);
+		}
+		Status:status = out.WriteCString("struct ");
+		if (status == Status::Ok) {
+			status = out.WriteString(std::OwnedStringView(&use.key));
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString(" {\n");
+		}
+		for (usize:i = 0; i < itemDecl.fieldCount && status == Status::Ok; i++) {
+			ptr<ModuleField>:field = &program.fields.data[itemDecl.firstField + i];
+			if (SoaFieldUnsupported(program, field)) {
+				return(Status::Unsupported);
+			}
+			TypeInfo:fieldInfo;
+			status = RenderTypeInfo(program, field.fileIndex, field.typeStart, field.typeEnd, &fieldInfo);
+			if (status == Status::Ok) {
+				status = out.WriteCString("    ");
+			}
+			if (status == Status::Ok) {
+				status = out.WriteString(std::OwnedStringView(&fieldInfo.cType));
+			}
+			if (status == Status::Ok) {
+				status = out.WriteCString("* ");
+			}
+			if (status == Status::Ok) {
+				status = WriteToken(program, out, field.fileIndex, field.nameIndex);
+			}
+			if (status == Status::Ok) {
+				status = out.WriteCString(";\n");
+			}
+			TypeInfoDestroy(&fieldInfo);
+		}
+		if (status == Status::Ok) {
+			status = out.WriteCString("    usize len;\n    usize cap;\n    struct Allocator allocator;\n};\n");
+		}
+		if (status == Status::Ok) {
+			use.emitted = true;
+		}
+		return(status);
 	}
 	ptr<ModuleDecl>:decl = FindTypeDecl(program, std::OwnedStringView(&use.baseName));
 	if (decl == 0 || decl.kind != DeclKind::Struct) {
@@ -763,6 +824,20 @@ Status:WriteTypeUseWithDependencies(ptr<CompilerContext>:program, ptr<StringBuil
 		}
 	}
 	ptr<ModuleDecl>:decl = FindTypeDecl(program, std::OwnedStringView(&use.baseName));
+	if (decl == 0) {
+		String:baseName = std::OwnedStringView(&use.baseName);
+		if (baseName.EqualsCString("Soa") && use.args.len >= 1) {
+			ptr<ModuleDecl>:itemDecl = FindTypeDecl(program, std::OwnedStringView(&use.args.data[0]));
+			if (itemDecl != 0 && itemDecl.kind == DeclKind::Struct) {
+				for (usize:i = 0; i < itemDecl.fieldCount; i++) {
+					Status:status = WriteFieldTypeDependencies(program, out, &program.fields.data[itemDecl.firstField + i]);
+					if (status != Status::Ok) {
+						return(status);
+					}
+				}
+			}
+		}
+	}
 	if (decl != 0 && decl.kind == DeclKind::Struct) {
 		for (usize:i = 0; i < decl.fieldCount; i++) {
 			Status:status = WriteFieldTypeDependencies(program, out, &program.fields.data[decl.firstField + i]);
