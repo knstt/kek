@@ -1,28 +1,5 @@
 #import(kek/syntax.kek);
 
-bool:IsOpenDelimiter(ptr<CompilerContext>:program, usize:fileIndex, usize:index) {
-	return(IsPunctuation(program, fileIndex, index, PunctuationKind::LeftParen)
-		|| IsPunctuation(program, fileIndex, index, PunctuationKind::LeftBrace)
-		|| IsPunctuation(program, fileIndex, index, PunctuationKind::LeftBracket)
-		|| IsOperator(program, fileIndex, index, OperatorKind::Less));
-}
-
-bool:DelimiterMatches(ptr<CompilerContext>:program, usize:fileIndex, usize:openIndex, usize:closeIndex) {
-	if (IsPunctuation(program, fileIndex, openIndex, PunctuationKind::LeftParen)) {
-		return(IsPunctuation(program, fileIndex, closeIndex, PunctuationKind::RightParen));
-	}
-	if (IsPunctuation(program, fileIndex, openIndex, PunctuationKind::LeftBrace)) {
-		return(IsPunctuation(program, fileIndex, closeIndex, PunctuationKind::RightBrace));
-	}
-	if (IsPunctuation(program, fileIndex, openIndex, PunctuationKind::LeftBracket)) {
-		return(IsPunctuation(program, fileIndex, closeIndex, PunctuationKind::RightBracket));
-	}
-	if (IsOperator(program, fileIndex, openIndex, OperatorKind::Less)) {
-		return(IsOperator(program, fileIndex, closeIndex, OperatorKind::Greater));
-	}
-	return(false);
-}
-
 usize:FindMatching(ptr<CompilerContext>:program, usize:fileIndex, usize:openIndex) {
 	usize:count = FileTokenCount(program, fileIndex);
 	usize:depth = 0;

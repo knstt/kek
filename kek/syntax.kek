@@ -167,10 +167,6 @@ struct:CompilerContext {
 	Array<MethodDeclIndexEntry>:methodDeclIndex;
 };
 
-bool:IsOk(Status:status) {
-	return(status == Status::Ok);
-}
-
 String:TokenText(ptr<CompilerContext>:program, usize:fileIndex, usize:tokenIndex) {
 	ptr<SyntaxFile>:file = &program.tokenFiles.data[fileIndex];
 	Token:token = file.tokens[tokenIndex];
@@ -180,10 +176,6 @@ String:TokenText(ptr<CompilerContext>:program, usize:fileIndex, usize:tokenIndex
 
 bool:TokenEquals(ptr<CompilerContext>:program, usize:fileIndex, usize:tokenIndex, str:text) {
 	String:value = TokenText(program, fileIndex, tokenIndex);
-	return(value.EqualsCString(text));
-}
-
-bool:StringEquals(String:value, str:text) {
 	return(value.EqualsCString(text));
 }
 
@@ -222,14 +214,6 @@ usize:FileTokenCount(ptr<CompilerContext>:program, usize:fileIndex) {
 	return(program.tokenFiles.data[fileIndex].tokenLen);
 }
 
-Status:Write(ptr<StringBuilder>:out, str:text) {
-	return(out.WriteCString(text));
-}
-
-Status:WriteString(ptr<StringBuilder>:out, String:text) {
-	return(out.WriteString(text));
-}
-
 Status:WriteToken(ptr<CompilerContext>:program, ptr<StringBuilder>:out, usize:fileIndex, usize:tokenIndex) {
 	return(out.WriteString(TokenText(program, fileIndex, tokenIndex)));
 }
@@ -240,21 +224,6 @@ Status:CloneContextCString(ptr<CompilerContext>:program, str:text, ptr<OwnedStri
 
 Status:CloneContextString(ptr<CompilerContext>:program, String:text, ptr<OwnedString>:out) {
 	return(std::CloneString(text, program.allocator, out));
-}
-
-String:OwnedView(ptr<OwnedString>:value) {
-	return(std::OwnedStringView(value));
-}
-
-bool:OwnedEqualsCString(ptr<OwnedString>:value, str:text) {
-	String:view = std::OwnedStringView(value);
-	return(view.EqualsCString(text));
-}
-
-bool:OwnedEquals(ptr<OwnedString>:left, ptr<OwnedString>:right) {
-	String:leftView = std::OwnedStringView(left);
-	String:rightView = std::OwnedStringView(right);
-	return(leftView.Equals(rightView));
 }
 
 Status:DetachBuilder(ptr<StringBuilder>:builder, ptr<OwnedString>:out) {
@@ -271,10 +240,6 @@ Status:DetachBuilder(ptr<StringBuilder>:builder, ptr<OwnedString>:out) {
 
 Status:MakeOwnedEmpty(ptr<CompilerContext>:program, ptr<OwnedString>:out) {
 	return(CloneContextCString(program, "", out));
-}
-
-Status:WriteOwned(ptr<StringBuilder>:out, ptr<OwnedString>:text) {
-	return(out.WriteString(std::OwnedStringView(text)));
 }
 
 usize:StringLastSlash(String:path) {
