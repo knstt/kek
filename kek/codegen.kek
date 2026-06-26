@@ -23,23 +23,3 @@ Status:WriteProgram(ptr<CompilerContext>:program, ptr<StringBuilder>:out) {
 Status:GenerateC(ptr<CompilerContext>:program, ptr<StringBuilder>:out) {
 	return(WriteProgram(program, out));
 }
-
-Status:WriteGeneratedC(str:inputPath, Allocator:allocator, ptr<StringBuilder>:out) {
-	CompilerContext:program;
-	Status:status = ProgramInit(&program, allocator);
-	if (status != Status::Ok) {
-		return(status);
-	}
-	status = LoadSyntaxPackage(inputPath, &program);
-	if (status == Status::Ok) {
-		status = BuildModule(&program);
-	}
-	if (status == Status::Ok) {
-		status = CheckModule(&program);
-	}
-	if (status == Status::Ok) {
-		status = GenerateC(&program, out);
-	}
-	ProgramDestroy(&program);
-	return(status);
-}

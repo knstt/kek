@@ -1,13 +1,11 @@
 #import(kek/codegen_stmt.kek);
 
 Status:WriteSubstTypeForFunc(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, ptr<FuncUse>:funcUse, usize:fileIndex, usize:start, usize:end) {
-	TypeUse:temp;
-	FuncUseTempTypeUse(funcUse, &temp);
 	String:firstTypeToken = TokenText(program, fileIndex, start);
 	if (start < end && firstTypeToken.EqualsCString("ptr") && start + 1 < end && IsOperator(program, fileIndex, start + 1, OperatorKind::Less)) {
 		usize:genericEnd = FindMatching(program, fileIndex, start + 1);
 		OwnedString:innerKey;
-		Status:innerStatus = MakeSubstTypeKey(program, decl, &temp, fileIndex, start + 2, genericEnd, &innerKey);
+		Status:innerStatus = MakeSubstTypeKey(program, decl, &funcUse.args, fileIndex, start + 2, genericEnd, &innerKey);
 		if (innerStatus == Status::Ok) {
 			innerStatus = WriteCTypeFromKey(program, out, std::OwnedStringView(&innerKey));
 		}
@@ -18,7 +16,7 @@ Status:WriteSubstTypeForFunc(ptr<CompilerContext>:program, ptr<StringBuilder>:ou
 		return(innerStatus);
 	}
 	OwnedString:key;
-	Status:status = MakeSubstTypeKey(program, decl, &temp, fileIndex, start, end, &key);
+	Status:status = MakeSubstTypeKey(program, decl, &funcUse.args, fileIndex, start, end, &key);
 	if (status == Status::Ok) {
 		status = WriteCTypeFromKey(program, out, std::OwnedStringView(&key));
 	}

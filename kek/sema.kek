@@ -844,9 +844,6 @@ Status:AddTypeUse(ptr<CompilerContext>:program, ptr<TypeInfo>:info) {
 	ptr<TypeUse>:use = &program.typeUses.data[program.typeUses.len];
 	status = CloneContextString(program, key, &use.key);
 	if (status == Status::Ok) {
-		status = CloneContextString(program, std::OwnedStringView(&info.cType), &use.cName);
-	}
-	if (status == Status::Ok) {
 		status = CloneContextString(program, std::OwnedStringView(&info.baseName), &use.baseName);
 	}
 	if (status == Status::Ok) {
@@ -883,9 +880,6 @@ Status:AddTypeUseFromBaseArg(ptr<CompilerContext>:program, str:baseName, String:
 	ptr<TypeUse>:use = &program.typeUses.data[program.typeUses.len];
 	if (status == Status::Ok) {
 		status = CloneContextString(program, key, &use.key);
-	}
-	if (status == Status::Ok) {
-		status = CloneContextString(program, key, &use.cName);
 	}
 	if (status == Status::Ok) {
 		status = CloneContextString(program, std::StringFromCString(baseName), &use.baseName);
@@ -1344,10 +1338,6 @@ Status:CheckModule(ptr<CompilerContext>:program) {
 		status = CollectGenericFunctionUses(program);
 	}
 	return(status);
-}
-
-Status:CheckedModuleDestroy(ptr<CompilerContext>:program) {
-	return(Status::Ok);
 }
 
 Status:WriteSemanticDiagnostics(str:inputPath, Allocator:allocator, ptr<StringBuilder>:out) {

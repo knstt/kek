@@ -28,12 +28,6 @@ enum:u8:TypeKind {
 	Alias,
 };
 
-struct:SyntaxOptions {
-	bool:emitComments;
-	bool:parseAst;
-	bool:retainAst;
-};
-
 struct:SyntaxFile {
 	ptr<Token>:tokens;
 	usize:tokenLen;
@@ -59,7 +53,6 @@ struct:TokenizeJob {
 
 struct:TypeUse {
 	OwnedString:key;
-	OwnedString:cName;
 	OwnedString:baseName;
 	Array<OwnedString>:args;
 	bool:emitted;
@@ -134,27 +127,6 @@ struct:ModuleDecl {
 	bool:emitted;
 	bool:reachable;
 	bool:isTagged;
-};
-
-struct:SyntaxPackage {
-	Allocator:allocator;
-	DiagnosticBag:diagnostics;
-	FileTable:files;
-	Array<SyntaxFile>:tokenFiles;
-};
-
-struct:Module {
-	Allocator:allocator;
-	ptr<SyntaxPackage>:syntax;
-	Array<ModuleDecl>:decls;
-	Array<ModuleParam>:params;
-	Array<ModuleField>:fields;
-};
-
-struct:CheckedModule {
-	ptr<Module>:module;
-	Array<TypeUse>:typeUses;
-	Array<FuncUse>:funcUses;
 };
 
 struct:DeclNameIndexEntry {
@@ -453,7 +425,6 @@ Status:ProgramDestroy(ptr<CompilerContext>:program) {
 	}
 	for (usize:i = 0; i < program.typeUses.len; i++) {
 		std::DestroyOwnedString(&program.typeUses.data[i].key);
-		std::DestroyOwnedString(&program.typeUses.data[i].cName);
 		std::DestroyOwnedString(&program.typeUses.data[i].baseName);
 		for (usize:j = 0; j < program.typeUses.data[i].args.len; j++) {
 			std::DestroyOwnedString(&program.typeUses.data[i].args.data[j]);
@@ -655,8 +626,4 @@ Status:LoadAndTokenize(ptr<CompilerContext>:program, str:entryPath) {
 
 Status:LoadSyntaxPackage(str:entryPath, ptr<CompilerContext>:program) {
 	return(LoadAndTokenize(program, entryPath));
-}
-
-Status:SyntaxPackageDestroy(ptr<CompilerContext>:program) {
-	return(ProgramDestroy(program));
 }

@@ -540,7 +540,6 @@ struct Array__OwnedString {
 };
 struct TypeUse {
     struct OwnedString key;
-    struct OwnedString cName;
     struct OwnedString baseName;
     struct Array__OwnedString args;
     bool emitted;
@@ -792,6 +791,10 @@ struct Slice__DeferRange {
     struct DeferRange* data;
     usize len;
 };
+struct Slice__OwnedString {
+    struct OwnedString* data;
+    usize len;
+};
 struct Result__Local {
     Status status;
     struct Local value;
@@ -814,10 +817,6 @@ struct Result__MethodDeclIndexEntry {
 };
 struct Slice__MethodDeclIndexEntry {
     struct MethodDeclIndexEntry* data;
-    usize len;
-};
-struct Slice__OwnedString {
-    struct OwnedString* data;
     usize len;
 };
 struct Result__TypeInfo {
@@ -1099,15 +1098,14 @@ Status kek_codegen_expr_ApplyPostfix(struct ExprParser* parser,struct Expr* expr
 Status kek_codegen_expr_CompileUnary(struct ExprParser* parser,struct Expr* out);
 Status kek_codegen_expr_CompileBinaryOperation(struct ExprParser* parser,struct Expr* left,usize operatorIndex,struct Expr* right,struct Expr* out);
 Status kek_codegen_expr_CompileExpression(struct ExprParser* parser,u8 minPrecedence,struct Expr* out);
-Status kek_codegen_types_FuncUseTempTypeUse(struct FuncUse* funcUse,struct TypeUse* out);
 Status kek_codegen_types_WriteDeclarator(struct CompilerContext* program,struct StringBuilder* out,usize fileIndex,usize typeStart,usize typeEnd,usize nameIndex,bool isArray,usize arrayStart,usize arrayEnd);
 Status kek_codegen_types_WriteFields(struct CompilerContext* program,struct StringBuilder* out,struct ModuleDecl* decl);
 bool kek_codegen_types_GenericParamEquals(struct CompilerContext* program,struct ModuleDecl* decl,usize paramIndex,struct String name);
-Status kek_codegen_types_WriteTypeSuffixSubst(struct CompilerContext* program,struct StringBuilder* out,struct ModuleDecl* decl,struct TypeUse* use,usize fileIndex,usize start,usize end);
-Status kek_codegen_types_MakeSubstTypeKey(struct CompilerContext* program,struct ModuleDecl* decl,struct TypeUse* use,usize fileIndex,usize start,usize end,struct OwnedString* out);
-Status kek_codegen_types_MakeSubstTypeInfo(struct CompilerContext* program,struct ModuleDecl* decl,struct TypeUse* use,usize fileIndex,usize start,usize end,struct TypeInfo* info);
+Status kek_codegen_types_WriteTypeSuffixSubst(struct CompilerContext* program,struct StringBuilder* out,struct ModuleDecl* decl,struct Array__OwnedString* args,usize fileIndex,usize start,usize end);
+Status kek_codegen_types_MakeSubstTypeKey(struct CompilerContext* program,struct ModuleDecl* decl,struct Array__OwnedString* args,usize fileIndex,usize start,usize end,struct OwnedString* out);
+Status kek_codegen_types_MakeSubstTypeInfo(struct CompilerContext* program,struct ModuleDecl* decl,struct Array__OwnedString* args,usize fileIndex,usize start,usize end,struct TypeInfo* info);
 Status kek_codegen_types_MakeSubstTypeInfoForFunc(struct CompilerContext* program,struct ModuleDecl* decl,struct FuncUse* funcUse,usize fileIndex,usize start,usize end,struct OwnedString* outKey,struct OwnedString* outCType,bool* outIsPointer);
-Status kek_codegen_types_WriteDeclaratorSubst(struct CompilerContext* program,struct StringBuilder* out,struct ModuleDecl* decl,struct TypeUse* use,usize fileIndex,usize typeStart,usize typeEnd,usize nameIndex,bool isArray,usize arrayStart,usize arrayEnd);
+Status kek_codegen_types_WriteDeclaratorSubst(struct CompilerContext* program,struct StringBuilder* out,struct ModuleDecl* decl,struct Array__OwnedString* args,usize fileIndex,usize typeStart,usize typeEnd,usize nameIndex,bool isArray,usize arrayStart,usize arrayEnd);
 Status kek_codegen_types_WriteFieldsSubst(struct CompilerContext* program,struct StringBuilder* out,struct ModuleDecl* decl,struct TypeUse* use);
 Status kek_codegen_types_WriteStructDecl(struct CompilerContext* program,struct StringBuilder* out,struct ModuleDecl* decl,struct String specializedName);
 Status kek_codegen_types_WriteUnionDecl(struct CompilerContext* program,struct StringBuilder* out,struct ModuleDecl* decl);
@@ -1328,6 +1326,11 @@ Status Array__DeferRange_Reserve(struct Array__DeferRange* this,usize additional
 Status Array__DeferRange_Push(struct Array__DeferRange* this,struct DeferRange value);
 struct Result__DeferRange Array__DeferRange_Pop(struct Array__DeferRange* this);
 struct Slice__DeferRange Array__DeferRange_Slice(struct Array__DeferRange* this);
+Status Array__OwnedString_Destroy(struct Array__OwnedString* this);
+Status Array__OwnedString_Reserve(struct Array__OwnedString* this,usize additional);
+Status Array__OwnedString_Push(struct Array__OwnedString* this,struct OwnedString value);
+struct Result__OwnedString Array__OwnedString_Pop(struct Array__OwnedString* this);
+struct Slice__OwnedString Array__OwnedString_Slice(struct Array__OwnedString* this);
 Status Array__Local_Destroy(struct Array__Local* this);
 Status Array__Local_Reserve(struct Array__Local* this,usize additional);
 Status Array__Local_Push(struct Array__Local* this,struct Local value);
@@ -1343,11 +1346,6 @@ Status Array__MethodDeclIndexEntry_Reserve(struct Array__MethodDeclIndexEntry* t
 Status Array__MethodDeclIndexEntry_Push(struct Array__MethodDeclIndexEntry* this,struct MethodDeclIndexEntry value);
 struct Result__MethodDeclIndexEntry Array__MethodDeclIndexEntry_Pop(struct Array__MethodDeclIndexEntry* this);
 struct Slice__MethodDeclIndexEntry Array__MethodDeclIndexEntry_Slice(struct Array__MethodDeclIndexEntry* this);
-Status Array__OwnedString_Destroy(struct Array__OwnedString* this);
-Status Array__OwnedString_Reserve(struct Array__OwnedString* this,usize additional);
-Status Array__OwnedString_Push(struct Array__OwnedString* this,struct OwnedString value);
-struct Result__OwnedString Array__OwnedString_Pop(struct Array__OwnedString* this);
-struct Slice__OwnedString Array__OwnedString_Slice(struct Array__OwnedString* this);
 Status Array__TypeInfo_Destroy(struct Array__TypeInfo* this);
 Status Array__TypeInfo_Reserve(struct Array__TypeInfo* this,usize additional);
 Status Array__TypeInfo_Push(struct Array__TypeInfo* this,struct TypeInfo value);
@@ -1833,6 +1831,49 @@ struct Slice__DeferRange Array__DeferRange_Slice(struct Array__DeferRange* this)
     out.len=this->len;
     return out;
 }
+Status Array__OwnedString_Destroy(struct Array__OwnedString* this) {
+    if(this->data!=0){
+        kek_std_free(this->data);
+    }
+    this->data=0;
+    this->len=0;
+    this->cap=0;
+    return Status_Ok;
+}
+Status Array__OwnedString_Reserve(struct Array__OwnedString* this,usize additional) {
+    usize needed=this->len+additional;
+    if(needed<=this->cap){return Status_Ok;}
+    usize newCap=this->cap;
+    if(newCap==0){newCap=8;}
+    while(newCap<needed){newCap=newCap*2;}
+    struct OwnedString* newData=(struct OwnedString*)kek_std_resize(
+        this->data,newCap*sizeof(struct OwnedString));
+    if(newData==0){return Status_NoMemory;}
+    this->data=newData;
+    this->cap=newCap;
+    return Status_Ok;
+}
+Status Array__OwnedString_Push(struct Array__OwnedString* this,struct OwnedString value) {
+    Status status=Array__OwnedString_Reserve(this,1);
+    if(status!=Status_Ok){return status;}
+    this->data[this->len]=value;
+    this->len+=1;
+    return Status_Ok;
+}
+struct Result__OwnedString Array__OwnedString_Pop(struct Array__OwnedString* this) {
+    struct Result__OwnedString result={0};
+    if(this->len==0){result.status=Status_End;return result;}
+    this->len-=1;
+    result.status=Status_Ok;
+    result.value=this->data[this->len];
+    return result;
+}
+struct Slice__OwnedString Array__OwnedString_Slice(struct Array__OwnedString* this) {
+    struct Slice__OwnedString out={0};
+    out.data=this->data;
+    out.len=this->len;
+    return out;
+}
 Status Array__Local_Destroy(struct Array__Local* this) {
     if(this->data!=0){
         kek_std_free(this->data);
@@ -1958,49 +1999,6 @@ struct Result__MethodDeclIndexEntry Array__MethodDeclIndexEntry_Pop(struct Array
 }
 struct Slice__MethodDeclIndexEntry Array__MethodDeclIndexEntry_Slice(struct Array__MethodDeclIndexEntry* this) {
     struct Slice__MethodDeclIndexEntry out={0};
-    out.data=this->data;
-    out.len=this->len;
-    return out;
-}
-Status Array__OwnedString_Destroy(struct Array__OwnedString* this) {
-    if(this->data!=0){
-        kek_std_free(this->data);
-    }
-    this->data=0;
-    this->len=0;
-    this->cap=0;
-    return Status_Ok;
-}
-Status Array__OwnedString_Reserve(struct Array__OwnedString* this,usize additional) {
-    usize needed=this->len+additional;
-    if(needed<=this->cap){return Status_Ok;}
-    usize newCap=this->cap;
-    if(newCap==0){newCap=8;}
-    while(newCap<needed){newCap=newCap*2;}
-    struct OwnedString* newData=(struct OwnedString*)kek_std_resize(
-        this->data,newCap*sizeof(struct OwnedString));
-    if(newData==0){return Status_NoMemory;}
-    this->data=newData;
-    this->cap=newCap;
-    return Status_Ok;
-}
-Status Array__OwnedString_Push(struct Array__OwnedString* this,struct OwnedString value) {
-    Status status=Array__OwnedString_Reserve(this,1);
-    if(status!=Status_Ok){return status;}
-    this->data[this->len]=value;
-    this->len+=1;
-    return Status_Ok;
-}
-struct Result__OwnedString Array__OwnedString_Pop(struct Array__OwnedString* this) {
-    struct Result__OwnedString result={0};
-    if(this->len==0){result.status=Status_End;return result;}
-    this->len-=1;
-    result.status=Status_Ok;
-    result.value=this->data[this->len];
-    return result;
-}
-struct Slice__OwnedString Array__OwnedString_Slice(struct Array__OwnedString* this) {
-    struct Slice__OwnedString out={0};
     out.data=this->data;
     out.len=this->len;
     return out;
@@ -4396,13 +4394,11 @@ Status kek_codegen_GenerateC(struct CompilerContext* program,struct StringBuilde
     return (kek_codegen_WriteProgram(program,out));
 }
 Status kek_codegen_funcs_WriteSubstTypeForFunc(struct CompilerContext* program,struct StringBuilder* out,struct ModuleDecl* decl,struct FuncUse* funcUse,usize fileIndex,usize start,usize end) {
-    struct TypeUse temp={0};
-    kek_codegen_types_FuncUseTempTypeUse(funcUse,&temp);
     struct String firstTypeToken=kek_syntax_TokenText(program,fileIndex,start);
     if (start<end&&String_EqualsCString(&firstTypeToken,"ptr")&&start+1<end&&kek_syntax_IsOperator(program,fileIndex,start+1,OperatorKind_Less)) {
         usize genericEnd=kek_module_FindMatching(program,fileIndex,start+1);
         struct OwnedString innerKey={0};
-        Status innerStatus=kek_codegen_types_MakeSubstTypeKey(program,decl,&temp,fileIndex,start+2,genericEnd,&innerKey);
+        Status innerStatus=kek_codegen_types_MakeSubstTypeKey(program,decl,&funcUse->args,fileIndex,start+2,genericEnd,&innerKey);
         if (innerStatus==Status_Ok) {
             innerStatus=kek_sema_WriteCTypeFromKey(program,out,std_string_OwnedStringView(&innerKey));
         }
@@ -4413,7 +4409,7 @@ Status kek_codegen_funcs_WriteSubstTypeForFunc(struct CompilerContext* program,s
         return (innerStatus);
     }
     struct OwnedString key={0};
-    Status status=kek_codegen_types_MakeSubstTypeKey(program,decl,&temp,fileIndex,start,end,&key);
+    Status status=kek_codegen_types_MakeSubstTypeKey(program,decl,&funcUse->args,fileIndex,start,end,&key);
     if (status==Status_Ok) {
         status=kek_sema_WriteCTypeFromKey(program,out,std_string_OwnedStringView(&key));
     }
@@ -6997,7 +6993,7 @@ Status kek_codegen_expr_ModuleFieldType(struct CompilerContext* program,struct S
             }
             kek_sema_TypeInfoDestroy(outInfo);
             if (use!=0&&decl!=0) {
-                return (kek_codegen_types_MakeSubstTypeInfo(program,decl,use,field->fileIndex,field->typeStart,field->typeEnd,outInfo));
+                return (kek_codegen_types_MakeSubstTypeInfo(program,decl,&use->args,field->fileIndex,field->typeStart,field->typeEnd,outInfo));
             }
             return (kek_sema_RenderTypeInfo(program,field->fileIndex,field->typeStart,field->typeEnd,outInfo));
         }
@@ -7954,14 +7950,6 @@ Status kek_codegen_expr_CompileExpression(struct ExprParser* parser,u8 minPreced
     out[0]=left;
     return (Status_Ok);
 }
-Status kek_codegen_types_FuncUseTempTypeUse(struct FuncUse* funcUse,struct TypeUse* out) {
-    out->key=funcUse->key;
-    out->cName=funcUse->cName;
-    out->baseName=funcUse->key;
-    out->args=funcUse->args;
-    out->emitted=0;
-    return (Status_Ok);
-}
 Status kek_codegen_types_WriteDeclarator(struct CompilerContext* program,struct StringBuilder* out,usize fileIndex,usize typeStart,usize typeEnd,usize nameIndex,bool isArray,usize arrayStart,usize arrayEnd) {
     struct TypeInfo info={0};
     Status status=kek_sema_RenderTypeInfo(program,fileIndex,typeStart,typeEnd,&info);
@@ -8061,15 +8049,15 @@ bool kek_codegen_types_GenericParamEquals(struct CompilerContext* program,struct
     }
     return (0);
 }
-Status kek_codegen_types_WriteTypeSuffixSubst(struct CompilerContext* program,struct StringBuilder* out,struct ModuleDecl* decl,struct TypeUse* use,usize fileIndex,usize start,usize end) {
+Status kek_codegen_types_WriteTypeSuffixSubst(struct CompilerContext* program,struct StringBuilder* out,struct ModuleDecl* decl,struct Array__OwnedString* args,usize fileIndex,usize start,usize end) {
     if (start>=end) {
         return (Status_Ok);
     }
     struct String first=kek_syntax_TokenText(program,fileIndex,start);
     if (end==start+1) {
-        for (usize i=0;i<use->args.len;i++) {
+        for (usize i=0;i<args->len;i++) {
             if (kek_codegen_types_GenericParamEquals(program,decl,i,first)) {
-                return (StringBuilder_WriteString(out,std_string_OwnedStringView(&use->args.data[i])));
+                return (StringBuilder_WriteString(out,std_string_OwnedStringView(&args->data[i])));
             }
         }
         return (kek_sema_WriteSanitized(out,first));
@@ -8084,7 +8072,7 @@ Status kek_codegen_types_WriteTypeSuffixSubst(struct CompilerContext* program,st
                 status=StringBuilder_WriteCString(out,"__");
             }
             if (status==Status_Ok) {
-                status=kek_codegen_types_WriteTypeSuffixSubst(program,out,decl,use,fileIndex,argStart,argEnd);
+                status=kek_codegen_types_WriteTypeSuffixSubst(program,out,decl,args,fileIndex,argStart,argEnd);
             }
             if (status!=Status_Ok||argEnd>=genericEnd) {
                 break;
@@ -8095,16 +8083,16 @@ Status kek_codegen_types_WriteTypeSuffixSubst(struct CompilerContext* program,st
     }
     return (kek_sema_WriteTypeSuffixFromRange(program,out,fileIndex,start,end));
 }
-Status kek_codegen_types_MakeSubstTypeKey(struct CompilerContext* program,struct ModuleDecl* decl,struct TypeUse* use,usize fileIndex,usize start,usize end,struct OwnedString* out) {
+Status kek_codegen_types_MakeSubstTypeKey(struct CompilerContext* program,struct ModuleDecl* decl,struct Array__OwnedString* args,usize fileIndex,usize start,usize end,struct OwnedString* out) {
     struct StringBuilder builder=std_string_StringBuilderNew(program->allocator);
-    Status status=kek_codegen_types_WriteTypeSuffixSubst(program,&builder,decl,use,fileIndex,start,end);
+    Status status=kek_codegen_types_WriteTypeSuffixSubst(program,&builder,decl,args,fileIndex,start,end);
     if (status==Status_Ok) {
         status=kek_syntax_DetachBuilder(&builder,out);
     }
     StringBuilder_Destroy(&builder);
     return (status);
 }
-Status kek_codegen_types_MakeSubstTypeInfo(struct CompilerContext* program,struct ModuleDecl* decl,struct TypeUse* use,usize fileIndex,usize start,usize end,struct TypeInfo* info) {
+Status kek_codegen_types_MakeSubstTypeInfo(struct CompilerContext* program,struct ModuleDecl* decl,struct Array__OwnedString* args,usize fileIndex,usize start,usize end,struct TypeInfo* info) {
     Status status=kek_sema_TypeInfoInitEmpty(program,info);
     if (status!=Status_Ok) {
         return (status);
@@ -8115,7 +8103,7 @@ Status kek_codegen_types_MakeSubstTypeInfo(struct CompilerContext* program,struc
         usize genericEnd=kek_module_FindMatching(program,fileIndex,start+1);
         struct OwnedString innerKey={0};
         innerKey.data=0;
-        status=kek_codegen_types_MakeSubstTypeKey(program,decl,use,fileIndex,start+2,genericEnd,&innerKey);
+        status=kek_codegen_types_MakeSubstTypeKey(program,decl,args,fileIndex,start+2,genericEnd,&innerKey);
         struct StringBuilder builder=std_string_StringBuilderNew(program->allocator);
         if (status==Status_Ok) {
             status=StringBuilder_WriteString(&builder,std_string_OwnedStringView(&innerKey));
@@ -8131,7 +8119,7 @@ Status kek_codegen_types_MakeSubstTypeInfo(struct CompilerContext* program,struc
             std_string_DestroyOwnedString(&innerKey);
         }
     } else {
-        status=kek_codegen_types_MakeSubstTypeKey(program,decl,use,fileIndex,start,end,&key);
+        status=kek_codegen_types_MakeSubstTypeKey(program,decl,args,fileIndex,start,end,&key);
     }
     if (status==Status_Ok) {
         status=kek_sema_ReplaceOwned(&info->key,key);
@@ -8151,10 +8139,8 @@ Status kek_codegen_types_MakeSubstTypeInfo(struct CompilerContext* program,struc
     return (status);
 }
 Status kek_codegen_types_MakeSubstTypeInfoForFunc(struct CompilerContext* program,struct ModuleDecl* decl,struct FuncUse* funcUse,usize fileIndex,usize start,usize end,struct OwnedString* outKey,struct OwnedString* outCType,bool* outIsPointer) {
-    struct TypeUse temp={0};
-    kek_codegen_types_FuncUseTempTypeUse(funcUse,&temp);
     struct TypeInfo info={0};
-    Status status=kek_codegen_types_MakeSubstTypeInfo(program,decl,&temp,fileIndex,start,end,&info);
+    Status status=kek_codegen_types_MakeSubstTypeInfo(program,decl,&funcUse->args,fileIndex,start,end,&info);
     if (status==Status_Ok) {
         outKey[0]=info.key;
         outCType[0]=info.cType;
@@ -8165,14 +8151,14 @@ Status kek_codegen_types_MakeSubstTypeInfoForFunc(struct CompilerContext* progra
     }
     return (status);
 }
-Status kek_codegen_types_WriteDeclaratorSubst(struct CompilerContext* program,struct StringBuilder* out,struct ModuleDecl* decl,struct TypeUse* use,usize fileIndex,usize typeStart,usize typeEnd,usize nameIndex,bool isArray,usize arrayStart,usize arrayEnd) {
+Status kek_codegen_types_WriteDeclaratorSubst(struct CompilerContext* program,struct StringBuilder* out,struct ModuleDecl* decl,struct Array__OwnedString* args,usize fileIndex,usize typeStart,usize typeEnd,usize nameIndex,bool isArray,usize arrayStart,usize arrayEnd) {
     struct String first=kek_syntax_TokenText(program,fileIndex,typeStart);
     struct OwnedString key={0};
     Status status=Status_Ok;
     if (String_EqualsCString(&first,"ptr")&&typeStart+1<typeEnd&&kek_syntax_IsOperator(program,fileIndex,typeStart+1,OperatorKind_Less)) {
         usize genericEnd=kek_module_FindMatching(program,fileIndex,typeStart+1);
         struct OwnedString innerKey={0};
-        status=kek_codegen_types_MakeSubstTypeKey(program,decl,use,fileIndex,typeStart+2,genericEnd,&innerKey);
+        status=kek_codegen_types_MakeSubstTypeKey(program,decl,args,fileIndex,typeStart+2,genericEnd,&innerKey);
         struct StringBuilder ct=std_string_StringBuilderNew(program->allocator);
         if (status==Status_Ok) {
             status=kek_sema_WriteCTypeFromKey(program,&ct,std_string_OwnedStringView(&innerKey));
@@ -8186,7 +8172,7 @@ Status kek_codegen_types_WriteDeclaratorSubst(struct CompilerContext* program,st
         StringBuilder_Destroy(&ct);
         std_string_DestroyOwnedString(&innerKey);
     } else {
-        status=kek_codegen_types_MakeSubstTypeKey(program,decl,use,fileIndex,typeStart,typeEnd,&key);
+        status=kek_codegen_types_MakeSubstTypeKey(program,decl,args,fileIndex,typeStart,typeEnd,&key);
         if (status==Status_Ok) {
             status=kek_sema_WriteCTypeFromKey(program,out,std_string_OwnedStringView(&key));
         }
@@ -8231,7 +8217,7 @@ Status kek_codegen_types_WriteFieldsSubst(struct CompilerContext* program,struct
             status=w.status;
         } else {
             if (status==Status_Ok) {
-                status=kek_codegen_types_WriteDeclaratorSubst(program,out,decl,use,field->fileIndex,field->typeStart,field->typeEnd,field->nameIndex,field->isArray,field->arrayStart,field->arrayEnd);
+                status=kek_codegen_types_WriteDeclaratorSubst(program,out,decl,&use->args,field->fileIndex,field->typeStart,field->typeEnd,field->nameIndex,field->isArray,field->arrayStart,field->arrayEnd);
             }
         }
         w.status=status;
@@ -9663,9 +9649,6 @@ Status kek_sema_AddTypeUse(struct CompilerContext* program,struct TypeInfo* info
     struct TypeUse* use=&program->typeUses.data[program->typeUses.len];
     status=kek_syntax_CloneContextString(program,key,&use->key);
     if (status==Status_Ok) {
-        status=kek_syntax_CloneContextString(program,std_string_OwnedStringView(&info->cType),&use->cName);
-    }
-    if (status==Status_Ok) {
         status=kek_syntax_CloneContextString(program,std_string_OwnedStringView(&info->baseName),&use->baseName);
     }
     if (status==Status_Ok) {
@@ -9701,9 +9684,6 @@ Status kek_sema_AddTypeUseFromBaseArg(struct CompilerContext* program,str baseNa
     struct TypeUse* use=&program->typeUses.data[program->typeUses.len];
     if (status==Status_Ok) {
         status=kek_syntax_CloneContextString(program,key,&use->key);
-    }
-    if (status==Status_Ok) {
-        status=kek_syntax_CloneContextString(program,key,&use->cName);
     }
     if (status==Status_Ok) {
         status=kek_syntax_CloneContextString(program,std_string_StringFromCString(baseName),&use->baseName);
@@ -11214,7 +11194,6 @@ Status kek_syntax_ProgramDestroy(struct CompilerContext* program) {
     }
     for (usize i=0;i<program->typeUses.len;i++) {
         std_string_DestroyOwnedString(&program->typeUses.data[i].key);
-        std_string_DestroyOwnedString(&program->typeUses.data[i].cName);
         std_string_DestroyOwnedString(&program->typeUses.data[i].baseName);
         for (usize j=0;j<program->typeUses.data[i].args.len;j++) {
             std_string_DestroyOwnedString(&program->typeUses.data[i].args.data[j]);

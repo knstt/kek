@@ -1,14 +1,5 @@
 #import(kek/codegen_emit.kek);
 
-Status:FuncUseTempTypeUse(ptr<FuncUse>:funcUse, ptr<TypeUse>:out) {
-	out.key = funcUse.key;
-	out.cName = funcUse.cName;
-	out.baseName = funcUse.key;
-	out.args = funcUse.args;
-	out.emitted = false;
-	return(Status::Ok);
-}
-
 Status:WriteDeclarator(ptr<CompilerContext>:program, ptr<StringBuilder>:out, usize:fileIndex, usize:typeStart, usize:typeEnd, usize:nameIndex, bool:isArray, usize:arrayStart, usize:arrayEnd) {
 	TypeInfo:info;
 	Status:status = RenderTypeInfo(program, fileIndex, typeStart, typeEnd, &info);
@@ -112,15 +103,15 @@ bool:GenericParamEquals(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, usiz
 	return(false);
 }
 
-Status:WriteTypeSuffixSubst(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, ptr<TypeUse>:use, usize:fileIndex, usize:start, usize:end) {
+Status:WriteTypeSuffixSubst(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, ptr<Array<OwnedString>>:args, usize:fileIndex, usize:start, usize:end) {
 	if (start >= end) {
 		return(Status::Ok);
 	}
 	String:first = TokenText(program, fileIndex, start);
 	if (end == start + 1) {
-		for (usize:i = 0; i < use.args.len; i++) {
+		for (usize:i = 0; i < args.len; i++) {
 			if (GenericParamEquals(program, decl, i, first)) {
-				return(out.WriteString(std::OwnedStringView(&use.args.data[i])));
+				return(out.WriteString(std::OwnedStringView(&args.data[i])));
 			}
 		}
 		return(WriteSanitized(out, first));
@@ -135,7 +126,7 @@ Status:WriteTypeSuffixSubst(ptr<CompilerContext>:program, ptr<StringBuilder>:out
 				status = out.WriteCString("__");
 			}
 			if (status == Status::Ok) {
-				status = WriteTypeSuffixSubst(program, out, decl, use, fileIndex, argStart, argEnd);
+				status = WriteTypeSuffixSubst(program, out, decl, args, fileIndex, argStart, argEnd);
 			}
 			if (status != Status::Ok || argEnd >= genericEnd) {
 				break;
@@ -147,9 +138,9 @@ Status:WriteTypeSuffixSubst(ptr<CompilerContext>:program, ptr<StringBuilder>:out
 	return(WriteTypeSuffixFromRange(program, out, fileIndex, start, end));
 }
 
-Status:MakeSubstTypeKey(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, ptr<TypeUse>:use, usize:fileIndex, usize:start, usize:end, ptr<OwnedString>:out) {
+Status:MakeSubstTypeKey(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, ptr<Array<OwnedString>>:args, usize:fileIndex, usize:start, usize:end, ptr<OwnedString>:out) {
 	StringBuilder:builder = std::StringBuilderNew(program.allocator);
-	Status:status = WriteTypeSuffixSubst(program, &builder, decl, use, fileIndex, start, end);
+	Status:status = WriteTypeSuffixSubst(program, &builder, decl, args, fileIndex, start, end);
 	if (status == Status::Ok) {
 		status = DetachBuilder(&builder, out);
 	}
@@ -157,7 +148,7 @@ Status:MakeSubstTypeKey(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, ptr<
 	return(status);
 }
 
-Status:MakeSubstTypeInfo(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, ptr<TypeUse>:use, usize:fileIndex, usize:start, usize:end, ptr<TypeInfo>:info) {
+Status:MakeSubstTypeInfo(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, ptr<Array<OwnedString>>:args, usize:fileIndex, usize:start, usize:end, ptr<TypeInfo>:info) {
 	Status:status = TypeInfoInitEmpty(program, info);
 	if (status != Status::Ok) {
 		return(status);
@@ -168,7 +159,7 @@ Status:MakeSubstTypeInfo(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, ptr
 		usize:genericEnd = FindMatching(program, fileIndex, start + 1);
 		OwnedString:innerKey;
 		innerKey.data = 0;
-		status = MakeSubstTypeKey(program, decl, use, fileIndex, start + 2, genericEnd, &innerKey);
+		status = MakeSubstTypeKey(program, decl, args, fileIndex, start + 2, genericEnd, &innerKey);
 		StringBuilder:builder = std::StringBuilderNew(program.allocator);
 		if (status == Status::Ok) {
 			status = builder.WriteString(std::OwnedStringView(&innerKey));
@@ -184,7 +175,7 @@ Status:MakeSubstTypeInfo(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, ptr
 			std::DestroyOwnedString(&innerKey);
 		}
 	} else {
-		status = MakeSubstTypeKey(program, decl, use, fileIndex, start, end, &key);
+		status = MakeSubstTypeKey(program, decl, args, fileIndex, start, end, &key);
 	}
 	if (status == Status::Ok) {
 		status = ReplaceOwned(&info.key, key);
@@ -205,10 +196,8 @@ Status:MakeSubstTypeInfo(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, ptr
 }
 
 Status:MakeSubstTypeInfoForFunc(ptr<CompilerContext>:program, ptr<ModuleDecl>:decl, ptr<FuncUse>:funcUse, usize:fileIndex, usize:start, usize:end, ptr<OwnedString>:outKey, ptr<OwnedString>:outCType, ptr<bool>:outIsPointer) {
-	TypeUse:temp;
-	FuncUseTempTypeUse(funcUse, &temp);
 	TypeInfo:info;
-	Status:status = MakeSubstTypeInfo(program, decl, &temp, fileIndex, start, end, &info);
+	Status:status = MakeSubstTypeInfo(program, decl, &funcUse.args, fileIndex, start, end, &info);
 	if (status == Status::Ok) {
 		outKey[0] = info.key;
 		outCType[0] = info.cType;
@@ -220,14 +209,14 @@ Status:MakeSubstTypeInfoForFunc(ptr<CompilerContext>:program, ptr<ModuleDecl>:de
 	return(status);
 }
 
-Status:WriteDeclaratorSubst(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, ptr<TypeUse>:use, usize:fileIndex, usize:typeStart, usize:typeEnd, usize:nameIndex, bool:isArray, usize:arrayStart, usize:arrayEnd) {
+Status:WriteDeclaratorSubst(ptr<CompilerContext>:program, ptr<StringBuilder>:out, ptr<ModuleDecl>:decl, ptr<Array<OwnedString>>:args, usize:fileIndex, usize:typeStart, usize:typeEnd, usize:nameIndex, bool:isArray, usize:arrayStart, usize:arrayEnd) {
 	String:first = TokenText(program, fileIndex, typeStart);
 	OwnedString:key;
 	Status:status = Status::Ok;
 	if (first.EqualsCString("ptr") && typeStart + 1 < typeEnd && IsOperator(program, fileIndex, typeStart + 1, OperatorKind::Less)) {
 		usize:genericEnd = FindMatching(program, fileIndex, typeStart + 1);
 		OwnedString:innerKey;
-		status = MakeSubstTypeKey(program, decl, use, fileIndex, typeStart + 2, genericEnd, &innerKey);
+		status = MakeSubstTypeKey(program, decl, args, fileIndex, typeStart + 2, genericEnd, &innerKey);
 		StringBuilder:ct = std::StringBuilderNew(program.allocator);
 		if (status == Status::Ok) {
 			status = WriteCTypeFromKey(program, &ct, std::OwnedStringView(&innerKey));
@@ -241,7 +230,7 @@ Status:WriteDeclaratorSubst(ptr<CompilerContext>:program, ptr<StringBuilder>:out
 		ct.Destroy();
 		std::DestroyOwnedString(&innerKey);
 	} else {
-		status = MakeSubstTypeKey(program, decl, use, fileIndex, typeStart, typeEnd, &key);
+		status = MakeSubstTypeKey(program, decl, args, fileIndex, typeStart, typeEnd, &key);
 		if (status == Status::Ok) {
 			status = WriteCTypeFromKey(program, out, std::OwnedStringView(&key));
 		}
@@ -287,7 +276,7 @@ Status:WriteFieldsSubst(ptr<CompilerContext>:program, ptr<StringBuilder>:out, pt
 			status = w.status;
 		} else {
 			if (status == Status::Ok) {
-				status = WriteDeclaratorSubst(program, out, decl, use, field.fileIndex, field.typeStart, field.typeEnd, field.nameIndex, field.isArray, field.arrayStart, field.arrayEnd);
+				status = WriteDeclaratorSubst(program, out, decl, &use.args, field.fileIndex, field.typeStart, field.typeEnd, field.nameIndex, field.isArray, field.arrayStart, field.arrayEnd);
 			}
 		}
 		w.status = status;

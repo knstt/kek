@@ -346,7 +346,7 @@ Status:ModuleFieldType(ptr<CompilerContext>:program, String:typeKey, String:fiel
 			}
 			TypeInfoDestroy(outInfo);
 			if (use != 0 && decl != 0) {
-				return(MakeSubstTypeInfo(program, decl, use, field.fileIndex, field.typeStart, field.typeEnd, outInfo));
+				return(MakeSubstTypeInfo(program, decl, &use.args, field.fileIndex, field.typeStart, field.typeEnd, outInfo));
 			}
 			return(RenderTypeInfo(program, field.fileIndex, field.typeStart, field.typeEnd, outInfo));
 		}
