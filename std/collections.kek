@@ -1,6 +1,0 @@
-#import(std/array.kek);
-#import(std/list.kek);
-
-// Re-export placeholder for the bootstrap package layout.
-// Importing std/lib.kek loads all std modules today; this file marks the intended
-// collections aggregation point for Array and future map/set containers.
