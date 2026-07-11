@@ -1,0 +1,368 @@
+// ============================================================================
+// Example: E-Commerce Shopping System
+// ============================================================================
+// This example demonstrates a reactive state machine for an e-commerce
+// platform with products, shopping cart, and async order processing.
+//
+// Key features:
+// - Pure functions for data transformation (product lookup, pricing)
+// - State objects for cart, inventory, and orders
+// - Explicit transitions for state changes
+// - Reactive hooks for cascading updates
+// - I/O state for async order processing
+// ============================================================================
+
+// ============================================================================
+// Data Types (Pure, Immutable)
+// ============================================================================
+
+struct Product {
+  id: i32,
+  name: String,
+  price: f64,
+  stock: i32
+}
+
+struct CartItem {
+  product_id: i32,
+  quantity: i32,
+  unit_price: f64
+}
+
+// ============================================================================
+// Pure Functions (Data Transformation)
+// ============================================================================
+
+// Calculate the total price of a cart item
+fn item_total(item: CartItem) -> f64 {
+  return item.unit_price * item.quantity as f64
+}
+
+// Calculate cart subtotal
+fn calculate_subtotal(items: Vec<CartItem>) -> f64 {
+  let mut total = 0.0
+  for item in items {
+    total = total + item_total(item)
+  }
+  return total
+}
+
+// Apply discount
+fn apply_discount(subtotal: f64, discount_percent: i32) -> f64 {
+  assert!(discount_percent >= 0 && discount_percent <= 100)
+  return subtotal * (1.0 - discount_percent as f64 / 100.0)
+}
+
+// Find product by ID
+fn find_product(products: Vec<Product>, product_id: i32) -> Option<Product> {
+  for product in products {
+    if product.id == product_id {
+      return Some(product)
+    }
+  }
+  return None
+}
+
+// ============================================================================
+// State Objects
+// ============================================================================
+
+state Inventory {
+  products: Vec<Product>,
+  
+  default {
+    products: []
+  }
+  
+  verify {
+    products.len() <= 10000  // Max 10k products
+  }
+}
+
+state ShoppingCart {
+  user_id: i64,
+  items: Vec<CartItem>,
+  subtotal: f64,
+  discount_percent: i32,
+  final_total: f64,
+  
+  default {
+    user_id: 0,
+    items: [],
+    subtotal: 0.0,
+    discount_percent: 0,
+    final_total: 0.0
+  }
+  
+  verify {
+    user_id > 0,
+    items.len() <= 1000,      // Max 1000 items in cart
+    subtotal >= 0.0,
+    discount_percent >= 0 && discount_percent <= 100,
+    final_total >= 0.0,
+    final_total <= subtotal,  // Final must be <= subtotal
+    final_total == apply_discount(subtotal, discount_percent)  // Derived
+  }
+}
+
+state Order {
+  order_id: i64,
+  user_id: i64,
+  items: Vec<CartItem>,
+  total: f64,
+  status: Pending | Processing | Shipped | Delivered,
+  created_at: String,
+  
+  default {
+    order_id: 0,
+    user_id: 0,
+    items: [],
+    total: 0.0,
+    status: Pending,
+    created_at: ""
+  }
+  
+  verify {
+    order_id > 0,
+    user_id > 0,
+    items.len() > 0,          // Must have at least one item
+    total > 0.0,
+    total <= 1000000.0        // Max order value
+  }
+}
+
+state OrderProcessing {
+  order_id: i64,
+  status: Pending | Processing | Completed | Failed,
+  result: String,
+  error: Error?
+  
+  default {
+    order_id: 0,
+    status: Pending,
+    result: "",
+    error: null
+  }
+  
+  verify {
+    order_id > 0,
+    (status == Completed) => result.len() > 0
+  }
+}
+
+// ============================================================================
+// Transitions
+// ============================================================================
+
+// Add an item to the cart
+transition AddToCart(cart: ShoppingCart, item: CartItem) -> ShoppingCart {
+  let new_items = cart.items + [item]
+  let new_subtotal = calculate_subtotal(new_items)
+  let new_final_total = apply_discount(new_subtotal, cart.discount_percent)
+  
+  let working = ShoppingCart {
+    user_id: cart.user_id,
+    items: new_items,
+    subtotal: new_subtotal,
+    discount_percent: cart.discount_percent,
+    final_total: new_final_total
+  }
+  
+  return working  // Auto-verified
+}
+
+// Remove an item from cart
+transition RemoveFromCart(cart: ShoppingCart, product_id: i32) -> ShoppingCart {
+  let new_items = []
+  for item in cart.items {
+    if item.product_id != product_id {
+      new_items = new_items + [item]
+    }
+  }
+  
+  let new_subtotal = calculate_subtotal(new_items)
+  let new_final_total = apply_discount(new_subtotal, cart.discount_percent)
+  
+  let working = ShoppingCart {
+    user_id: cart.user_id,
+    items: new_items,
+    subtotal: new_subtotal,
+    discount_percent: cart.discount_percent,
+    final_total: new_final_total
+  }
+  
+  return working
+}
+
+// Apply discount code
+transition ApplyDiscount(cart: ShoppingCart, discount: i32) -> ShoppingCart {
+  let new_final_total = apply_discount(cart.subtotal, discount)
+  
+  let working = ShoppingCart {
+    user_id: cart.user_id,
+    items: cart.items,
+    subtotal: cart.subtotal,
+    discount_percent: discount,
+    final_total: new_final_total
+  }
+  
+  return working
+}
+
+// Checkout: convert cart to order
+transition Checkout(cart: ShoppingCart, order_id: i64) -> Order {
+  let working = Order {
+    order_id: order_id,
+    user_id: cart.user_id,
+    items: cart.items,
+    total: cart.final_total,
+    status: Pending,
+    created_at: "2026-07-09"
+  }
+  
+  return working
+}
+
+// Process order (async via I/O state)
+transition ProcessOrder(order: Order) -> OrderProcessing {
+  let working = OrderProcessing {
+    order_id: order.order_id,
+    status: Processing,
+    result: "",
+    error: null
+  }
+  
+  return working
+}
+
+// Mark order as completed (triggered by hook when I/O finishes)
+transition CompleteOrder(order: Order) -> Order {
+  let working = Order {
+    order_id: order.order_id,
+    user_id: order.user_id,
+    items: order.items,
+    total: order.total,
+    status: Shipped,
+    created_at: order.created_at
+  }
+  
+  return working
+}
+
+// Clear cart after order
+transition ClearCart(cart: ShoppingCart) -> ShoppingCart {
+  let working = ShoppingCart {
+    user_id: cart.user_id,
+    items: [],
+    subtotal: 0.0,
+    discount_percent: 0,
+    final_total: 0.0
+  }
+  
+  return working
+}
+
+// ============================================================================
+// Reactive Hooks
+// ============================================================================
+
+// When order processing completes, mark order as shipped
+on_state_change OrderProcessing {
+  if status == Completed {
+    transition CompleteOrder()
+  }
+  
+  if status == Failed {
+    transition HandleOrderError(error)
+  }
+}
+
+// When an order is placed, clear the cart
+on_state_change Order {
+  if status == Pending {
+    transition ClearCart()
+  }
+}
+
+// ============================================================================
+// Error Handling Transition
+// ============================================================================
+
+transition HandleOrderError(order: Order, error: Error) -> Order {
+  let working = Order {
+    order_id: order.order_id,
+    user_id: order.user_id,
+    items: order.items,
+    total: order.total,
+    status: Pending,  // Revert to pending on error
+    created_at: order.created_at
+  }
+  
+  return working
+}
+
+// ============================================================================
+// Main Program (Orchestration)
+// ============================================================================
+
+fn main() {
+  // Initialize inventory with some products
+  let inventory = Inventory {
+    products: [
+      Product { id: 1, name: "Laptop", price: 999.99, stock: 10 },
+      Product { id: 2, name: "Mouse", price: 29.99, stock: 100 },
+      Product { id: 3, name: "Keyboard", price: 79.99, stock: 50 }
+    ]
+  }
+  
+  // Create a shopping cart for a user
+  let cart = ShoppingCart {
+    user_id: 12345,
+    items: [],
+    subtotal: 0.0,
+    discount_percent: 0,
+    final_total: 0.0
+  }
+  
+  // Add items to cart (cascading transitions run in parallel where possible)
+  let item1 = CartItem {
+    product_id: 1,
+    quantity: 1,
+    unit_price: 999.99
+  }
+  
+  let cart_with_item1 = AddToCart(cart, item1)
+  
+  let item2 = CartItem {
+    product_id: 2,
+    quantity: 2,
+    unit_price: 29.99
+  }
+  
+  let cart_with_items = AddToCart(cart_with_item1, item2)
+  
+  // Apply discount
+  let discounted_cart = ApplyDiscount(cart_with_items, 10)
+  
+  // Checkout
+  let order = Checkout(discounted_cart, 54321)
+  
+  // Process order (triggers async I/O)
+  let processing = ProcessOrder(order)
+  
+  // When processing completes (via hook), order status changes to Shipped
+  // and cart is automatically cleared (via cascading hook)
+}
+
+// ============================================================================
+// Notes for Future Implementation
+// ============================================================================
+//
+// 1. Error handling is implicit via Result type—errors propagate and cascade
+// 2. All transitions on different states run in parallel (Inventory vs Cart)
+// 3. Multiple transitions on the same state are queued (FIFO)
+// 4. Memory is stack-based for working states, reference-counted for globals
+// 5. Pure functions (parse_product, apply_discount) are deterministic & testable
+// 6. Verification rules are checked on every state return
+// 7. Rollback is atomic—if any cascading transition fails, all changes revert
+//

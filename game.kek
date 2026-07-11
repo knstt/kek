@@ -1,0 +1,44 @@
+
+
+
+state StandardInput {
+    input: String;
+    
+    default {
+        input: "";
+    }
+    
+    verify {
+        input.len() <= 1000;  // Max 1000 characters
+    }
+}
+
+transition StandardInput::PopChar(
+
+state StandardOutput {
+    output: String,
+    
+    default {
+        output: ""
+    }
+    
+    verify {
+        output.len() <= 1000  // Max 1000 characters
+    }
+}
+
+hook StandardInput<input> {
+    // This hook is called when the StandardInput state is updated
+    // You can process the input and update the StandardOutput state accordingly
+    let processed_output = process_input(input.input);
+    StandardOutput { output: processed_output }
+}
+
+// Gloabal states
+stdin: StandardInput;
+stdout: StandardOutput;
+
+function main() {
+    
+}
+
