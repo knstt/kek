@@ -90,6 +90,13 @@ static void stream_data_handler(const KekEvent* event, void* context) {
 
     for (size_t i = 0; i < event->data_len; i++) {
         char ch = event->data[i];
+        
+        if (ch == 'q') {
+            app_write(app, "\n\nQuitting...\n");
+            kek_runtime_request_quit(app->runtime);
+            break;
+        }
+        
         if (ch == '\n') {
             app_write(app, "[ENTER]\n");
         } else if (ch == '\x1b') {
@@ -100,11 +107,6 @@ static void stream_data_handler(const KekEvent* event, void* context) {
             app_write(app, special);
         } else {
             app_write_raw(app, &ch, 1);
-        }
-
-        if (ch == 'q') {
-            app_write(app, "\n\nQuitting...\n");
-            kek_runtime_request_quit(app->runtime);
         }
     }
 }
