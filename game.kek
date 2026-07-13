@@ -1,44 +1,38 @@
-
-
-
 state StandardInput {
-    input: String;
-    
-    default {
-        input: "";
-    }
-    
-    verify {
-        input.len() <= 1000;  // Max 1000 characters
-    }
-}
+  input: String
 
-transition StandardInput::PopChar(
+  default {
+    input: ""
+  }
+
+  verify {
+    input.len() <= 1000
+  }
+}
 
 state StandardOutput {
-    output: String,
-    
-    default {
-        output: ""
-    }
-    
-    verify {
-        output.len() <= 1000  // Max 1000 characters
-    }
+  output: String
+
+  default {
+    output: ""
+  }
+
+  verify {
+    output.len() <= 1000
+  }
 }
 
-hook StandardInput<input> {
-    // This hook is called when the StandardInput state is updated
-    // You can process the input and update the StandardOutput state accordingly
-    let processed_output = process_input(input.input);
-    StandardOutput { output: processed_output }
+state Player {
+  name: String
+  health: i32
+
+  default {
+    name: "Player"
+    health: 100
+  }
+
+  verify {
+    name.len() <= 64
+    health >= 0 && health <= 100
+  }
 }
-
-// Gloabal states
-stdin: StandardInput;
-stdout: StandardOutput;
-
-function main() {
-    
-}
-
