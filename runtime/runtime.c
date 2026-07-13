@@ -50,6 +50,18 @@ void kek_runtime_request_quit(KekRuntime* runtime) {
     }
 }
 
+int kek_runtime_publish_state_changed(KekRuntime* runtime, void* source) {
+    if (!runtime) {
+        return 0;
+    }
+
+    KekEvent event;
+    memset(&event, 0, sizeof(event));
+    event.type = KEK_EVENT_STATE_CHANGED;
+    event.source = source;
+    return kek_event_publish(&runtime->events, &event);
+}
+
 int kek_runtime_enable_raw_mode(KekRuntime* runtime, int fd) {
     if (!runtime || !isatty(fd)) {
         return 0;

@@ -14,6 +14,16 @@ void kek_event_subscribe(KekEventDispatcher* dispatcher, KekEventType type,
     }
 
     KekEventSubscriberList* list = &dispatcher->subscriber_lists[type];
+    for (size_t i = 0; i < list->count; i++) {
+        KekEventSubscriber* subscriber = &list->subscribers[i];
+        if (!subscriber->active) {
+            subscriber->handler = handler;
+            subscriber->context = context;
+            subscriber->active = 1;
+            return;
+        }
+    }
+
     if (list->count >= KEK_EVENT_MAX_SUBSCRIBERS) {
         fprintf(stderr, "event subscriber list full\n");
         return;

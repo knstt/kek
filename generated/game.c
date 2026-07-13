@@ -51,3 +51,19 @@ int Player_verify(const Player* state) {
     assert(state->health >= 0 && state->health <= 100);
     return 1;
 }
+
+GameState GameState_default(void) {
+    GameState state = {0};
+    state.standard_input = StandardInput_default();
+    state.standard_output = StandardOutput_default();
+    state.player = Player_default();
+    return state;
+}
+
+int GameState_verify(const GameState* state) {
+    assert(state != 0);
+    StandardInput_verify(&state->standard_input);
+    StandardOutput_verify(&state->standard_output);
+    Player_verify(&state->player);
+    return 1;
+}

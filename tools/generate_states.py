@@ -103,6 +103,9 @@ def parse_states(source: str) -> list[State]:
             field_match = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Za-z_][A-Za-z0-9_]*)", line)
             if not field_match:
                 raise SyntaxError(f"line {line_number}: expected field declaration")
+            field_name = field_match.group(1)
+            if any(item.name == field_name for item in current.fields):
+                raise SyntaxError(f"line {line_number}: duplicate field {field_name}")
             current.fields.append(Field(field_match.group(1), field_match.group(2)))
             continue
 
@@ -110,7 +113,10 @@ def parse_states(source: str) -> list[State]:
             default_match = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(.+)", line)
             if not default_match:
                 raise SyntaxError(f"line {line_number}: expected default assignment")
-            current.defaults[default_match.group(1)] = default_match.group(2).strip()
+            field_name = default_match.group(1)
+            if field_name in current.defaults:
+                raise SyntaxError(f"line {line_number}: duplicate default for {field_name}")
+            current.defaults[field_name] = default_match.group(2).strip()
             continue
 
         if section == "verify":
@@ -131,6 +137,16 @@ def generated_guard(name: str) -> str:
     return f"GENERATED_{cleaned}_H"
 
 
+def c_identifier_from_type(name: str) -> str:
+    output = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", name)
+    output = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", output)
+    return output.lower()
+
+
+def aggregate_state_name(name: str) -> str:
+    return f"{name[:1].upper()}{name[1:]}State"
+
+
 def field_map(state: State) -> dict[str, Field]:
     return {item.name: item for item in state.fields}
 
@@ -149,6 +165,12 @@ def translate_default(field_item: Field, value: str) -> str:
 def translate_verify_rule(state: State, rule: str) -> str:
     fields = field_map(state)
     output = rule
+
+    for name in re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\.len\(\)", rule):
+        if name not in fields:
+            raise ValueError(f"{state.name}: verify references unknown field {name}")
+        if fields[name].type_name != "String":
+            raise ValueError(f"{state.name}: len() is only supported for String field {name}")
 
     for item in sorted(state.fields, key=lambda value: len(value.name), reverse=True):
         if item.type_name == "String":
@@ -203,6 +225,16 @@ def emit_header(states: list[State], name: str) -> str:
         lines.append(f"int {state.name}_verify(const {state.name}* state);")
         lines.append("")
 
+    aggregate_name = aggregate_state_name(name)
+    lines.append(f"typedef struct {aggregate_name} {{")
+    for state in states:
+        lines.append(f"    {state.name} {c_identifier_from_type(state.name)};")
+    lines.append(f"}} {aggregate_name};")
+    lines.append("")
+    lines.append(f"{aggregate_name} {aggregate_name}_default(void);")
+    lines.append(f"int {aggregate_name}_verify(const {aggregate_name}* state);")
+    lines.append("")
+
     lines.extend([f"#endif /* {guard} */", ""])
     return "\n".join(lines)
 
@@ -247,6 +279,23 @@ def emit_source(states: list[State], name: str) -> str:
         lines.append("    return 1;")
         lines.append("}")
         lines.append("")
+
+    aggregate_name = aggregate_state_name(name)
+    lines.append(f"{aggregate_name} {aggregate_name}_default(void) {{")
+    lines.append(f"    {aggregate_name} state = {{0}};")
+    for state in states:
+        lines.append(f"    state.{c_identifier_from_type(state.name)} = {state.name}_default();")
+    lines.append("    return state;")
+    lines.append("}")
+    lines.append("")
+
+    lines.append(f"int {aggregate_name}_verify(const {aggregate_name}* state) {{")
+    lines.append("    assert(state != 0);")
+    for state in states:
+        lines.append(f"    {state.name}_verify(&state->{c_identifier_from_type(state.name)});")
+    lines.append("    return 1;")
+    lines.append("}")
+    lines.append("")
 
     return "\n".join(lines)
 

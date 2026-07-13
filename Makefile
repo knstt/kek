@@ -25,4 +25,4 @@ runtime: generate
 	$(CC) $(CPPFLAGS) $(CFLAGS) main.c runtime/event.c runtime/stream.c runtime/runtime.c $(GENERATED_C) -o main
 
 clean:
-	rm -rf $(GENERATED_DIR) main
+	rm -f $(GENERATED_DIR)/$(GENERATED_NAME).o main keyboard_log.txt

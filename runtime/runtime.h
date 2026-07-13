@@ -24,6 +24,7 @@ KekEventDispatcher* kek_runtime_events(KekRuntime* runtime);
 int kek_runtime_register_state(KekRuntime* runtime, const KekRuntimeState* state);
 KekRuntimeState* kek_runtime_get_state(KekRuntime* runtime, size_t state_id);
 void kek_runtime_request_quit(KekRuntime* runtime);
+int kek_runtime_publish_state_changed(KekRuntime* runtime, void* source);
 int kek_runtime_run(KekRuntime* runtime);
 int kek_runtime_drain(KekRuntime* runtime);
 int kek_runtime_enable_raw_mode(KekRuntime* runtime, int fd);

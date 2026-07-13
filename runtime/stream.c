@@ -100,6 +100,11 @@ static int stream_has_work(const KekRuntimeState* state) {
 
 int kek_runtime_register_stream(KekRuntime* runtime, int fd, KekStreamMode mode,
                                 int close_on_destroy) {
+    if (!runtime || fd < 0 || fd >= FD_SETSIZE ||
+        (mode != KEK_STREAM_READ && mode != KEK_STREAM_WRITE)) {
+        return -1;
+    }
+
     KekStream* stream = (KekStream*)calloc(1, sizeof(*stream));
     if (!stream) {
         return -1;

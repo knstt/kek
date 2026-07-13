@@ -36,4 +36,13 @@ typedef struct Player {
 Player Player_default(void);
 int Player_verify(const Player* state);
 
+typedef struct GameState {
+    StandardInput standard_input;
+    StandardOutput standard_output;
+    Player player;
+} GameState;
+
+GameState GameState_default(void);
+int GameState_verify(const GameState* state);
+
 #endif /* GENERATED_GAME_H */
