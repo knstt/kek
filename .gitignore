@@ -4,3 +4,4 @@ out/
 *.o
 /main
 /keyboard_log.txt
+generated/
