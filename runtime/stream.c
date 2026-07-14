@@ -155,17 +155,3 @@ size_t kek_stream_write_raw(KekStream* stream, const char* data, size_t len) {
     }
     return to_copy;
 }
-
-size_t kek_stream_read_buffer(KekStream* stream, char* output, size_t max_len) {
-    if (!stream || stream->mode != KEK_STREAM_READ || !output || max_len == 0) {
-        return 0;
-    }
-
-    size_t to_copy = stream->length < max_len ? stream->length : max_len;
-    if (to_copy > 0) {
-        memcpy(output, stream->buffer, to_copy);
-        memmove(stream->buffer, stream->buffer + to_copy, stream->length - to_copy);
-        stream->length -= to_copy;
-    }
-    return to_copy;
-}

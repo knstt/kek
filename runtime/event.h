@@ -2,23 +2,26 @@
 #define KEK_RUNTIME_EVENT_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 #define KEK_EVENT_MAX_SUBSCRIBERS 32
 #define KEK_EVENT_QUEUE_CAPACITY 256
 #define KEK_EVENT_DATA_CAPACITY 1024
-#define KEK_EVENT_TYPE_COUNT 5
+#define KEK_EVENT_TYPE_COUNT 4
 
 typedef enum KekEventType {
     KEK_EVENT_STREAM_DATA = 0,
     KEK_EVENT_STREAM_EOF = 1,
     KEK_EVENT_STREAM_ERROR = 2,
-    KEK_EVENT_STATE_CHANGED = 3,
-    KEK_EVENT_QUIT = 4
+    KEK_EVENT_STATE_CHANGED = 3
 } KekEventType;
 
 typedef struct KekEvent {
     KekEventType type;
     void* source;
+    size_t state_type_id;
+    size_t state_slot_id;
+    uint64_t state_version;
     char data[KEK_EVENT_DATA_CAPACITY];
     size_t data_len;
     int error_code;

@@ -8,7 +8,7 @@ Related documents:
 
 ## Overview
 
-The generator is a single Python script that performs parsing, validation, in-memory modeling, and C emission.
+The generator is a single Python script that performs parsing, validation, in-memory modeling, and C emission for states and hook metadata.
 
 ```mermaid
 flowchart TB
@@ -44,6 +44,7 @@ The generator uses two dataclasses:
 | --- | --- |
 | `Field` | Stores field name and schema type name. |
 | `State` | Stores state name, fields, defaults, and verification rules. |
+| `Hook` | Stores hook trigger plus read/write state dependencies. |
 
 This model is intentionally close to the schema structure. There is no full AST.
 
@@ -55,6 +56,7 @@ The parser tracks:
 
 - Current state or no active state.
 - Current section: fields, default block, or verify block.
+- Current hook declaration.
 - Brace depth for state/block termination.
 
 This keeps the parser small but limits expression and nesting support.
@@ -65,7 +67,7 @@ The header and source emitters render strings from the `State` model.
 
 The header emitter owns declarations and aggregate type layout.
 
-The source emitter owns helper implementations, default construction, and verification code.
+The source emitter owns helper implementations, default construction, verification code, void-pointer adapters, state descriptor tables, and hook descriptor tables.
 
 ## Naming Strategy
 
@@ -74,7 +76,8 @@ The source emitter owns helper implementations, default construction, and verifi
 | Header guard | Uppercase output base name with non-alphanumeric characters replaced by `_`, prefixed by `GENERATED_`, suffixed by `_H`. |
 | Aggregate state | Output base name with first character uppercased, suffixed by `State`. |
 | Aggregate fields | State type names converted from CamelCase to snake_case. |
-| State functions | `<StateName>_default` and `<StateName>_verify`. |
+| State functions | `<StateName>_default`, `<StateName>_check`, and `<StateName>_reset`. |
+| Descriptor adapters | `<StateName>_default_into`, `<StateName>_check_void`, and `<StateName>_reset_void`. |
 
 ## Dependency Direction
 
@@ -91,12 +94,12 @@ flowchart LR
     GeneratedSource --> Consumer
 ```
 
-The generator has no dependency on the runtime implementation. Runtime or application code may depend on generated files.
+Generated structs and state helpers remain plain C data ABI. Generated descriptor declarations explicitly depend on the runtime `KekStateDescriptor` type so runtime state slots can be registered without handwritten adapters.
 
 ## Design Constraints
 
 - The parser is intentionally not a full language parser.
 - Generated state data is plain C.
-- Generated verification uses `assert(...)`.
+- Generated verification rules are exposed through non-aborting check functions.
 - Generated strings are borrowed views.
 - Generated code is expected to be replaceable as the language matures.

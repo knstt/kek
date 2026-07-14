@@ -18,6 +18,25 @@ Related documents:
 
 The runtime capacity is `KEK_RUNTIME_MAX_STATES`.
 
+## State Storage
+
+`KekStateStorage` is a separate runtime utility for owning generated state objects.
+
+It stores two copies of a state object:
+
+- The active copy, which remains readable while updates are attempted.
+- The inactive copy, which is used as a draft for the next update.
+
+`kek_state_storage_update()` copies the active state into the inactive draft, invokes the caller-provided update callback, validates the draft with the caller-provided check function, and swaps active buffers only when validation succeeds.
+
+If validation fails, the active state is unchanged and the draft is reset from the active copy. A successful update publishes a state-changed notification for the new active state pointer.
+
+`KekStateStore` is the instance-aware storage API for generated states. It owns independent `KekStateSlot` entries instead of one aggregate object. Each slot stores two buffers, one active index, a generated `KekStateDescriptor`, and a monotonically increasing version.
+
+Multiple slots may reference the same descriptor. This supports multiple instances of one generated state type, such as several `Goblin` objects.
+
+`kek_state_store_update()` copies the active slot value into its inactive draft, invokes the update callback, validates the draft with the descriptor check function, swaps on success, increments the slot version, and publishes `KEK_EVENT_STATE_CHANGED` with state type id, slot id, and version.
+
 ## Runtime State Interface
 
 `KekRuntimeState` is the generic state interface used by the event loop.
@@ -52,7 +71,14 @@ Event types:
 | `KEK_EVENT_STREAM_EOF` | Stream reached EOF. |
 | `KEK_EVENT_STREAM_ERROR` | Stream operation failed. |
 | `KEK_EVENT_STATE_CHANGED` | A state change was published. |
-| `KEK_EVENT_QUIT` | Reserved event type. |
+
+State-change events may carry:
+
+| Field | Purpose |
+| --- | --- |
+| `state_type_id` | Generated state type identifier. |
+| `state_slot_id` | Runtime slot instance identifier. |
+| `state_version` | Version after the successful update. |
 
 Capacity constants:
 
@@ -61,11 +87,26 @@ Capacity constants:
 | `KEK_EVENT_MAX_SUBSCRIBERS` | `32` | Max subscribers per event type. |
 | `KEK_EVENT_QUEUE_CAPACITY` | `256` | Max queued events. |
 | `KEK_EVENT_DATA_CAPACITY` | `1024` | Max bytes copied into event payload. |
-| `KEK_EVENT_TYPE_COUNT` | `5` | Number of event types. |
+| `KEK_EVENT_TYPE_COUNT` | `4` | Number of event types. |
 
 Publishing fails and drops the event when the queue is full.
 
 Dispatch is synchronous: each active subscriber for the event type is called before the dispatcher moves to the next queued event.
+
+## Hook Registry
+
+`KekHookRegistry` bridges generated hook descriptors to the event dispatcher. A registry stores hook descriptors, subscribes one internal handler to runtime event types, filters by event type and optional generated state type, and invokes matching hook functions with `KekHookContext`.
+
+`KekHookContext` contains:
+
+| Field | Purpose |
+| --- | --- |
+| `runtime` | Runtime that received the event. |
+| `state_store` | Independent generated state slots. |
+| `event` | Triggering event. |
+| `app_context` | Application-owned context pointer. |
+
+Hook descriptors declare read and write state type ids. The current runtime stores this metadata for scheduling and documentation, but does not yet enforce access or transactions.
 
 ## Event Loop
 

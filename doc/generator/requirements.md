@@ -23,19 +23,25 @@ It is responsible for data shape generation, default constructors, and invariant
 | GEN-FR-005 | Support `verify` blocks for simple invariants. | Implemented | `State.verify_rules` |
 | GEN-FR-006 | Generate C structs for each state. | Implemented | `emit_header()` |
 | GEN-FR-007 | Generate one default constructor per state. | Implemented | `emit_source()` |
-| GEN-FR-008 | Generate one verification function per state. | Implemented | `emit_source()` |
+| GEN-FR-008 | Generate one non-aborting check function per state. | Implemented | `emit_source()` |
 | GEN-FR-009 | Generate an aggregate state struct for all parsed states. | Implemented | `aggregate_state_name()` |
-| GEN-FR-010 | Generate aggregate default and verification functions. | Implemented | `emit_source()` |
+| GEN-FR-010 | Generate aggregate default and check functions. | Implemented | `emit_source()` |
 | GEN-FR-011 | Map known schema primitive types to C types. | Implemented | `TYPE_MAP` |
 | GEN-FR-012 | Preserve unknown type names in generated C. | Implemented | `c_type()` |
 | GEN-FR-013 | Provide a command-line interface for input path, output directory, and output base name. | Implemented | `argparse` in `main()` |
+| GEN-FR-014 | Generate reset functions that restore default values. | Implemented | `emit_source()` |
+| GEN-FR-015 | Generate state type identifiers. | Implemented | `KekGeneratedStateType` |
+| GEN-FR-016 | Generate runtime-facing state descriptors. | Implemented | `KekGeneratedStateDescriptors` |
+| GEN-FR-017 | Generate void-pointer descriptor adapters. | Implemented | `*_default_into()`, `*_check_void()`, `*_reset_void()` |
+| GEN-FR-018 | Parse hook declarations with state-change triggers and read/write dependencies. | Implemented | `parse_source()` |
+| GEN-FR-019 | Generate hook descriptor metadata. | Implemented | `KekGeneratedHookDescriptors` |
 
 ## Non-Functional Requirements
 
 | ID | Requirement | Current Status | Evidence |
 | --- | --- | --- | --- |
 | GEN-NFR-001 | Emit plain C ABI files. | Implemented | generated `.h` and `.c` |
-| GEN-NFR-002 | Avoid hidden runtime dependencies in generated code. | Implemented | generated code uses C standard headers and generated declarations |
+| GEN-NFR-002 | Keep generated structs and helpers plain C while exposing explicit runtime metadata. | Implemented | generated data structs plus `KekStateDescriptor` table |
 | GEN-NFR-003 | Keep generated string representation minimal. | Implemented | `KekString` contains `const char*` and `size_t` |
 | GEN-NFR-004 | Fail generation with a diagnostic on syntax or validation errors. | Implemented | `except (SyntaxError, ValueError)` |
 
@@ -45,7 +51,7 @@ It is responsible for data shape generation, default constructors, and invariant
 - Function body compilation.
 - Transition body compilation.
 - Hook body compilation.
-- Runtime registration of generated states.
+- Hook body compilation.
 - Rollback semantics.
 - String ownership and allocation policy.
 

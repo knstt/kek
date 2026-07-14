@@ -42,6 +42,16 @@ state StateName {
 }
 ```
 
+The supported hook declaration is:
+
+```text
+hook HookName {
+  on StateName.changed
+  reads StateA, StateB
+  writes StateC
+}
+```
+
 Parser rules:
 
 - State names must match `[A-Za-z_][A-Za-z0-9_]*`.
@@ -52,6 +62,8 @@ Parser rules:
 - Commas and semicolons are accepted as optional line endings.
 - `//` comments are ignored unless inside a string literal.
 - Nested states and nested blocks are rejected.
+- Hook names and referenced state names must use identifiers.
+- Hook triggers currently support `StateName.changed`.
 
 ## Type Mapping
 
@@ -79,9 +91,15 @@ The generated header contains:
 - `kek_string_len()` declaration.
 - One C struct per schema state.
 - One default function declaration per state.
-- One verification function declaration per state.
+- One non-aborting check function declaration per state.
+- One reset function declaration per state.
 - One aggregate state struct containing all states.
-- Aggregate default and verification function declarations.
+- Aggregate default, check, and reset function declarations.
+- A generated state type enum.
+- Void-pointer adapter declarations for descriptor use.
+- A generated `KekStateDescriptor` table declaration.
+- Generated hook function declarations.
+- A generated hook descriptor table declaration.
 
 State names are preserved. Aggregate field names are derived from state names by converting CamelCase to snake_case.
 
@@ -91,13 +109,27 @@ The generated source contains:
 
 - `KekString` helper implementations.
 - Per-state default constructors.
-- Per-state verification functions.
+- Per-state non-aborting check functions.
+- Per-state reset functions.
 - Aggregate default constructor.
-- Aggregate verification function.
+- Aggregate check function.
+- Aggregate reset function.
+- Void-pointer descriptor adapters.
+- A generated descriptor table.
+- Generated hook read/write dependency arrays.
+- A generated hook descriptor table.
 
 Default constructors zero-initialize the state first and then assign explicit defaults.
 
-Verification functions assert that the state pointer is not null, then assert each translated verification rule, then return `1`.
+Check functions return `0` when the state pointer is null or any translated verification rule fails. They return `1` when all rules pass.
+
+Reset functions return `0` when the state pointer is null. Otherwise, they assign the corresponding default value into the existing object and return the result of the corresponding check function.
+
+Generated structs expose their fields directly. Callers that need rollback-safe validation should update through `KekStateStorage`, which validates the complete draft before swapping it into place.
+
+Callers that need independent state instances should use `KekStateStore` with generated `KekStateDescriptor` entries. Multiple runtime slots may use the same descriptor.
+
+Generated hook descriptors reference user-provided C hook bodies by name. The generator does not compile hook bodies.
 
 ## Verification Translation
 

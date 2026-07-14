@@ -32,6 +32,15 @@ class State:
     verify_rules: list[str] = field(default_factory=list)
 
 
+@dataclass
+class Hook:
+    name: str
+    event_type: str = ""
+    state_name: str = ""
+    reads: list[str] = field(default_factory=list)
+    writes: list[str] = field(default_factory=list)
+
+
 def strip_comment(line: str) -> str:
     in_string = False
     escaped = False
@@ -54,10 +63,12 @@ def clean_line(line: str) -> str:
     return strip_comment(line).strip().rstrip(",;").strip()
 
 
-def parse_states(source: str) -> list[State]:
+def parse_source(source: str) -> tuple[list[State], list[Hook]]:
     lines = source.splitlines()
     states: list[State] = []
+    hooks: list[Hook] = []
     current: State | None = None
+    current_hook: Hook | None = None
     section = "fields"
     depth = 0
 
@@ -68,8 +79,8 @@ def parse_states(source: str) -> list[State]:
 
         state_match = re.fullmatch(r"state\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{?", line)
         if state_match:
-            if current is not None:
-                raise SyntaxError(f"line {line_number}: nested state declarations are not supported")
+            if current is not None or current_hook is not None:
+                raise SyntaxError(f"line {line_number}: nested declarations are not supported")
             current = State(state_match.group(1))
             section = "fields"
             depth = 1 if line.endswith("{") else 0
@@ -77,14 +88,29 @@ def parse_states(source: str) -> list[State]:
                 raise SyntaxError(f"line {line_number}: expected '{{' after state name")
             continue
 
-        if current is None:
-            raise SyntaxError(f"line {line_number}: expected state declaration")
+        hook_match = re.fullmatch(r"hook\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{?", line)
+        if hook_match:
+            if current is not None or current_hook is not None:
+                raise SyntaxError(f"line {line_number}: nested declarations are not supported")
+            current_hook = Hook(hook_match.group(1))
+            section = "hook"
+            depth = 1 if line.endswith("{") else 0
+            if depth == 0:
+                raise SyntaxError(f"line {line_number}: expected '{{' after hook name")
+            continue
+
+        if current is None and current_hook is None:
+            raise SyntaxError(f"line {line_number}: expected state or hook declaration")
 
         if line == "}":
             depth -= 1
-            if depth == 0:
+            if depth == 0 and current is not None:
                 states.append(current)
                 current = None
+                section = "fields"
+            elif depth == 0 and current_hook is not None:
+                hooks.append(current_hook)
+                current_hook = None
                 section = "fields"
             elif depth == 1:
                 section = "fields"
@@ -123,9 +149,43 @@ def parse_states(source: str) -> list[State]:
             current.verify_rules.append(line)
             continue
 
+        if section == "hook":
+            on_match = re.fullmatch(r"on\s+([A-Za-z_][A-Za-z0-9_]*)\.(changed)", line)
+            if on_match:
+                current_hook.state_name = on_match.group(1)
+                current_hook.event_type = "KEK_EVENT_STATE_CHANGED"
+                continue
+
+            reads_match = re.fullmatch(r"reads\s+(.+)", line)
+            if reads_match:
+                current_hook.reads = parse_name_list(reads_match.group(1))
+                continue
+
+            writes_match = re.fullmatch(r"writes\s+(.+)", line)
+            if writes_match:
+                current_hook.writes = parse_name_list(writes_match.group(1))
+                continue
+
+            raise SyntaxError(f"line {line_number}: expected hook clause")
+
     if current is not None:
         raise SyntaxError(f"unterminated state {current.name}")
+    if current_hook is not None:
+        raise SyntaxError(f"unterminated hook {current_hook.name}")
+    return states, hooks
+
+
+def parse_states(source: str) -> list[State]:
+    states, _hooks = parse_source(source)
     return states
+
+
+def parse_name_list(value: str) -> list[str]:
+    names = [item.strip() for item in value.split(",")]
+    for name in names:
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+            raise SyntaxError(f"invalid name {name}")
+    return names
 
 
 def c_type(type_name: str) -> str:
@@ -147,8 +207,24 @@ def aggregate_state_name(name: str) -> str:
     return f"{name[:1].upper()}{name[1:]}State"
 
 
+def state_type_macro(name: str) -> str:
+    return f"KEK_STATE_TYPE_{name.upper()}"
+
+
 def field_map(state: State) -> dict[str, Field]:
     return {item.name: item for item in state.fields}
+
+
+def validate_hooks(states: list[State], hooks: list[Hook]) -> None:
+    state_names = {state.name for state in states}
+    for hook in hooks:
+        if not hook.event_type or not hook.state_name:
+            raise ValueError(f"{hook.name}: hook must declare an on clause")
+        if hook.state_name not in state_names:
+            raise ValueError(f"{hook.name}: hook references unknown state {hook.state_name}")
+        for name in hook.reads + hook.writes:
+            if name not in state_names:
+                raise ValueError(f"{hook.name}: hook references unknown state {name}")
 
 
 def translate_default(field_item: Field, value: str) -> str:
@@ -194,7 +270,7 @@ def translate_verify_rule(state: State, rule: str) -> str:
     return re.sub(r"\b[A-Za-z_][A-Za-z0-9_]*\b", replace_name, output)
 
 
-def emit_header(states: list[State], name: str) -> str:
+def emit_header(states: list[State], hooks: list[Hook], name: str) -> str:
     guard = generated_guard(name)
     lines = [
         "/* Generated by tools/generate_states.py. Do not edit manually. */",
@@ -204,6 +280,9 @@ def emit_header(states: list[State], name: str) -> str:
         "#include <stdbool.h>",
         "#include <stddef.h>",
         "#include <stdint.h>",
+        "",
+        "#include \"../runtime/state_storage.h\"",
+        "#include \"../runtime/hook.h\"",
         "",
         "typedef struct KekString {",
         "    const char* data;",
@@ -215,6 +294,13 @@ def emit_header(states: list[State], name: str) -> str:
         "",
     ]
 
+    lines.append("typedef enum KekGeneratedStateType {")
+    for index, state in enumerate(states):
+        lines.append(f"    {state_type_macro(state.name)} = {index},")
+    lines.append(f"    KEK_STATE_TYPE_COUNT = {len(states)}")
+    lines.append("} KekGeneratedStateType;")
+    lines.append("")
+
     for state in states:
         lines.append(f"typedef struct {state.name} {{")
         for item in state.fields:
@@ -222,7 +308,11 @@ def emit_header(states: list[State], name: str) -> str:
         lines.append(f"}} {state.name};")
         lines.append("")
         lines.append(f"{state.name} {state.name}_default(void);")
-        lines.append(f"int {state.name}_verify(const {state.name}* state);")
+        lines.append(f"void {state.name}_default_into(void* state);")
+        lines.append(f"int {state.name}_check(const {state.name}* state);")
+        lines.append(f"int {state.name}_check_void(const void* state);")
+        lines.append(f"int {state.name}_reset({state.name}* state);")
+        lines.append(f"int {state.name}_reset_void(void* state);")
         lines.append("")
 
     aggregate_name = aggregate_state_name(name)
@@ -232,18 +322,26 @@ def emit_header(states: list[State], name: str) -> str:
     lines.append(f"}} {aggregate_name};")
     lines.append("")
     lines.append(f"{aggregate_name} {aggregate_name}_default(void);")
-    lines.append(f"int {aggregate_name}_verify(const {aggregate_name}* state);")
+    lines.append(f"int {aggregate_name}_check(const {aggregate_name}* state);")
+    lines.append(f"int {aggregate_name}_reset({aggregate_name}* state);")
+    lines.append("")
+    lines.append("extern const KekStateDescriptor KekGeneratedStateDescriptors[KEK_STATE_TYPE_COUNT];")
+    lines.append("const KekStateDescriptor* kek_generated_state_descriptor(size_t type_id);")
+    lines.append("")
+    lines.append(f"#define KEK_GENERATED_HOOK_COUNT {len(hooks)}")
+    for hook in hooks:
+        lines.append(f"void {hook.name}(KekHookContext* context);")
+    lines.append("extern const KekHookDescriptor* KekGeneratedHookDescriptors;")
     lines.append("")
 
     lines.extend([f"#endif /* {guard} */", ""])
     return "\n".join(lines)
 
 
-def emit_source(states: list[State], name: str) -> str:
+def emit_source(states: list[State], hooks: list[Hook], name: str) -> str:
     header_name = f"{name}.h"
     lines = [
         "/* Generated by tools/generate_states.py. Do not edit manually. */",
-        "#include <assert.h>",
         "#include <string.h>",
         f"#include \"{header_name}\"",
         "",
@@ -272,11 +370,42 @@ def emit_source(states: list[State], name: str) -> str:
         lines.append("}")
         lines.append("")
 
-        lines.append(f"int {state.name}_verify(const {state.name}* state) {{")
-        lines.append("    assert(state != 0);")
+        lines.append(f"void {state.name}_default_into(void* state) {{")
+        lines.append("    if (state == 0) {")
+        lines.append("        return;")
+        lines.append("    }")
+        lines.append(f"    *(({state.name}*)state) = {state.name}_default();")
+        lines.append("}")
+        lines.append("")
+
+        lines.append(f"int {state.name}_check(const {state.name}* state) {{")
+        lines.append("    if (state == 0) {")
+        lines.append("        return 0;")
+        lines.append("    }")
         for rule in state.verify_rules:
-            lines.append(f"    assert({translate_verify_rule(state, rule)});")
+            lines.append(f"    if (!({translate_verify_rule(state, rule)})) {{")
+            lines.append("        return 0;")
+            lines.append("    }")
         lines.append("    return 1;")
+        lines.append("}")
+        lines.append("")
+
+        lines.append(f"int {state.name}_check_void(const void* state) {{")
+        lines.append(f"    return {state.name}_check((const {state.name}*)state);")
+        lines.append("}")
+        lines.append("")
+
+        lines.append(f"int {state.name}_reset({state.name}* state) {{")
+        lines.append("    if (state == 0) {")
+        lines.append("        return 0;")
+        lines.append("    }")
+        lines.append(f"    *state = {state.name}_default();")
+        lines.append(f"    return {state.name}_check(state);")
+        lines.append("}")
+        lines.append("")
+
+        lines.append(f"int {state.name}_reset_void(void* state) {{")
+        lines.append(f"    return {state.name}_reset(({state.name}*)state);")
         lines.append("}")
         lines.append("")
 
@@ -289,16 +418,84 @@ def emit_source(states: list[State], name: str) -> str:
     lines.append("}")
     lines.append("")
 
-    lines.append(f"int {aggregate_name}_verify(const {aggregate_name}* state) {{")
-    lines.append("    assert(state != 0);")
+    lines.append(f"int {aggregate_name}_check(const {aggregate_name}* state) {{")
+    lines.append("    if (state == 0) {")
+    lines.append("        return 0;")
+    lines.append("    }")
     for state in states:
-        lines.append(f"    {state.name}_verify(&state->{c_identifier_from_type(state.name)});")
+        lines.append(f"    if (!{state.name}_check(&state->{c_identifier_from_type(state.name)})) {{")
+        lines.append("        return 0;")
+        lines.append("    }")
     lines.append("    return 1;")
     lines.append("}")
     lines.append("")
 
-    return "\n".join(lines)
+    lines.append(f"int {aggregate_name}_reset({aggregate_name}* state) {{")
+    lines.append("    if (state == 0) {")
+    lines.append("        return 0;")
+    lines.append("    }")
+    lines.append(f"    *state = {aggregate_name}_default();")
+    lines.append(f"    return {aggregate_name}_check(state);")
+    lines.append("}")
+    lines.append("")
 
+    lines.append("const KekStateDescriptor KekGeneratedStateDescriptors[KEK_STATE_TYPE_COUNT] = {")
+    for state in states:
+        lines.append("    {")
+        lines.append(f"        .type_id = {state_type_macro(state.name)},")
+        lines.append(f"        .name = \"{state.name}\",")
+        lines.append(f"        .size = sizeof({state.name}),")
+        lines.append(f"        .set_default = {state.name}_default_into,")
+        lines.append(f"        .check = {state.name}_check_void,")
+        lines.append(f"        .reset = {state.name}_reset_void,")
+        lines.append("    },")
+    lines.append("};")
+    lines.append("")
+
+    lines.append("const KekStateDescriptor* kek_generated_state_descriptor(size_t type_id) {")
+    lines.append("    if (type_id >= KEK_STATE_TYPE_COUNT) {")
+    lines.append("        return 0;")
+    lines.append("    }")
+    lines.append("    return &KekGeneratedStateDescriptors[type_id];")
+    lines.append("}")
+    lines.append("")
+
+    for hook in hooks:
+        if hook.reads:
+            lines.append(f"static const size_t {hook.name}_reads[] = {{")
+            for state_name in hook.reads:
+                lines.append(f"    {state_type_macro(state_name)},")
+            lines.append("};")
+            lines.append("")
+        if hook.writes:
+            lines.append(f"static const size_t {hook.name}_writes[] = {{")
+            for state_name in hook.writes:
+                lines.append(f"    {state_type_macro(state_name)},")
+            lines.append("};")
+            lines.append("")
+
+    if hooks:
+        lines.append("static const KekHookDescriptor KekGeneratedHookDescriptorData[KEK_GENERATED_HOOK_COUNT] = {")
+        for hook in hooks:
+            reads_name = f"{hook.name}_reads" if hook.reads else "0"
+            writes_name = f"{hook.name}_writes" if hook.writes else "0"
+            lines.append("    {")
+            lines.append(f"        .name = \"{hook.name}\",")
+            lines.append(f"        .event_type = {hook.event_type},")
+            lines.append(f"        .state_type_id = {state_type_macro(hook.state_name)},")
+            lines.append(f"        .reads = {reads_name},")
+            lines.append(f"        .read_count = {len(hook.reads)},")
+            lines.append(f"        .writes = {writes_name},")
+            lines.append(f"        .write_count = {len(hook.writes)},")
+            lines.append(f"        .run = {hook.name},")
+            lines.append("    },")
+        lines.append("};")
+        lines.append("const KekHookDescriptor* KekGeneratedHookDescriptors = KekGeneratedHookDescriptorData;")
+    else:
+        lines.append("const KekHookDescriptor* KekGeneratedHookDescriptors = 0;")
+    lines.append("")
+
+    return "\n".join(lines)
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate C structs from Kek state schema files.")
@@ -312,17 +509,18 @@ def main() -> int:
         source = source_file.read()
 
     try:
-        states = parse_states(source)
+        states, hooks = parse_source(source)
         if not states:
             raise SyntaxError("no state declarations found")
+        validate_hooks(states, hooks)
 
         os.makedirs(args.out_dir, exist_ok=True)
         header_path = os.path.join(args.out_dir, f"{base_name}.h")
         source_path = os.path.join(args.out_dir, f"{base_name}.c")
         with open(header_path, "w", encoding="utf-8") as header_file:
-            header_file.write(emit_header(states, base_name))
+            header_file.write(emit_header(states, hooks, base_name))
         with open(source_path, "w", encoding="utf-8") as c_file:
-            c_file.write(emit_source(states, base_name))
+            c_file.write(emit_source(states, hooks, base_name))
     except (SyntaxError, ValueError) as error:
         print(f"generate_states.py: {error}", file=sys.stderr)
         return 1

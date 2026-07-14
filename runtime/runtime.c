@@ -51,6 +51,13 @@ void kek_runtime_request_quit(KekRuntime* runtime) {
 }
 
 int kek_runtime_publish_state_changed(KekRuntime* runtime, void* source) {
+    return kek_runtime_publish_state_slot_changed(runtime, source, 0, 0, 0);
+}
+
+int kek_runtime_publish_state_slot_changed(KekRuntime* runtime, void* source,
+                                           size_t state_type_id,
+                                           size_t state_slot_id,
+                                           uint64_t state_version) {
     if (!runtime) {
         return 0;
     }
@@ -59,6 +66,9 @@ int kek_runtime_publish_state_changed(KekRuntime* runtime, void* source) {
     memset(&event, 0, sizeof(event));
     event.type = KEK_EVENT_STATE_CHANGED;
     event.source = source;
+    event.state_type_id = state_type_id;
+    event.state_slot_id = state_slot_id;
+    event.state_version = state_version;
     return kek_event_publish(&runtime->events, &event);
 }
 

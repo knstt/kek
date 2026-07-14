@@ -22,7 +22,7 @@ check: generate
 	$(CC) $(CFLAGS) -c $(GENERATED_C) -o $(GENERATED_DIR)/$(GENERATED_NAME).o
 
 runtime: generate
-	$(CC) $(CPPFLAGS) $(CFLAGS) main.c runtime/event.c runtime/stream.c runtime/runtime.c $(GENERATED_C) -o main
+	$(CC) $(CPPFLAGS) $(CFLAGS) main.c runtime/event.c runtime/hook.c runtime/stream.c runtime/runtime.c runtime/state_storage.c $(GENERATED_C) -o main
 
 clean:
 	rm -f $(GENERATED_DIR)/$(GENERATED_NAME).o main keyboard_log.txt

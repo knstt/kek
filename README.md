@@ -3,7 +3,7 @@
 This repository prototypes two related components:
 
 - A `.kek` state-schema generator that emits plain C data structures and verification helpers.
-- A small single-threaded C runtime with event dispatch, runtime state registration, and stream state support.
+- A small single-threaded C runtime with event dispatch, hook dispatch, runtime state registration, and stream state support.
 
 The current goal is to keep generated state data and runtime behavior separate. The generator owns the C data ABI. The runtime owns event processing and runtime-managed state callbacks.
 
@@ -65,30 +65,15 @@ flowchart TD
 | `make generate` | Run the schema generator. |
 | `make check` | Generate and compile generated C. |
 | `make runtime` | Build the runtime executable. |
-| `make example` | Build the non-interactive lifecycle example. |
-| `make run-example` | Run the lifecycle example. |
 | `make all` | Run `check` and build the runtime executable. |
 | `make clean` | Remove build/runtime artifacts. |
 
-## Lifecycle Example
+## Runtime Example
 
-`examples/lifecycle.kek` defines several generated data state objects:
-
-- `PlayerProfile`
-- `Inventory`
-- `Combat`
-- `WorldClock`
-
-`examples/lifecycle_demo.c` creates a `LifecycleState` aggregate, mutates each
-generated state, verifies it, and publishes `KEK_EVENT_STATE_CHANGED` events.
-It also registers three runtime-owned custom state objects and shows their
-destruction through `kek_runtime_destroy()`.
-
-Run it with:
-
-```sh
-make run-example
-```
+`main.c` builds a small terminal dungeon demo around the generated `GameState`.
+It registers stdin, stdout, and log streams with the runtime, stores generated
+state through `KekStateStorage`, validates updates before swapping them in, and
+renders the current state after game actions.
 
 ## Current Boundaries
 
@@ -97,7 +82,8 @@ Implemented in the generator:
 - `state` declarations.
 - Typed fields.
 - `default` blocks.
-- Simple `verify` blocks emitted as `assert(...)` checks.
+- Simple `verify` blocks emitted as non-aborting `*_check()` functions.
+- Generated `*_reset()` functions that restore defaults.
 - C header/source generation.
 
 Implemented in the runtime:
@@ -107,12 +93,18 @@ Implemented in the runtime:
 - Fixed-size runtime state registry.
 - `select()`-based event loop.
 - Runtime stream states for file descriptors.
+- Rollback-safe generated state storage.
+- Independent generated state slots.
+- Multiple instances per generated state type.
+- Generated hook descriptors.
 
 Not implemented yet:
 
 - Full language parsing.
 - Compiled function, transition, or hook bodies.
-- Generated runtime wiring.
+- Full generated runtime wiring.
 - Rollback semantics.
 - Per-state queues.
 - Generated-state ownership management.
+- Hook body compilation.
+- Hook transaction enforcement.
