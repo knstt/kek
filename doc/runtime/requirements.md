@@ -35,6 +35,11 @@ It is responsible for event processing and runtime-managed states. It is not res
 | RT-FR-017 | Support multiple instances of the same generated state type. | Implemented | Multiple slots can share one `KekStateDescriptor` |
 | RT-FR-018 | Publish state-changed events with state type, slot, and version metadata. | Implemented | `KekEvent.state_type_id`, `state_slot_id`, `state_version` |
 | RT-FR-019 | Register and dispatch generated hook descriptors. | Implemented | `KekHookRegistry`, `KekHookDescriptor` |
+| RT-FR-020 | Commit multi-slot generated state updates transactionally. | Implemented | `kek_state_store_update_many()` |
+| RT-FR-021 | Expose event-version state snapshots to hooks when bounded capacity permits. | Implemented | `KekEvent.state_snapshot`, `kek_hook_event_state()` |
+| RT-FR-022 | Enforce hook-declared generated state writes during hook execution. | Implemented | `state_store_write_allowed()` |
+| RT-FR-023 | Prevent direct hook writes to the triggering state type. | Implemented | `kek_hook_current_trigger_state_type()` |
+| RT-FR-024 | Provide reusable standard text state bridge helpers. | Implemented | `KekStandardTextBridge` |
 
 ## Non-Functional Requirements
 
@@ -53,7 +58,7 @@ It is responsible for event processing and runtime-managed states. It is not res
 - Dynamic growth of event queues, subscribers, runtime states, or stream buffers.
 - Per-generated-state queues.
 - Compiled transition or hook dispatch.
-- Hook transaction enforcement.
+- Declarative schema-driven standard stream registration.
 
 ## Requirement Relationship
 

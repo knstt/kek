@@ -68,7 +68,7 @@ The runtime does not depend on generated schema files. Generated code or applica
 
 ## Event Dispatch Architecture
 
-Events are published into a global ring buffer. Dispatch removes events from the ring buffer in FIFO order and invokes active subscribers for the event type. State-change events can identify the generated state type, concrete slot instance, and version.
+Events are published into a global ring buffer. Dispatch removes events from the ring buffer in FIFO order and invokes active subscribers for the event type. State-change events can identify the generated state type, concrete slot instance, and version. When the changed state fits in the fixed snapshot capacity, the event also carries copied state bytes for hooks that need the event-version value.
 
 Generated hooks attach to the same dispatcher through `KekHookRegistry`. The registry keeps one event subscription per event type and invokes only descriptors whose trigger matches the event.
 
@@ -92,7 +92,7 @@ The runtime owns generic state slots. Each state implementation supplies callbac
 
 ## Generated State Store Architecture
 
-Generated state objects can be stored independently in `KekStateStore`. Each slot points to a generated descriptor and owns two buffers for validate-before-swap updates.
+Generated state objects can be stored independently in `KekStateStore`. Each slot points to a generated descriptor and owns two buffers for validate-before-swap updates. Single-slot updates swap and publish immediately. Multi-slot updates prepare all drafts, validate all drafts, swap all active buffers, publish state-change events, and then publish one aggregate batch event only after the whole batch succeeds.
 
 ```mermaid
 flowchart LR
@@ -114,7 +114,9 @@ Several slots may share one descriptor, enabling multiple instances of one state
 
 ## Hook Architecture
 
-Hook descriptors declare their trigger plus read/write state type dependencies. The runtime hook registry filters events and invokes hook bodies supplied by application code.
+Hook descriptors declare their trigger plus read/write state type dependencies. The runtime hook registry filters events and invokes hook bodies supplied by application code. While a hook body runs, the state store checks writes against the active hook descriptor and rejects direct writes to the trigger state type.
+
+Hook bodies normally read current state through `KekStateStore`. When they need the exact triggering version, they can read the copied snapshot from the triggering event through `kek_hook_event_state()`.
 
 ```mermaid
 flowchart LR
@@ -159,6 +161,8 @@ Read streams add their fd to the read set and publish events after reads.
 
 Write streams add their fd to the write set only when buffered data exists and flush buffered data after readiness.
 
+The standard text bridge is a small utility above streams and generated string setters. It does not register file descriptors itself; applications still choose which descriptors to register, then reuse the bridge for `StandardInput` and `StandardOutput` buffer/state synchronization.
+
 ```mermaid
 flowchart LR
     FD[File Descriptor]
@@ -180,5 +184,6 @@ flowchart LR
 - Fixed event queue capacity.
 - Fixed subscriber capacity per event type.
 - Fixed stream buffer capacity.
+- Fixed state-change snapshot capacity.
 - Synchronous subscriber invocation.
 - Generated state storage owns two caller-sized state buffers.

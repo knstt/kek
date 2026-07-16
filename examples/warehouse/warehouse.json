@@ -234,6 +234,9 @@
       ],
       "writes": [
         "Worker",
+        "WarehouseMap",
+        "Package",
+        "DeliveryZone",
         "GameStatus"
       ]
     },
@@ -250,7 +253,6 @@
       ],
       "writes": [
         "Package",
-        "Worker",
         "GameStatus"
       ]
     },

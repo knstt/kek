@@ -9,6 +9,12 @@
 typedef int (*KekStateStorageCheckFn)(const void* state);
 typedef void (*KekStateStorageUpdateFn)(void* draft, void* context);
 
+typedef struct KekStateStoreUpdateItem {
+    size_t slot_id;
+    KekStateStorageUpdateFn update;
+    void* context;
+} KekStateStoreUpdateItem;
+
 #define KEK_STATE_STORE_MAX_SLOTS 128
 #define KEK_STATE_INVALID_ID ((size_t)-1)
 
@@ -74,6 +80,9 @@ size_t kek_state_store_find_first(const KekStateStore* store, size_t state_type_
 size_t kek_state_store_find_next(const KekStateStore* store, size_t state_type_id,
                                  size_t after_slot_id);
 int kek_state_store_update(KekStateStore* store, size_t slot_id,
-                           KekStateStorageUpdateFn update, void* context);
+                            KekStateStorageUpdateFn update, void* context);
+int kek_state_store_update_many(KekStateStore* store,
+                                const KekStateStoreUpdateItem* updates,
+                                size_t update_count);
 
 #endif

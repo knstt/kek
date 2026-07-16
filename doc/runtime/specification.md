@@ -37,6 +37,8 @@ Multiple slots may reference the same descriptor. This supports multiple instanc
 
 `kek_state_store_update()` copies the active slot value into its inactive draft, invokes the update callback, validates the draft with the descriptor check function, swaps on success, increments the slot version, and publishes `KEK_EVENT_STATE_CHANGED` with state type id, slot id, and version.
 
+`kek_state_store_update_many()` applies a bounded batch of independent slot updates transactionally. It prepares and validates every draft first. If any update or validation fails, no active slot is swapped and no state-change event is published. If all updates validate, every active slot is swapped, each changed slot version is incremented, and one `KEK_EVENT_STATE_CHANGED` event is published per changed slot after the full batch commit.
+
 `kek_state_store_remove()` deletes a slot, publishes `KEK_EVENT_STATE_DELETED`, and makes the slot id available for reuse. `kek_state_store_add()` reuses deleted slots before growing the store and publishes `KEK_EVENT_STATE_CREATED` for the new slot.
 
 ## Runtime State Interface
@@ -59,6 +61,7 @@ Supported state kinds:
 | Kind | Purpose |
 | --- | --- |
 | `KEK_RUNTIME_STATE_STREAM` | Runtime stream wrapper around a file descriptor. |
+| `KEK_RUNTIME_STATE_TIMER` | Runtime timer that updates a generated timer state slot. |
 | `KEK_RUNTIME_STATE_CUSTOM` | Reserved custom state kind. |
 
 ## Event Dispatcher
@@ -75,6 +78,7 @@ Event types:
 | `KEK_EVENT_STATE_CHANGED` | A state change was published. |
 | `KEK_EVENT_STATE_CREATED` | A generated state-store slot was created. |
 | `KEK_EVENT_STATE_DELETED` | A generated state-store slot was deleted. |
+| `KEK_EVENT_STATE_BATCH_CHANGED` | A transactional generated state-store batch committed. |
 
 State-change events may carry:
 
@@ -83,6 +87,9 @@ State-change events may carry:
 | `state_type_id` | Generated state type identifier. |
 | `state_slot_id` | Runtime slot instance identifier. |
 | `state_version` | Version after the successful update. |
+| `state_snapshot` | Copied event-version state bytes when the state fits in `KEK_EVENT_STATE_SNAPSHOT_CAPACITY`. |
+| `state_snapshot_size` | Number of copied state bytes. |
+| `has_state_snapshot` | Whether `state_snapshot` contains a valid copied state. |
 
 Capacity constants:
 
@@ -91,7 +98,8 @@ Capacity constants:
 | `KEK_EVENT_MAX_SUBSCRIBERS` | `32` | Max subscribers per event type. |
 | `KEK_EVENT_QUEUE_CAPACITY` | `256` | Max queued events. |
 | `KEK_EVENT_DATA_CAPACITY` | `1024` | Max bytes copied into event payload. |
-| `KEK_EVENT_TYPE_COUNT` | `6` | Number of event types. |
+| `KEK_EVENT_STATE_SNAPSHOT_CAPACITY` | `1024` | Max bytes copied into a state-change snapshot. |
+| `KEK_EVENT_TYPE_COUNT` | `7` | Number of event types. |
 
 Publishing fails and drops the event when the queue is full.
 
@@ -110,7 +118,9 @@ Dispatch is synchronous: each active subscriber for the event type is called bef
 | `event` | Triggering event. |
 | `app_context` | Application-owned context pointer. |
 
-Hook descriptors declare read and write state type ids. The current runtime stores this metadata for scheduling and documentation, but does not yet enforce access or transactions.
+Hook descriptors declare read and write state type ids. During hook execution, `KekStateStore` write operations are rejected when the target state type is not listed in the running hook descriptor's `writes`. Direct writes to the state type that triggered the current hook are also rejected to prevent simple self-feedback cycles.
+
+`kek_hook_event_state()` returns the copied event-version state snapshot when present. Hook bodies can use this when the triggering state value must match `event->state_version` instead of the current store value after later queued updates.
 
 ## Event Loop
 
@@ -154,6 +164,8 @@ Drain is currently used to flush pending write-stream data and dispatch remainin
 The stream buffer capacity is `KEK_STREAM_BUFFER_CAPACITY`.
 
 `kek_stream_flush()` attempts to synchronously write any currently buffered bytes for a write stream. It is useful for applications that need bounded-buffer backpressure before queuing more output.
+
+`KekStandardTextBridge` is a reusable bridge for generated single-string standard states. It appends stream input into a caller-owned buffer and updates the generated `StandardInput` slot through a generated string setter. It can also track written bytes in a generated `StandardOutput` slot while writing through a `KekStream`.
 
 ## Raw Terminal Mode
 

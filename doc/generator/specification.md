@@ -183,7 +183,7 @@ The generated header contains:
 - Void-pointer adapter declarations for descriptor use.
 - A generated `KekStateDescriptor` table declaration.
 - A generated helper for adding one default `KekStateStore` slot per generated state type.
-- A generated named slot struct and helpers for adding/removing schema-declared instances in `KekStateStore`.
+- A generated named slot struct and helpers for adding/removing/resetting schema-declared instances in `KekStateStore`.
 - A generated runtime binding struct that owns `KekStateStore`, `KekHookRegistry`, and declared slot ids for a caller-owned `KekRuntime`.
 - Generated per-state create/delete/find helpers for dynamic instances.
 - Generated typed accessors for named instances and arbitrary slot ids.
@@ -207,6 +207,7 @@ The generated source contains:
 - Void-pointer descriptor adapters.
 - A generated descriptor table.
 - A generated default slot registration helper.
+- A generated declared-slot reset helper backed by `kek_state_store_update_many()`.
 - Generated hook read/write dependency arrays.
 - A generated hook descriptor table.
 
@@ -223,6 +224,8 @@ Generated structs expose their fields directly. Callers that need rollback-safe 
 `kek_generated_state_store_add_defaults()` adds one default-initialized slot for each generated state type and writes the created slot ids into a caller-provided `size_t slot_ids[KEK_STATE_TYPE_COUNT]` array.
 
 `<name>_state_slots_add_declared()` adds the schema-declared instances to `KekStateStore` and writes their slot ids into the generated `<Name>StateSlots` struct. The slot struct stores only ids; `KekStateStore` remains the source of truth for all instance data.
+
+`<name>_state_slots_reset_declared()` resets all currently declared slots through one transactional batch update.
 
 Generated `<name>_<state>_create()` and `<name>_<state>_delete()` helpers create and delete dynamic instances through `KekStateStore`.
 

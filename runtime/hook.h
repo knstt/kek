@@ -40,6 +40,9 @@ typedef struct KekHookRegistry {
     int attached;
 } KekHookRegistry;
 
+const KekHookDescriptor* kek_hook_current_descriptor(void);
+size_t kek_hook_current_trigger_state_type(void);
+
 void kek_hook_registry_init(KekHookRegistry* registry, struct KekRuntime* runtime,
                             struct KekStateStore* state_store, void* app_context);
 int kek_hook_registry_add(KekHookRegistry* registry,
@@ -50,5 +53,6 @@ int kek_hook_registry_add_many(KekHookRegistry* registry,
 void kek_hook_registry_attach(KekHookRegistry* registry);
 void kek_hook_registry_detach(KekHookRegistry* registry);
 void kek_hook_registry_dispatch(KekHookRegistry* registry, const KekEvent* event);
+const void* kek_hook_event_state(const KekHookContext* context, size_t* size);
 
 #endif

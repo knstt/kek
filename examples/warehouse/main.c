@@ -6,6 +6,7 @@
 #include "generated/warehouse.h"
 #include "runtime/hook.h"
 #include "runtime/runtime.h"
+#include "runtime/standard_io.h"
 #include "runtime/state_storage.h"
 #include "runtime/stream.h"
 
@@ -16,10 +17,9 @@ typedef struct WarehouseApp {
     KekStream* stdin_stream;
     KekStream* stdout_stream;
     WarehouseRuntimeBinding binding;
-    size_t input_len;
+    KekStandardTextBridge input_bridge;
     size_t handled_input_len;
-    size_t output_len;
-    uint64_t ignored_worker_version;
+    KekStandardTextBridge output_bridge;
 } WarehouseApp;
 
 #define APP_STORE(app) (&(app)->binding.state_store)
@@ -119,50 +119,15 @@ static void status_set_message(GameStatus* status, const char* message) {
 }
 
 static void app_set_input_state(WarehouseApp* app, const char* data, size_t len) {
-    size_t capacity = sizeof(app->binding.standard_input_input_buffer);
-    size_t available = capacity - app->input_len - 1;
-    size_t to_copy = len < available ? len : available;
-    if (to_copy > 0) {
-        memcpy(app->binding.standard_input_input_buffer + app->input_len, data, to_copy);
-        app->input_len += to_copy;
-        app->binding.standard_input_input_buffer[app->input_len] = '\0';
-    }
-
-    warehouse_standard_input_set_input(APP_STORE(app), app->binding.slots.standard_input,
-                                        app->binding.standard_input_input_buffer, app->input_len);
-}
-
-static void app_track_output_state(WarehouseApp* app, const char* data, size_t len) {
-    size_t capacity = sizeof(app->binding.standard_output_output_buffer);
-    size_t available = capacity - app->output_len - 1;
-    if (available == 0) {
-        app->output_len = 0;
-        app->binding.standard_output_output_buffer[0] = '\0';
-        available = capacity - 1;
-    }
-
-    size_t to_copy = len < available ? len : available;
-    if (to_copy > 0) {
-        memcpy(app->binding.standard_output_output_buffer + app->output_len, data, to_copy);
-        app->output_len += to_copy;
-        app->binding.standard_output_output_buffer[app->output_len] = '\0';
-    }
-
-    warehouse_standard_output_set_output(APP_STORE(app), app->binding.slots.standard_output,
-                                          app->binding.standard_output_output_buffer, app->output_len);
+    kek_standard_text_bridge_append(&app->input_bridge, data, len);
 }
 
 static void app_write_raw(WarehouseApp* app, const char* data, size_t len) {
-    kek_stream_flush(app->stdout_stream);
-    size_t written = kek_stream_write_raw(app->stdout_stream, data, len);
-    if (written != len) {
-        kek_stream_flush(app->stdout_stream);
-        written += kek_stream_write_raw(app->stdout_stream, data + written, len - written);
-    }
+    size_t written = kek_standard_output_write(app->stdout_stream, &app->output_bridge,
+                                               data, len);
     if (written != len) {
         fprintf(stderr, "stdout stream buffer full, dropped %zu bytes\n", len - written);
     }
-    app_track_output_state(app, data, written);
 }
 
 static void app_write(WarehouseApp* app, const char* text) {
@@ -172,14 +137,54 @@ static void app_write(WarehouseApp* app, const char* text) {
 }
 
 static void warehouse_reset(WarehouseApp* app) {
-    size_t slots[] = {app->binding.slots.player_command, app->binding.slots.worker,
-                      app->binding.slots.warehouse_map, app->binding.slots.package_a,
-                      app->binding.slots.package_b, app->binding.slots.delivery_zone_a,
-                      app->binding.slots.delivery_zone_b, app->binding.slots.game_status};
+    size_t slots[] = {app->binding.slots.worker, app->binding.slots.warehouse_map,
+                      app->binding.slots.package_a, app->binding.slots.package_b,
+                      app->binding.slots.delivery_zone_a, app->binding.slots.delivery_zone_b,
+                      app->binding.slots.game_status};
+    const KekStateDescriptor* descriptors[sizeof(slots) / sizeof(slots[0])];
+    KekStateStoreUpdateItem updates[sizeof(slots) / sizeof(slots[0])];
     for (size_t i = 0; i < sizeof(slots) / sizeof(slots[0]); i++) {
-        const KekStateDescriptor* descriptor = kek_state_store_descriptor(APP_STORE(app), slots[i]);
-        kek_state_store_update(APP_STORE(app), slots[i], update_reset_state, (void*)descriptor);
+        descriptors[i] = kek_state_store_descriptor(APP_STORE(app), slots[i]);
+        updates[i] = (KekStateStoreUpdateItem){slots[i], update_reset_state,
+                                               (void*)descriptors[i]};
     }
+    kek_state_store_update_many(APP_STORE(app), updates,
+                                sizeof(updates) / sizeof(updates[0]));
+}
+
+static int warehouse_apply_package_rules(WarehouseApp* app, Worker* worker,
+                                         Package packages[WAREHOUSE_PACKAGE_COUNT],
+                                         GameStatus* status,
+                                         int package_changed[WAREHOUSE_PACKAGE_COUNT]) {
+    int changed = 0;
+
+    for (size_t i = 0; i < WAREHOUSE_PACKAGE_COUNT; i++) {
+        if (packages[i].status == PackageStatus_Waiting && !worker->carrying &&
+            worker->x == packages[i].package_x && worker->y == packages[i].package_y) {
+            packages[i].status = PackageStatus_Carried;
+            worker->carrying = true;
+            worker->score += 10;
+            package_changed[i] = 1;
+            changed = 1;
+            status_set_message(status, "Package picked. Deliver it to the matching dock.");
+            break;
+        }
+    }
+
+    for (size_t i = 0; i < WAREHOUSE_PACKAGE_COUNT; i++) {
+        const DeliveryZone* zone = app_delivery_zone_const(app, i);
+        if (zone && packages[i].status == PackageStatus_Carried && worker->carrying &&
+            worker->x == zone->zone_x && worker->y == zone->zone_y) {
+            packages[i].status = PackageStatus_Delivered;
+            worker->carrying = false;
+            worker->score += 90;
+            package_changed[i] = 1;
+            changed = 1;
+            status_set_message(status, "Package dropped at the matching dock.");
+            break;
+        }
+    }
+    return changed;
 }
 
 static char warehouse_cell_at(const WarehouseApp* app, int x, int y) {
@@ -346,6 +351,10 @@ void ApplyCommandChanged(KekHookContext* context) {
     }
 
     Worker worker = *app_worker_const(app);
+    Package packages[WAREHOUSE_PACKAGE_COUNT];
+    for (size_t i = 0; i < WAREHOUSE_PACKAGE_COUNT; i++) {
+        packages[i] = *app_package_const(app, i);
+    }
     const WarehouseMap* map = app_warehouse_map_const(app);
     GameStatus status = *app_game_status_const(app);
 
@@ -367,14 +376,49 @@ void ApplyCommandChanged(KekHookContext* context) {
     worker.y = next_y;
     worker.energy--;
     worker.facing = command->recent_directions[3];
+    status.turn++;
+    status_set_message(&status, "You hurry through the warehouse aisles.");
 
-    if (!Worker_check(&worker)) {
+    int package_changed[WAREHOUSE_PACKAGE_COUNT] = {0};
+    warehouse_apply_package_rules(app, &worker, packages, &status, package_changed);
+
+    if (worker.energy == 0 && !status.game_over) {
+        status.game_over = true;
+        status.won = false;
+        status_set_message(&status, "Energy depleted before delivery.");
+    }
+
+    if (!Worker_check(&worker) || !GameStatus_check(&status)) {
         status_set_message(&status, "The requested move would put the worker in an invalid state.");
         app_commit_state_copy(app, app->binding.slots.game_status, &status, sizeof(status));
         return;
     }
+    for (size_t i = 0; i < WAREHOUSE_PACKAGE_COUNT; i++) {
+        if (!Package_check(&packages[i])) {
+            return;
+        }
+    }
 
-    app_commit_state_copy(app, app->binding.slots.worker, &worker, sizeof(worker));
+    StateCopyUpdate worker_update = {&worker, sizeof(worker)};
+    StateCopyUpdate package_updates[WAREHOUSE_PACKAGE_COUNT];
+    StateCopyUpdate status_update = {&status, sizeof(status)};
+    KekStateStoreUpdateItem updates[WAREHOUSE_PACKAGE_COUNT + 2];
+    size_t update_count = 0;
+    updates[update_count++] = (KekStateStoreUpdateItem){app->binding.slots.worker,
+                                                        update_state_copy,
+                                                        &worker_update};
+    for (size_t i = 0; i < WAREHOUSE_PACKAGE_COUNT; i++) {
+        if (package_changed[i]) {
+            package_updates[i] = (StateCopyUpdate){&packages[i], sizeof(packages[i])};
+            updates[update_count++] = (KekStateStoreUpdateItem){app_package_slot(app, i),
+                                                                update_state_copy,
+                                                                &package_updates[i]};
+        }
+    }
+    updates[update_count++] = (KekStateStoreUpdateItem){app->binding.slots.game_status,
+                                                        update_state_copy,
+                                                        &status_update};
+    kek_state_store_update_many(APP_STORE(app), updates, update_count);
 }
 
 void UpdatePackageAfterWorkerChanged(KekHookContext* context) {
@@ -382,12 +426,14 @@ void UpdatePackageAfterWorkerChanged(KekHookContext* context) {
     if (!app || !context->event || context->event->state_slot_id != app->binding.slots.worker) {
         return;
     }
-    if (context->event->state_version == app->ignored_worker_version) {
-        app->ignored_worker_version = 0;
+    const Worker* event_worker = (const Worker*)kek_hook_event_state(context, NULL);
+    if (!event_worker) {
         return;
     }
-
-    Worker worker = *app_worker_const(app);
+    const Worker* current_worker = app_worker_const(app);
+    if (!current_worker || current_worker->carrying == event_worker->carrying) {
+        return;
+    }
     Package packages[WAREHOUSE_PACKAGE_COUNT];
     for (size_t i = 0; i < WAREHOUSE_PACKAGE_COUNT; i++) {
         packages[i] = *app_package_const(app, i);
@@ -398,45 +444,14 @@ void UpdatePackageAfterWorkerChanged(KekHookContext* context) {
         return;
     }
 
-    status.turn++;
-    status_set_message(&status, "You hurry through the warehouse aisles.");
-    int worker_changed = 0;
     int package_changed[WAREHOUSE_PACKAGE_COUNT] = {0};
-
-    for (size_t i = 0; i < WAREHOUSE_PACKAGE_COUNT; i++) {
-        if (packages[i].status == PackageStatus_Waiting && !worker.carrying &&
-            worker.x == packages[i].package_x && worker.y == packages[i].package_y) {
-            packages[i].status = PackageStatus_Carried;
-            worker.carrying = true;
-            worker.score += 10;
-            worker_changed = 1;
-            package_changed[i] = 1;
-            status_set_message(&status, "Package picked. Deliver it to the matching dock.");
-            break;
-        }
+    if (event_worker->carrying) {
+        status_set_message(&status, "Package picked. Deliver it to the matching dock.");
+    } else {
+        status_set_message(&status, "Package dropped at the matching dock.");
     }
 
-    for (size_t i = 0; i < WAREHOUSE_PACKAGE_COUNT; i++) {
-        const DeliveryZone* zone = app_delivery_zone_const(app, i);
-        if (zone && packages[i].status == PackageStatus_Carried && worker.carrying &&
-            worker.x == zone->zone_x && worker.y == zone->zone_y) {
-            packages[i].status = PackageStatus_Delivered;
-            worker.carrying = false;
-            worker.score += 90;
-            worker_changed = 1;
-            package_changed[i] = 1;
-            status_set_message(&status, "Package dropped at the matching dock.");
-            break;
-        }
-    }
-
-    if (worker.energy == 0 && !status.game_over) {
-        status.game_over = true;
-        status.won = false;
-        status_set_message(&status, "Energy depleted before delivery.");
-    }
-
-    if (!Worker_check(&worker) || !GameStatus_check(&status)) {
+    if (!GameStatus_check(&status)) {
         return;
     }
     for (size_t i = 0; i < WAREHOUSE_PACKAGE_COUNT; i++) {
@@ -445,15 +460,22 @@ void UpdatePackageAfterWorkerChanged(KekHookContext* context) {
         }
     }
 
-    if (worker_changed && app_commit_state_copy(app, app->binding.slots.worker, &worker, sizeof(worker))) {
-        app->ignored_worker_version = kek_state_store_version(APP_STORE(app), app->binding.slots.worker);
-    }
+    StateCopyUpdate package_updates[WAREHOUSE_PACKAGE_COUNT];
+    StateCopyUpdate status_update = {&status, sizeof(status)};
+    KekStateStoreUpdateItem updates[WAREHOUSE_PACKAGE_COUNT + 1];
+    size_t update_count = 0;
     for (size_t i = 0; i < WAREHOUSE_PACKAGE_COUNT; i++) {
         if (package_changed[i]) {
-            app_commit_state_copy(app, app_package_slot(app, i), &packages[i], sizeof(packages[i]));
+            package_updates[i] = (StateCopyUpdate){&packages[i], sizeof(packages[i])};
+            updates[update_count++] = (KekStateStoreUpdateItem){app_package_slot(app, i),
+                                                                update_state_copy,
+                                                                &package_updates[i]};
         }
     }
-    app_commit_state_copy(app, app->binding.slots.game_status, &status, sizeof(status));
+    updates[update_count++] = (KekStateStoreUpdateItem){app->binding.slots.game_status,
+                                                        update_state_copy,
+                                                        &status_update};
+    kek_state_store_update_many(APP_STORE(app), updates, update_count);
 }
 
 void UpdateStatusAfterPackageChanged(KekHookContext* context) {
@@ -597,6 +619,13 @@ static void stream_error_handler(const KekEvent* event, void* context) {
     }
 }
 
+static void stream_eof_handler(const KekEvent* event, void* context) {
+    WarehouseApp* app = (WarehouseApp*)context;
+    if (event->source == app->stdin_stream) {
+        kek_runtime_request_quit(app->runtime);
+    }
+}
+
 static int app_init(WarehouseApp* app, KekRuntime* runtime, KekStream* stdin_stream,
                     KekStream* stdout_stream) {
     memset(app, 0, sizeof(*app));
@@ -607,6 +636,16 @@ static int app_init(WarehouseApp* app, KekRuntime* runtime, KekStream* stdin_str
     if (!warehouse_runtime_binding_init(&app->binding, runtime, app)) {
         return -1;
     }
+    kek_standard_text_bridge_init(&app->input_bridge, APP_STORE(app),
+                                  app->binding.slots.standard_input,
+                                  app->binding.standard_input_input_buffer,
+                                  sizeof(app->binding.standard_input_input_buffer),
+                                  warehouse_standard_input_set_input);
+    kek_standard_text_bridge_init(&app->output_bridge, APP_STORE(app),
+                                  app->binding.slots.standard_output,
+                                  app->binding.standard_output_output_buffer,
+                                  sizeof(app->binding.standard_output_output_buffer),
+                                  warehouse_standard_output_set_output);
     return 0;
 }
 
@@ -638,6 +677,8 @@ int main(void) {
 
     kek_event_subscribe(kek_runtime_events(&runtime), KEK_EVENT_STREAM_DATA,
                         stream_data_handler, &app);
+    kek_event_subscribe(kek_runtime_events(&runtime), KEK_EVENT_STREAM_EOF,
+                        stream_eof_handler, &app);
     kek_event_subscribe(kek_runtime_events(&runtime), KEK_EVENT_STREAM_ERROR,
                         stream_error_handler, &app);
     warehouse_render(&app);

@@ -39,6 +39,7 @@ It is responsible for data shape generation, default constructors, and invariant
 | GEN-FR-021 | Generate additional per-state constructors as partial overrides of the default constructor. | Implemented | `Constructor` |
 | GEN-FR-022 | Parse enum declarations and generate matching C enum typedefs. | Implemented | `Enum`, `emit_header()` |
 | GEN-FR-023 | Support fixed-size field arrays with full-array defaults and per-element checks. | Implemented | `Field.array_length`, `emit_source()` |
+| GEN-FR-024 | Generate a transactional reset helper for declared slots. | Implemented | `<name>_state_slots_reset_declared()` |
 
 ## Non-Functional Requirements
 
@@ -56,7 +57,7 @@ It is responsible for data shape generation, default constructors, and invariant
 - Function body compilation.
 - Transition body compilation.
 - Hook body compilation.
-- Rollback semantics.
+- Compiling transaction boundaries from schema declarations.
 - String ownership and allocation policy.
 
 ## Requirement Relationship

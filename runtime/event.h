@@ -7,7 +7,13 @@
 #define KEK_EVENT_MAX_SUBSCRIBERS 32
 #define KEK_EVENT_QUEUE_CAPACITY 256
 #define KEK_EVENT_DATA_CAPACITY 1024
-#define KEK_EVENT_TYPE_COUNT 6
+#define KEK_EVENT_STATE_SNAPSHOT_CAPACITY 1024
+#define KEK_EVENT_TYPE_COUNT 7
+
+typedef union KekEventStateSnapshot {
+    max_align_t align;
+    unsigned char data[KEK_EVENT_STATE_SNAPSHOT_CAPACITY];
+} KekEventStateSnapshot;
 
 typedef enum KekEventType {
     KEK_EVENT_STREAM_DATA = 0,
@@ -15,7 +21,8 @@ typedef enum KekEventType {
     KEK_EVENT_STREAM_ERROR = 2,
     KEK_EVENT_STATE_CHANGED = 3,
     KEK_EVENT_STATE_CREATED = 4,
-    KEK_EVENT_STATE_DELETED = 5
+    KEK_EVENT_STATE_DELETED = 5,
+    KEK_EVENT_STATE_BATCH_CHANGED = 6
 } KekEventType;
 
 typedef struct KekEvent {
@@ -24,6 +31,9 @@ typedef struct KekEvent {
     size_t state_type_id;
     size_t state_slot_id;
     uint64_t state_version;
+    KekEventStateSnapshot state_snapshot;
+    size_t state_snapshot_size;
+    int has_state_snapshot;
     char data[KEK_EVENT_DATA_CAPACITY];
     size_t data_len;
     int error_code;

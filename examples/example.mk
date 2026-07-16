@@ -1,0 +1,38 @@
+PYTHON ?= python3
+CC ?= cc
+CFLAGS ?= -std=c11 -Wall -Wextra -Werror
+
+ROOT ?= ../..
+CPPFLAGS ?= -I. -I$(ROOT) -I$(ROOT)/runtime
+
+GENERATED_DIR ?= generated
+GENERATED_C := $(GENERATED_DIR)/$(GENERATED_NAME).c
+GENERATED_H := $(GENERATED_DIR)/$(GENERATED_NAME).h
+GENERATED_GRAPH := $(GENERATED_DIR)/$(GENERATED_NAME).graph.md
+RUNTIME_LIB := $(ROOT)/lib/libkek_runtime.a
+RUNTIME_DEPS := $(ROOT)/Makefile $(wildcard $(ROOT)/runtime/*.c) $(wildcard $(ROOT)/runtime/*.h)
+GENERATOR_DEPS := $(ROOT)/tools/generate_states.py $(wildcard $(ROOT)/tools/kekgen/*.py) $(wildcard $(ROOT)/tools/kekgen/templates/*)
+
+.PHONY: all generate check run clean
+
+all: check $(TARGET)
+
+generate: $(GENERATED_C) $(GENERATED_H) $(GENERATED_GRAPH)
+
+$(GENERATED_C) $(GENERATED_H) $(GENERATED_GRAPH): $(SCHEMA) $(GENERATOR_DEPS)
+	$(PYTHON) $(ROOT)/tools/generate_states.py $(SCHEMA) --out-dir $(GENERATED_DIR) --name $(GENERATED_NAME)
+
+check: generate
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $(GENERATED_C) -o $(GENERATED_DIR)/$(GENERATED_NAME).o
+
+$(RUNTIME_LIB): $(RUNTIME_DEPS)
+	$(MAKE) -C $(ROOT) runtime
+
+$(TARGET): generate $(EXAMPLE_MAIN) $(RUNTIME_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(EXAMPLE_MAIN) $(GENERATED_C) $(RUNTIME_LIB) -o $(TARGET)
+
+run: $(TARGET)
+	./$(TARGET)
+
+clean:
+	rm -f $(TARGET) $(GENERATED_DIR)/$(GENERATED_NAME).o $(GENERATED_C) $(GENERATED_H) $(GENERATED_GRAPH) $(EXTRA_CLEAN)

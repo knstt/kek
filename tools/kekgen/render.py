@@ -207,6 +207,7 @@ def render_instance_declarations(states: list[State], instances: list[Instance],
     lines.append(f"typedef struct {binding_name} {binding_name};")
     lines.append(f"int {prefix}_state_slots_add_declared(KekStateStore* store, {slots_name}* slots, {binding_name}* binding);")
     lines.append(f"int {prefix}_state_slots_remove_declared(KekStateStore* store, {slots_name}* slots);")
+    lines.append(f"int {prefix}_state_slots_reset_declared(KekStateStore* store, const {slots_name}* slots);")
     lines.append("")
     lines.append(f"struct {binding_name} {{")
     lines.append("    KekRuntime* runtime;")
@@ -454,6 +455,40 @@ def render_instance_definitions(states: list[State], instances: list[Instance], 
         lines.append(f"        slots->{instance.name} = KEK_STATE_INVALID_ID;")
         lines.append("    }")
     lines.extend(["    return ok;", "}", ""])
+
+    lines.extend(
+        [
+            "static void kek_generated_reset_slot(void* draft, void* context) {",
+            "    const KekStateDescriptor* descriptor = (const KekStateDescriptor*)context;",
+            "    if (descriptor != 0 && descriptor->reset != 0) {",
+            "        descriptor->reset(draft);",
+            "    }",
+            "}",
+            "",
+            f"int {prefix}_state_slots_reset_declared(KekStateStore* store, const {slots_name}* slots) {{",
+            "    if (store == 0 || slots == 0) {",
+            "        return 0;",
+            "    }",
+        ]
+    )
+    if instances:
+        lines.append(f"    KekStateStoreUpdateItem updates[{len(instances)}];")
+        lines.append(f"    const KekStateDescriptor* descriptors[{len(instances)}];")
+        lines.append("    size_t count = 0;")
+        for instance in instances:
+            lines.append(f"    if (slots->{instance.name} != KEK_STATE_INVALID_ID) {{")
+            lines.append(f"        descriptors[count] = kek_state_store_descriptor(store, slots->{instance.name});")
+            lines.append("        if (descriptors[count] == 0) {")
+            lines.append("            return 0;")
+            lines.append("        }")
+            lines.append(f"        updates[count] = (KekStateStoreUpdateItem){{slots->{instance.name}, kek_generated_reset_slot, (void*)descriptors[count]}};")
+            lines.append("        count++;")
+            lines.append("    }")
+        lines.append("    return kek_state_store_update_many(store, updates, count);")
+    else:
+        lines.append("    (void)store;")
+        lines.append("    return 1;")
+    lines.extend(["}", ""])
 
     lines.extend(
         [

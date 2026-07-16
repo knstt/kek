@@ -5,6 +5,7 @@
 
 #include "generated/game.h"
 #include "runtime/runtime.h"
+#include "runtime/standard_io.h"
 #include "runtime/hook.h"
 #include "runtime/state_storage.h"
 #include "runtime/stream.h"
@@ -19,9 +20,9 @@ typedef struct GameApp {
     KekStream* stdout_stream;
     KekStream* log_stream;
     GameRuntimeBinding binding;
-    size_t input_len;
+    KekStandardTextBridge input_bridge;
     size_t handled_input_len;
-    size_t output_len;
+    KekStandardTextBridge output_bridge;
 } GameApp;
 
 #define APP_STORE(app) (&(app)->binding.state_store)
@@ -74,49 +75,15 @@ static void game_set_message_on_state(GameProgress* progress, const char* messag
 }
 
 static void app_set_input_state(GameApp* app, const char* data, size_t len) {
-    size_t capacity = sizeof(app->binding.standard_input_input_buffer);
-    size_t available = capacity - app->input_len - 1;
-    size_t to_copy = len < available ? len : available;
-    if (to_copy > 0) {
-        memcpy(app->binding.standard_input_input_buffer + app->input_len, data, to_copy);
-        app->input_len += to_copy;
-        app->binding.standard_input_input_buffer[app->input_len] = '\0';
-    }
-
-    game_standard_input_set_input(APP_STORE(app), app->binding.slots.standard_input,
-                                  app->binding.standard_input_input_buffer, app->input_len);
-}
-
-static void app_track_output_state(GameApp* app, const char* data, size_t len) {
-    size_t capacity = sizeof(app->binding.standard_output_output_buffer);
-    size_t available = capacity - app->output_len - 1;
-    if (available == 0) {
-        app->output_len = 0;
-        app->binding.standard_output_output_buffer[0] = '\0';
-        available = capacity - 1;
-    }
-    size_t to_copy = len < available ? len : available;
-    if (to_copy > 0) {
-        memcpy(app->binding.standard_output_output_buffer + app->output_len, data, to_copy);
-        app->output_len += to_copy;
-        app->binding.standard_output_output_buffer[app->output_len] = '\0';
-    }
-
-    game_standard_output_set_output(APP_STORE(app), app->binding.slots.standard_output,
-                                    app->binding.standard_output_output_buffer, app->output_len);
+    kek_standard_text_bridge_append(&app->input_bridge, data, len);
 }
 
 static void app_write_raw(GameApp* app, const char* data, size_t len) {
-    kek_stream_flush(app->stdout_stream);
-    size_t written = kek_stream_write_raw(app->stdout_stream, data, len);
-    if (written != len) {
-        kek_stream_flush(app->stdout_stream);
-        written += kek_stream_write_raw(app->stdout_stream, data + written, len - written);
-    }
+    size_t written = kek_standard_output_write(app->stdout_stream, &app->output_bridge,
+                                               data, len);
     if (written != len) {
         fprintf(stderr, "stdout stream buffer full, dropped %zu bytes\n", len - written);
     }
-    app_track_output_state(app, data, written);
 }
 
 static void app_write(GameApp* app, const char* text) {
@@ -140,13 +107,6 @@ static void game_set_message(GameApp* app, const char* message) {
                            update_game_message, (void*)message);
 }
 
-static void update_reset_state(void* draft, void* context) {
-    const KekStateDescriptor* descriptor = (const KekStateDescriptor*)context;
-    if (descriptor && descriptor->reset) {
-        descriptor->reset(draft);
-    }
-}
-
 static void game_reset(GameApp* app) {
     size_t slot = game_treasure_first(APP_STORE(app));
     while (slot != KEK_STATE_INVALID_ID) {
@@ -166,13 +126,7 @@ static void game_reset(GameApp* app) {
         slot = next;
     }
 
-    size_t slots[] = {app->binding.slots.player, app->binding.slots.dungeon_map,
-                      app->binding.slots.treasure, app->binding.slots.goblin,
-                      app->binding.slots.game_progress};
-    for (size_t i = 0; i < sizeof(slots) / sizeof(slots[0]); i++) {
-        const KekStateDescriptor* descriptor = kek_state_store_descriptor(APP_STORE(app), slots[i]);
-        kek_state_store_update(APP_STORE(app), slots[i], update_reset_state, (void*)descriptor);
-    }
+    game_state_slots_reset_declared(APP_STORE(app), APP_SLOTS(app));
 }
 
 static char game_cell_at(const GameApp* app, int x, int y) {
@@ -392,10 +346,14 @@ static int game_apply_move(GameApp* app, const MoveUpdate* move) {
         return 0;
     }
 
-    int ok = app_commit_state_copy(app, app->binding.slots.player, &player, sizeof(player));
-    ok = app_commit_state_copy(app, app->binding.slots.game_progress, &progress,
-                               sizeof(progress)) && ok;
-    return ok;
+    StateCopyUpdate player_update = {&player, sizeof(player)};
+    StateCopyUpdate progress_update = {&progress, sizeof(progress)};
+    KekStateStoreUpdateItem updates[] = {
+        {app->binding.slots.player, update_state_copy, &player_update},
+        {app->binding.slots.game_progress, update_state_copy, &progress_update},
+    };
+    return kek_state_store_update_many(APP_STORE(app), updates,
+                                      sizeof(updates) / sizeof(updates[0]));
 }
 
 static int game_count_treasures(GameApp* app) {
@@ -612,6 +570,13 @@ static void stream_error_handler(const KekEvent* event, void* context) {
     }
 }
 
+static void stream_eof_handler(const KekEvent* event, void* context) {
+    GameApp* app = (GameApp*)context;
+    if (event->source == app->stdin_stream) {
+        kek_runtime_request_quit(app->runtime);
+    }
+}
+
 static int app_init(GameApp* app, KekRuntime* runtime, KekStream* stdin_stream,
                     KekStream* stdout_stream, KekStream* log_stream) {
     memset(app, 0, sizeof(*app));
@@ -622,6 +587,16 @@ static int app_init(GameApp* app, KekRuntime* runtime, KekStream* stdin_stream,
     if (!game_runtime_binding_init(&app->binding, runtime, app)) {
         return -1;
     }
+    kek_standard_text_bridge_init(&app->input_bridge, APP_STORE(app),
+                                  app->binding.slots.standard_input,
+                                  app->binding.standard_input_input_buffer,
+                                  sizeof(app->binding.standard_input_input_buffer),
+                                  game_standard_input_set_input);
+    kek_standard_text_bridge_init(&app->output_bridge, APP_STORE(app),
+                                  app->binding.slots.standard_output,
+                                  app->binding.standard_output_output_buffer,
+                                  sizeof(app->binding.standard_output_output_buffer),
+                                  game_standard_output_set_output);
     const Timer* timer = app_timer_const(app);
     if (!timer || kek_runtime_register_timer(runtime, APP_STORE(app), app->binding.slots.timer,
                                              timer->interval_ms) < 0) {
@@ -673,6 +648,8 @@ int main(void) {
 
     kek_event_subscribe(kek_runtime_events(&runtime), KEK_EVENT_STREAM_DATA,
                         stream_data_handler, &app);
+    kek_event_subscribe(kek_runtime_events(&runtime), KEK_EVENT_STREAM_EOF,
+                        stream_eof_handler, &app);
     kek_event_subscribe(kek_runtime_events(&runtime), KEK_EVENT_STREAM_ERROR,
                         stream_error_handler, &app);
     game_publish_state(&app);

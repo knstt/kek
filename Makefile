@@ -10,16 +10,25 @@ RUNTIME_SRCS := \
 	runtime/event.c \
 	runtime/hook.c \
 	runtime/stream.c \
+	runtime/standard_io.c \
 	runtime/timer.c \
 	runtime/runtime.c \
 	runtime/state_storage.c
 RUNTIME_OBJS := $(RUNTIME_SRCS:runtime/%.c=$(BUILD_DIR)/runtime/%.o)
 
-.PHONY: all runtime clean
+.PHONY: all runtime examples examples-clean clean
 
 all: runtime
 
 runtime: $(RUNTIME_LIB)
+
+examples: runtime
+	$(MAKE) -C examples/game
+	$(MAKE) -C examples/warehouse
+
+examples-clean:
+	$(MAKE) -C examples/game clean
+	$(MAKE) -C examples/warehouse clean
 
 $(RUNTIME_LIB): $(RUNTIME_OBJS) | $(LIB_DIR)
 	$(AR) rcs $@ $^

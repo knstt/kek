@@ -2,6 +2,9 @@
 
 #include "runtime.h"
 
+static const KekHookDescriptor* current_descriptor;
+static size_t current_trigger_state_type = KEK_HOOK_ANY_STATE;
+
 static void hook_registry_event_handler(const KekEvent* event, void* context) {
     kek_hook_registry_dispatch((KekHookRegistry*)context, event);
 }
@@ -91,6 +94,33 @@ void kek_hook_registry_dispatch(KekHookRegistry* registry, const KekEvent* event
         context.state_store = registry->state_store;
         context.event = event;
         context.app_context = registry->app_context;
+        const KekHookDescriptor* previous_descriptor = current_descriptor;
+        size_t previous_trigger_state_type = current_trigger_state_type;
+        current_descriptor = descriptor;
+        current_trigger_state_type = event->state_type_id;
         descriptor->run(&context);
+        current_descriptor = previous_descriptor;
+        current_trigger_state_type = previous_trigger_state_type;
     }
+}
+
+const KekHookDescriptor* kek_hook_current_descriptor(void) {
+    return current_descriptor;
+}
+
+size_t kek_hook_current_trigger_state_type(void) {
+    return current_trigger_state_type;
+}
+
+const void* kek_hook_event_state(const KekHookContext* context, size_t* size) {
+    if (size) {
+        *size = 0;
+    }
+    if (!context || !context->event || !context->event->has_state_snapshot) {
+        return NULL;
+    }
+    if (size) {
+        *size = context->event->state_snapshot_size;
+    }
+    return context->event->state_snapshot.data;
 }
