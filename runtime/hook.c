@@ -3,8 +3,8 @@
 #include "runtime.h"
 #include "state_storage.h"
 
-static void hook_registry_event_handler(const KekEvent* event, void* context) {
-    kek_hook_registry_dispatch((KekHookRegistry*)context, event);
+static int hook_registry_event_handler(const KekEvent* event, void* context) {
+    return kek_hook_registry_dispatch((KekHookRegistry*)context, event);
 }
 
 void kek_hook_registry_init(KekHookRegistry* registry, struct KekRuntime* runtime,
@@ -78,9 +78,20 @@ void kek_hook_registry_detach(KekHookRegistry* registry) {
     registry->attached = 0;
 }
 
-void kek_hook_registry_dispatch(KekHookRegistry* registry, const KekEvent* event) {
+static int hook_matches_changed_fields(const KekHookDescriptor* descriptor,
+                                       const KekEvent* event) {
+    if (!descriptor || descriptor->trigger_fields == KEK_EVENT_CHANGED_FIELDS_NONE) {
+        return 1;
+    }
+    if (!event || event->changed_fields == KEK_EVENT_CHANGED_FIELDS_UNKNOWN) {
+        return 1;
+    }
+    return (descriptor->trigger_fields & event->changed_fields) != 0;
+}
+
+int kek_hook_registry_dispatch(KekHookRegistry* registry, const KekEvent* event) {
     if (!registry || !event) {
-        return;
+        return 0;
     }
 
     for (size_t i = 0; i < registry->descriptor_count; i++) {
@@ -96,18 +107,38 @@ void kek_hook_registry_dispatch(KekHookRegistry* registry, const KekEvent* event
             descriptor->state_slot_id != event->state_slot_id) {
             continue;
         }
+        if (!hook_matches_changed_fields(descriptor, event)) {
+            continue;
+        }
 
         KekHookContext context;
         context.runtime = registry->runtime;
         context.state_store = registry->state_store;
         context.event = event;
         context.app_context = registry->app_context;
+        KekStateStoreTransaction state_transaction;
+        KekEventTransaction event_transaction;
+        if (!kek_state_store_transaction_begin(registry->state_store,
+                                               &state_transaction) ||
+            !kek_event_transaction_begin(kek_runtime_events(registry->runtime),
+                                         &event_transaction)) {
+            kek_state_store_transaction_rollback(&state_transaction);
+            return 0;
+        }
         KekStateStoreHookExecution previous_hook;
         kek_state_store_begin_hook(registry->state_store, descriptor,
                                    event->state_slot_id, &previous_hook);
-        descriptor->run(&context);
+        int ok = descriptor->run(&context);
         kek_state_store_end_hook(registry->state_store, &previous_hook);
+        if (!ok) {
+            kek_event_transaction_rollback(&event_transaction);
+            kek_state_store_transaction_rollback(&state_transaction);
+            return 0;
+        }
+        kek_event_transaction_commit(&event_transaction);
+        kek_state_store_transaction_commit(&state_transaction);
     }
+    return 1;
 }
 
 const void* kek_hook_event_state(const KekHookContext* context, size_t* size) {

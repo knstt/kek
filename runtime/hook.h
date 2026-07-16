@@ -20,13 +20,14 @@ typedef struct KekHookContext {
     void* app_context;
 } KekHookContext;
 
-typedef void (*KekHookFn)(KekHookContext* context);
+typedef int (*KekHookFn)(KekHookContext* context);
 
 typedef struct KekHookDescriptor {
     const char* name;
     KekEventType event_type;
     size_t state_type_id;
     size_t state_slot_id;
+    uint64_t trigger_fields;
     const size_t* reads;
     size_t read_count;
     const size_t* writes;
@@ -52,7 +53,7 @@ int kek_hook_registry_add_many(KekHookRegistry* registry,
                                size_t descriptor_count);
 void kek_hook_registry_attach(KekHookRegistry* registry);
 void kek_hook_registry_detach(KekHookRegistry* registry);
-void kek_hook_registry_dispatch(KekHookRegistry* registry, const KekEvent* event);
+int kek_hook_registry_dispatch(KekHookRegistry* registry, const KekEvent* event);
 const void* kek_hook_event_state(const KekHookContext* context, size_t* size);
 
 #endif

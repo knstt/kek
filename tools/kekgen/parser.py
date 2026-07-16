@@ -282,6 +282,7 @@ def parse_hooks(hook_items: object, instances: list[Instance] | None = None) -> 
                 event_type,
                 state_name,
                 instance_name,
+                parse_json_name_list(on_item.get("fields", []), f"{hook_name}.on.fields"),
                 parse_json_name_list(hook_item.get("reads", []), f"{hook_name}.reads"),
                 parse_json_name_list(hook_item.get("writes", []), f"{hook_name}.writes"),
             )
@@ -346,11 +347,16 @@ def parse_json_name_list(value: object, label: str) -> list[str]:
 
 def validate_hooks(states: list[State], hooks: list[Hook]) -> None:
     state_names = {state.name for state in states}
+    state_by_name = {state.name: state for state in states}
     for hook in hooks:
         if not hook.event_type or not hook.state_name:
             raise ValueError(f"{hook.name}: hook must declare an on clause")
         if hook.state_name not in state_names:
             raise ValueError(f"{hook.name}: hook references unknown state {hook.state_name}")
+        fields = field_map(state_by_name[hook.state_name])
+        for field_name in hook.trigger_fields:
+            if field_name not in fields:
+                raise ValueError(f"{hook.name}: hook references unknown trigger field {field_name}")
         for name in hook.reads + hook.writes:
             if name not in state_names:
                 raise ValueError(f"{hook.name}: hook references unknown state {name}")

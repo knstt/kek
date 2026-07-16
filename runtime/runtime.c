@@ -44,14 +44,17 @@ static int runtime_prepare_states(KekRuntime* runtime, fd_set* read_fds,
     return 0;
 }
 
-static void runtime_ready_states(KekRuntime* runtime, const fd_set* read_fds,
-                                 const fd_set* write_fds) {
+static int runtime_ready_states(KekRuntime* runtime, const fd_set* read_fds,
+                                const fd_set* write_fds) {
     for (size_t i = 0; i < runtime->state_count; i++) {
         KekRuntimeState* state = &runtime->states[i];
         if (state->ready) {
-            state->ready(runtime, state, read_fds, write_fds);
+            if (state->ready(runtime, state, read_fds, write_fds) < 0) {
+                return -1;
+            }
         }
     }
+    return 0;
 }
 
 static int runtime_wait(fd_set* read_fds, fd_set* write_fds, int max_fd,
@@ -125,6 +128,16 @@ int kek_runtime_publish_state_slot_changed(KekRuntime* runtime, void* source,
                                            size_t state_type_id,
                                            size_t state_slot_id,
                                            uint64_t state_version) {
+    return kek_runtime_publish_state_slot_fields_changed(
+        runtime, source, state_type_id, state_slot_id, state_version,
+        KEK_EVENT_CHANGED_FIELDS_UNKNOWN);
+}
+
+int kek_runtime_publish_state_slot_fields_changed(KekRuntime* runtime, void* source,
+                                                  size_t state_type_id,
+                                                  size_t state_slot_id,
+                                                  uint64_t state_version,
+                                                  uint64_t changed_fields) {
     if (!runtime) {
         return 0;
     }
@@ -136,6 +149,7 @@ int kek_runtime_publish_state_slot_changed(KekRuntime* runtime, void* source,
     event.state_type_id = state_type_id;
     event.state_slot_id = state_slot_id;
     event.state_version = state_version;
+    event.changed_fields = changed_fields;
     return kek_event_publish(&runtime->events, &event);
 }
 
@@ -187,7 +201,9 @@ int kek_runtime_run(KekRuntime* runtime) {
         }
 
         if (kek_event_has_pending(&runtime->events)) {
-            kek_event_dispatch_pending(&runtime->events);
+            if (!kek_event_dispatch_pending(&runtime->events)) {
+                return -1;
+            }
             continue;
         }
 
@@ -203,12 +219,18 @@ int kek_runtime_run(KekRuntime* runtime) {
             return -1;
         }
 
-        runtime_ready_states(runtime, &read_fds, &write_fds);
+        if (runtime_ready_states(runtime, &read_fds, &write_fds) < 0) {
+            return -1;
+        }
 
-        kek_event_dispatch_pending(&runtime->events);
+        if (!kek_event_dispatch_pending(&runtime->events)) {
+            return -1;
+        }
     }
 
-    kek_event_dispatch_pending(&runtime->events);
+    if (!kek_event_dispatch_pending(&runtime->events)) {
+        return -1;
+    }
     return kek_runtime_drain(runtime);
 }
 
@@ -231,7 +253,9 @@ int kek_runtime_drain(KekRuntime* runtime) {
             break;
         }
 
-        kek_event_dispatch_pending(&runtime->events);
+        if (!kek_event_dispatch_pending(&runtime->events)) {
+            return -1;
+        }
 
         has_state_work = 0;
         for (size_t i = 0; i < runtime->state_count; i++) {
@@ -268,7 +292,9 @@ int kek_runtime_drain(KekRuntime* runtime) {
             return -1;
         }
 
-        runtime_ready_states(runtime, &read_fds, &write_fds);
+        if (runtime_ready_states(runtime, &read_fds, &write_fds) < 0) {
+            return -1;
+        }
     }
 
     return 0;

@@ -17,10 +17,10 @@ typedef int (*KekRuntimeStatePrepareFn)(struct KekRuntime* runtime,
                                         fd_set* read_fds, fd_set* write_fds,
                                         int* max_fd,
                                         struct timeval* timeout);
-typedef void (*KekRuntimeStateReadyFn)(struct KekRuntime* runtime,
-                                       struct KekRuntimeState* state,
-                                       const fd_set* read_fds,
-                                       const fd_set* write_fds);
+typedef int (*KekRuntimeStateReadyFn)(struct KekRuntime* runtime,
+                                      struct KekRuntimeState* state,
+                                      const fd_set* read_fds,
+                                      const fd_set* write_fds);
 typedef int (*KekRuntimeStateHasWorkFn)(const struct KekRuntimeState* state);
 typedef void (*KekRuntimeStateDestroyFn)(struct KekRuntimeState* state);
 

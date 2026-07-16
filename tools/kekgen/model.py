@@ -45,5 +45,6 @@ class Hook:
     event_type: str = ""
     state_name: str = ""
     instance_name: str | None = None
+    trigger_fields: list[str] = field(default_factory=list)
     reads: list[str] = field(default_factory=list)
     writes: list[str] = field(default_factory=list)

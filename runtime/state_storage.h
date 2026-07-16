@@ -14,6 +14,7 @@ typedef struct KekStateStoreUpdateItem {
     size_t slot_id;
     KekStateStorageUpdateFn update;
     void* context;
+    uint64_t changed_fields;
 } KekStateStoreUpdateItem;
 
 #define KEK_STATE_STORE_MAX_SLOTS 128
@@ -50,6 +51,20 @@ typedef struct KekStateStore {
     size_t slot_count;
     KekStateStoreHookExecution active_hook;
 } KekStateStore;
+
+typedef struct KekStateStoreTransactionSlot {
+    const KekStateDescriptor* descriptor;
+    unsigned char* buffers[2];
+    size_t active_index;
+    uint64_t version;
+    int in_use;
+} KekStateStoreTransactionSlot;
+
+typedef struct KekStateStoreTransaction {
+    KekStateStore* store;
+    KekStateStoreTransactionSlot slots[KEK_STATE_STORE_MAX_SLOTS];
+    size_t slot_count;
+} KekStateStoreTransaction;
 
 typedef struct KekStateStorage {
     KekRuntime* runtime;
@@ -88,6 +103,9 @@ size_t kek_state_store_find_next(const KekStateStore* store, size_t state_type_i
                                  size_t after_slot_id);
 int kek_state_store_update(KekStateStore* store, size_t slot_id,
                             KekStateStorageUpdateFn update, void* context);
+int kek_state_store_update_fields(KekStateStore* store, size_t slot_id,
+                                  KekStateStorageUpdateFn update, void* context,
+                                  uint64_t changed_fields);
 int kek_state_store_update_many(KekStateStore* store,
                                 const KekStateStoreUpdateItem* updates,
                                 size_t update_count);
@@ -97,5 +115,9 @@ void kek_state_store_begin_hook(KekStateStore* store,
                                 KekStateStoreHookExecution* previous);
 void kek_state_store_end_hook(KekStateStore* store,
                               const KekStateStoreHookExecution* previous);
+int kek_state_store_transaction_begin(KekStateStore* store,
+                                      KekStateStoreTransaction* transaction);
+void kek_state_store_transaction_commit(KekStateStoreTransaction* transaction);
+void kek_state_store_transaction_rollback(KekStateStoreTransaction* transaction);
 
 #endif

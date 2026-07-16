@@ -8,6 +8,8 @@
 #define KEK_EVENT_QUEUE_CAPACITY 256
 #define KEK_EVENT_DATA_CAPACITY 1024
 #define KEK_EVENT_STATE_SNAPSHOT_CAPACITY 1024
+#define KEK_EVENT_CHANGED_FIELDS_NONE 0ull
+#define KEK_EVENT_CHANGED_FIELDS_UNKNOWN UINT64_MAX
 typedef union KekEventStateSnapshot {
     max_align_t align;
     unsigned char data[KEK_EVENT_STATE_SNAPSHOT_CAPACITY];
@@ -30,6 +32,7 @@ typedef struct KekEvent {
     size_t state_type_id;
     size_t state_slot_id;
     uint64_t state_version;
+    uint64_t changed_fields;
     KekEventStateSnapshot state_snapshot;
     size_t state_snapshot_size;
     int has_state_snapshot;
@@ -38,7 +41,7 @@ typedef struct KekEvent {
     int error_code;
 } KekEvent;
 
-typedef void (*KekEventHandler)(const KekEvent* event, void* context);
+typedef int (*KekEventHandler)(const KekEvent* event, void* context);
 
 typedef struct KekEventSubscriber {
     KekEventHandler handler;
@@ -59,14 +62,25 @@ typedef struct KekEventDispatcher {
     size_t queue_size;
 } KekEventDispatcher;
 
+typedef struct KekEventTransaction {
+    KekEventDispatcher* dispatcher;
+    size_t queue_start;
+    size_t queue_end;
+    size_t queue_size;
+} KekEventTransaction;
+
 void kek_event_dispatcher_init(KekEventDispatcher* dispatcher);
 int kek_event_subscribe(KekEventDispatcher* dispatcher, KekEventType type,
                         KekEventHandler handler, void* context);
 int kek_event_unsubscribe(KekEventDispatcher* dispatcher, KekEventType type,
                           KekEventHandler handler, void* context);
 int kek_event_publish(KekEventDispatcher* dispatcher, const KekEvent* event);
-void kek_event_dispatch_pending(KekEventDispatcher* dispatcher);
+int kek_event_dispatch_pending(KekEventDispatcher* dispatcher);
 int kek_event_has_pending(const KekEventDispatcher* dispatcher);
 size_t kek_event_capacity_remaining(const KekEventDispatcher* dispatcher);
+int kek_event_transaction_begin(KekEventDispatcher* dispatcher,
+                                KekEventTransaction* transaction);
+void kek_event_transaction_commit(KekEventTransaction* transaction);
+void kek_event_transaction_rollback(KekEventTransaction* transaction);
 
 #endif

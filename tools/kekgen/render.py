@@ -167,6 +167,12 @@ def render_state_declarations(states: list[State]) -> str:
                 lines.append(f"    {c_type(item.type_name)} {item.name}[{item.array_length}];")
         lines.append(f"}} {state.name};")
         lines.append("")
+        for index, item in enumerate(state.fields):
+            lines.append(
+                f"#define {state_type_macro(state.name)}_FIELD_{item.name.upper()} "
+                f"(1ull << {index})"
+            )
+        lines.append("")
         lines.append(f"{state.name} {state.name}_default(void);")
         for constructor in state.constructors:
             lines.append(f"{state.name} {state.name}_{constructor.name}(void);")
@@ -259,7 +265,7 @@ def render_instance_declarations(states: list[State], hooks: list[Hook], instanc
 
 
 def render_hook_declarations(hooks: list[Hook]) -> str:
-    return "\n".join(f"void {hook.name}(KekHookContext* context);" for hook in hooks)
+    return "\n".join(f"int {hook.name}(KekHookContext* context);" for hook in hooks)
 
 
 def render_state_definitions(states: list[State], enums: list[Enum] | None = None) -> str:
@@ -484,7 +490,7 @@ def render_instance_definitions(states: list[State], hooks: list[Hook], instance
             lines.append("        if (descriptors[count] == 0) {")
             lines.append("            return 0;")
             lines.append("        }")
-            lines.append(f"        updates[count] = (KekStateStoreUpdateItem){{slots->{instance.name}, kek_generated_reset_slot, (void*)descriptors[count]}};")
+            lines.append(f"        updates[count] = (KekStateStoreUpdateItem){{slots->{instance.name}, kek_generated_reset_slot, (void*)descriptors[count], KEK_EVENT_CHANGED_FIELDS_UNKNOWN}};")
             lines.append("        count++;")
             lines.append("    }")
         lines.append("    return kek_state_store_update_many(store, updates, count);")
@@ -634,7 +640,7 @@ def render_instance_definitions(states: list[State], hooks: list[Hook], instance
                 "        return 0;",
                 "    }",
                 f"    {state.name}_{field_name}_TextUpdate update = {{data, len}};",
-                f"    return kek_state_store_update(store, slot_id, {prefix}_{snake}_update_{field_name}, &update);",
+                f"    return kek_state_store_update_fields(store, slot_id, {prefix}_{snake}_update_{field_name}, &update, {macro}_FIELD_{field_name.upper()});",
                 "}",
                 "",
             ]
@@ -676,6 +682,7 @@ def render_hook_descriptor_table(hooks: list[Hook]) -> str:
             lines.append("        .state_slot_id = KEK_HOOK_ANY_SLOT,")
         else:
             lines.append("        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,")
+        lines.append(f"        .trigger_fields = {render_hook_trigger_fields(hook)},")
         lines.append(f"        .reads = {reads_name},")
         lines.append(f"        .read_count = {len(hook.reads)},")
         lines.append(f"        .writes = {writes_name},")
@@ -685,6 +692,15 @@ def render_hook_descriptor_table(hooks: list[Hook]) -> str:
     lines.append("};")
     lines.append("const KekHookDescriptor* KekGeneratedHookDescriptors = KekGeneratedHookDescriptorData;")
     return "\n".join(lines)
+
+
+def render_hook_trigger_fields(hook: Hook) -> str:
+    if not hook.trigger_fields:
+        return "KEK_EVENT_CHANGED_FIELDS_NONE"
+    return " | ".join(
+        f"{state_type_macro(hook.state_name)}_FIELD_{field_name.upper()}"
+        for field_name in hook.trigger_fields
+    )
 
 
 def render_graph_body(states: list[State], hooks: list[Hook], instances: list[Instance]) -> str:

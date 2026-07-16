@@ -41,6 +41,9 @@ typedef struct SmokeApp {
     size_t timer_slot;
     size_t stream_data_events;
     size_t hook_runs;
+    size_t self_hook_runs;
+    size_t text_hook_runs;
+    size_t failing_hook_runs;
     int write_stream_id;
 } SmokeApp;
 
@@ -105,7 +108,8 @@ static void update_text(void* draft, void* context) {
 static int set_text_state(KekStateStore* store, size_t slot_id,
                           const char* data, size_t len) {
     TextUpdate update = {data ? data : "", data ? len : 0};
-    return kek_state_store_update(store, slot_id, update_text, &update);
+    return kek_state_store_update_fields(store, slot_id, update_text, &update,
+                                         1ull << 0 | 1ull << 1);
 }
 
 static void add_to_counter(void* draft, void* context) {
@@ -114,37 +118,180 @@ static void add_to_counter(void* draft, void* context) {
     counter->value += *delta;
 }
 
-static void stream_event_handler(const KekEvent* event, void* context) {
+static void set_counter_value(void* draft, void* context) {
+    SmokeCounterState* counter = (SmokeCounterState*)draft;
+    int* value = (int*)context;
+    counter->value = *value;
+}
+
+static int stream_event_handler(const KekEvent* event, void* context) {
     SmokeApp* app = (SmokeApp*)context;
     if (event->type != KEK_EVENT_STREAM_DATA) {
-        return;
+        return 1;
     }
 
     app->stream_data_events++;
-    set_text_state(app->store, app->input_slot, event->data, event->data_len);
+    return set_text_state(app->store, app->input_slot, event->data, event->data_len);
 }
 
-static void timer_hook(KekHookContext* context) {
+static int timer_hook(KekHookContext* context) {
     SmokeApp* app = (SmokeApp*)context->app_context;
     size_t snapshot_size = 0;
     const SmokeTimerState* snapshot =
         (const SmokeTimerState*)kek_hook_event_state(context, &snapshot_size);
     if (!snapshot || snapshot_size != sizeof(*snapshot) || snapshot->tick == 0) {
-        return;
+        return 1;
     }
 
     app->hook_runs++;
     int delta = 1;
-    kek_state_store_update(context->state_store, app->counter_slot,
-                           add_to_counter, &delta);
+    if (!kek_state_store_update_fields(context->state_store, app->counter_slot,
+                                       add_to_counter, &delta,
+                                       1ull << 0)) {
+        return 0;
+    }
     kek_runtime_request_quit(context->runtime);
+    return 1;
 }
 
-static void generic_event_counter(const KekEvent* event, void* context) {
+static int generic_event_counter(const KekEvent* event, void* context) {
     size_t* count = (size_t*)context;
     if (event->type == KEK_EVENT_STATE_CHANGED) {
         (*count)++;
     }
+    return 1;
+}
+
+static int self_counter_hook(KekHookContext* context) {
+    SmokeApp* app = (SmokeApp*)context->app_context;
+    const SmokeCounterState* counter =
+        (const SmokeCounterState*)kek_hook_event_state(context, NULL);
+    if (!counter || counter->value != 1) {
+        return 1;
+    }
+    app->self_hook_runs++;
+    int value = 2;
+    return kek_state_store_update_fields(context->state_store, app->counter_slot,
+                                         set_counter_value, &value, 1ull << 0);
+}
+
+static int text_field_hook(KekHookContext* context) {
+    SmokeApp* app = (SmokeApp*)context->app_context;
+    app->text_hook_runs++;
+    return 1;
+}
+
+static int failing_counter_hook(KekHookContext* context) {
+    SmokeApp* app = (SmokeApp*)context->app_context;
+    app->failing_hook_runs++;
+    int value = 4;
+    if (!kek_state_store_update_fields(context->state_store, app->counter_slot,
+                                       set_counter_value, &value, 1ull << 0)) {
+        return 0;
+    }
+    return 0;
+}
+
+static int run_behavior_checks(void) {
+    KekRuntime runtime;
+    KekStateStore store;
+    KekHookRegistry hooks;
+    SmokeApp app;
+
+    kek_runtime_init(&runtime);
+    kek_state_store_init(&store, &runtime);
+    memset(&app, 0, sizeof(app));
+    app.runtime = &runtime;
+    app.store = &store;
+
+    app.counter_slot = kek_state_store_add_default(&store, &counter_descriptor);
+    app.input_slot = kek_state_store_add_default(&store, &text_descriptor);
+    if (app.counter_slot == KEK_STATE_INVALID_ID ||
+        app.input_slot == KEK_STATE_INVALID_ID) {
+        return 1;
+    }
+    if (!kek_event_dispatch_pending(kek_runtime_events(&runtime))) {
+        return 1;
+    }
+
+    size_t counter_writes[] = {SMOKE_STATE_COUNTER};
+    KekHookDescriptor descriptors[] = {
+        {"self counter", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
+         app.counter_slot, 1ull << 0, NULL, 0, counter_writes, 1,
+         self_counter_hook},
+        {"text field", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_TEXT,
+         app.input_slot, 1ull << 1, NULL, 0, NULL, 0, text_field_hook},
+        {"failing counter", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
+         app.counter_slot, 1ull << 0, NULL, 0, NULL, 0, failing_counter_hook},
+    };
+    kek_hook_registry_init(&hooks, &runtime, &store, &app);
+    if (!kek_hook_registry_add(&hooks, &descriptors[0]) ||
+        !kek_hook_registry_add(&hooks, &descriptors[1])) {
+        return 1;
+    }
+    kek_hook_registry_attach(&hooks);
+
+    int value = 1;
+    if (!kek_state_store_update_fields(&store, app.counter_slot,
+                                       set_counter_value, &value, 1ull << 0) ||
+        !kek_event_dispatch_pending(kek_runtime_events(&runtime))) {
+        return 1;
+    }
+    const SmokeCounterState* counter =
+        (const SmokeCounterState*)kek_state_store_current_const(&store,
+                                                                app.counter_slot);
+    if (!counter || counter->value != 2 || app.self_hook_runs != 1) {
+        return 1;
+    }
+
+    if (!set_text_state(&store, app.input_slot, "abc", 3) ||
+        !kek_event_dispatch_pending(kek_runtime_events(&runtime)) ||
+        app.text_hook_runs != 1) {
+        return 1;
+    }
+    if (!kek_state_store_update_fields(&store, app.input_slot,
+                                       update_text,
+                                       &(TextUpdate){"def", 3}, 1ull << 0) ||
+        !kek_event_dispatch_pending(kek_runtime_events(&runtime)) ||
+        app.text_hook_runs != 1) {
+        return 1;
+    }
+
+    value = 101;
+    if (kek_state_store_update_fields(&store, app.counter_slot,
+                                      set_counter_value, &value, 1ull << 0)) {
+        return 1;
+    }
+    counter = (const SmokeCounterState*)kek_state_store_current_const(
+        &store, app.counter_slot);
+    if (!counter || counter->value != 2) {
+        return 1;
+    }
+
+    kek_hook_registry_detach(&hooks);
+    kek_hook_registry_init(&hooks, &runtime, &store, &app);
+    if (!kek_hook_registry_add(&hooks, &descriptors[2])) {
+        return 1;
+    }
+    kek_hook_registry_attach(&hooks);
+    value = 3;
+    if (!kek_state_store_update_fields(&store, app.counter_slot,
+                                       set_counter_value, &value, 1ull << 0) ||
+        kek_event_dispatch_pending(kek_runtime_events(&runtime)) ||
+        app.failing_hook_runs != 1) {
+        return 1;
+    }
+    counter = (const SmokeCounterState*)kek_state_store_current_const(
+        &store, app.counter_slot);
+    if (!counter || counter->value != 3 ||
+        kek_event_has_pending(kek_runtime_events(&runtime))) {
+        return 1;
+    }
+
+    kek_hook_registry_detach(&hooks);
+    kek_state_store_destroy(&store);
+    kek_runtime_destroy(&runtime);
+    return 0;
 }
 
 static int run_smoke(void) {
@@ -213,7 +360,8 @@ static int run_smoke(void) {
     size_t timer_writes[] = {SMOKE_STATE_COUNTER};
     KekHookDescriptor timer_descriptor_hook = {
         "timer increments counter", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_TIMER,
-        app.timer_slot, NULL, 0, timer_writes, 1, timer_hook};
+        app.timer_slot, KEK_EVENT_CHANGED_FIELDS_UNKNOWN, NULL, 0,
+        timer_writes, 1, timer_hook};
     kek_hook_registry_init(&hooks, &runtime, &store, &app);
     if (!kek_hook_registry_add(&hooks, &timer_descriptor_hook)) {
         return 1;
@@ -250,6 +398,9 @@ static int run_smoke(void) {
 
 int main(void) {
     int result = run_smoke();
+    if (result == 0) {
+        result = run_behavior_checks();
+    }
     if (result == 0) {
         puts("runtime smoke passed");
     } else {

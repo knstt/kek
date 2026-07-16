@@ -141,6 +141,7 @@ Parser rules:
 - Hook names and referenced state names must use identifiers.
 - Hook triggers support `{ "event": "changed" }`, `{ "event": "created" }`, and `{ "event": "deleted" }`.
 - Hook triggers must declare exactly one selector: `state` for all instances of a state type, or `instance` for one schema-declared named slot.
+- Hook triggers may include `fields`, an array of field names from the triggering state. When provided, the generated hook only runs for changed events whose field mask contains at least one listed field.
 - Optional root-level `instances` declare named initial `KekStateStore` slots.
 - Instance names must match `[A-Za-z_][A-Za-z0-9_]*`.
 - Instance `state` values must reference a declared state type.
@@ -221,6 +222,8 @@ Check functions return `0` when the state pointer is null or any generated `min`
 Reset functions return `0` when the state pointer is null. Otherwise, they assign the corresponding default value into the existing object and return the result of the corresponding check function.
 
 Generated structs expose their fields directly. Callers that need rollback-safe validation should update through `KekStateStore` or `KekStateStorage`, which validate the complete draft before swapping it into place.
+
+Each generated state field has a bitmask macro named `<STATE_TYPE_MACRO>_FIELD_<FIELD_NAME>`, used in state-change events and generated hook field filters.
 
 `kek_generated_state_store_add_defaults()` adds one default-initialized slot for each generated state type and writes the created slot ids into a caller-provided `size_t slot_ids[KEK_STATE_TYPE_COUNT]` array.
 

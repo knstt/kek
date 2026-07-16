@@ -21,12 +21,9 @@ static int state_store_type_write_allowed(const KekStateStore* store,
 
 static int state_store_write_allowed(const KekStateStore* store,
                                      const KekStateSlot* slot, size_t slot_id) {
+    (void)slot_id;
     if (!slot || !slot->descriptor) {
         return 1;
-    }
-    if (store && store->active_hook.descriptor &&
-        slot_id == store->active_hook.trigger_state_slot) {
-        return 0;
     }
     return state_store_type_write_allowed(store, slot->descriptor->type_id);
 }
@@ -148,7 +145,8 @@ static void state_slot_clear(KekStateSlot* slot) {
 }
 
 static int state_store_publish_slot_event(KekStateStore* store, KekStateSlot* slot,
-                                           size_t slot_id, KekEventType event_type) {
+                                           size_t slot_id, KekEventType event_type,
+                                           uint64_t changed_fields) {
     if (!store || !store->runtime || !slot || !slot->descriptor) {
         return 0;
     }
@@ -160,6 +158,7 @@ static int state_store_publish_slot_event(KekStateStore* store, KekStateSlot* sl
     event.state_type_id = slot->descriptor->type_id;
     event.state_slot_id = slot_id;
     event.state_version = slot->version;
+    event.changed_fields = changed_fields;
     if (slot->descriptor->size <= KEK_EVENT_STATE_SNAPSHOT_CAPACITY) {
         memcpy(event.state_snapshot.data, slot->buffers[slot->active_index],
                slot->descriptor->size);
@@ -248,7 +247,9 @@ size_t kek_state_store_add(KekStateStore* store,
     slot->active_index = 0;
     slot->version = 1;
     slot->in_use = 1;
-    if (!state_store_publish_slot_event(store, slot, slot_id, KEK_EVENT_STATE_CREATED)) {
+    if (!state_store_publish_slot_event(store, slot, slot_id,
+                                        KEK_EVENT_STATE_CREATED,
+                                        KEK_EVENT_CHANGED_FIELDS_NONE)) {
         state_slot_clear(slot);
         while (store->slot_count > 0 && !store->slots[store->slot_count - 1].in_use) {
             store->slot_count--;
@@ -275,7 +276,9 @@ int kek_state_store_remove(KekStateStore* store, size_t slot_id) {
         return 0;
     }
 
-    if (!state_store_publish_slot_event(store, slot, slot_id, KEK_EVENT_STATE_DELETED)) {
+    if (!state_store_publish_slot_event(store, slot, slot_id,
+                                        KEK_EVENT_STATE_DELETED,
+                                        KEK_EVENT_CHANGED_FIELDS_NONE)) {
         return 0;
     }
     state_slot_clear(slot);
@@ -343,6 +346,13 @@ size_t kek_state_store_find_next(const KekStateStore* store, size_t state_type_i
 
 int kek_state_store_update(KekStateStore* store, size_t slot_id,
                             KekStateStorageUpdateFn update, void* context) {
+    return kek_state_store_update_fields(store, slot_id, update, context,
+                                         KEK_EVENT_CHANGED_FIELDS_UNKNOWN);
+}
+
+int kek_state_store_update_fields(KekStateStore* store, size_t slot_id,
+                                  KekStateStorageUpdateFn update, void* context,
+                                  uint64_t changed_fields) {
     KekStateSlot* slot = state_store_slot(store, slot_id);
     if (!store || !store->runtime || !slot || !slot->descriptor ||
         !slot->descriptor->check || !update) {
@@ -370,7 +380,8 @@ int kek_state_store_update(KekStateStore* store, size_t slot_id,
     slot->version++;
 
     if (state_store_publish_slot_event(store, slot, slot_id,
-                                       KEK_EVENT_STATE_CHANGED)) {
+                                       KEK_EVENT_STATE_CHANGED,
+                                       changed_fields)) {
         return 1;
     }
 
@@ -396,6 +407,7 @@ int kek_state_store_update_many(KekStateStore* store,
 
     KekStateSlot* slots[KEK_STATE_STORE_MAX_SLOTS];
     size_t inactive_indices[KEK_STATE_STORE_MAX_SLOTS];
+    size_t active_indices[KEK_STATE_STORE_MAX_SLOTS];
     if (update_count > KEK_STATE_STORE_MAX_SLOTS) {
         return 0;
     }
@@ -417,6 +429,7 @@ int kek_state_store_update_many(KekStateStore* store,
             return 0;
         }
         slots[i] = slot;
+        active_indices[i] = slot->active_index;
         inactive_indices[i] = slot->active_index == 0 ? 1u : 0u;
         memcpy(slot->buffers[inactive_indices[i]], slot->buffers[slot->active_index],
                slot->descriptor->size);
@@ -444,11 +457,28 @@ int kek_state_store_update_many(KekStateStore* store,
 
     for (size_t i = 0; i < update_count; i++) {
         if (!state_store_publish_slot_event(store, slots[i], updates[i].slot_id,
-                                            KEK_EVENT_STATE_CHANGED)) {
+                                            KEK_EVENT_STATE_CHANGED,
+                                            updates[i].changed_fields)) {
+            for (size_t j = 0; j < update_count; j++) {
+                slots[j]->active_index = active_indices[j];
+                slots[j]->version--;
+                memcpy(slots[j]->buffers[inactive_indices[j]],
+                       slots[j]->buffers[active_indices[j]],
+                       slots[j]->descriptor->size);
+            }
             return 0;
         }
     }
-    return state_store_publish_batch_event(store);
+    if (state_store_publish_batch_event(store)) {
+        return 1;
+    }
+    for (size_t i = 0; i < update_count; i++) {
+        slots[i]->active_index = active_indices[i];
+        slots[i]->version--;
+        memcpy(slots[i]->buffers[inactive_indices[i]],
+               slots[i]->buffers[active_indices[i]], slots[i]->descriptor->size);
+    }
+    return 0;
 }
 
 void kek_state_store_begin_hook(KekStateStore* store,
@@ -476,4 +506,80 @@ void kek_state_store_end_hook(KekStateStore* store,
     }
     store->active_hook.descriptor = NULL;
     store->active_hook.trigger_state_slot = KEK_STATE_INVALID_ID;
+}
+
+static void state_store_transaction_clear(KekStateStoreTransaction* transaction) {
+    if (!transaction) {
+        return;
+    }
+    for (size_t i = 0; i < transaction->slot_count; i++) {
+        free(transaction->slots[i].buffers[0]);
+        free(transaction->slots[i].buffers[1]);
+        transaction->slots[i].buffers[0] = NULL;
+        transaction->slots[i].buffers[1] = NULL;
+    }
+    memset(transaction, 0, sizeof(*transaction));
+}
+
+int kek_state_store_transaction_begin(KekStateStore* store,
+                                      KekStateStoreTransaction* transaction) {
+    if (!store || !transaction) {
+        return 0;
+    }
+    memset(transaction, 0, sizeof(*transaction));
+    transaction->store = store;
+    transaction->slot_count = store->slot_count;
+
+    for (size_t i = 0; i < store->slot_count; i++) {
+        KekStateSlot* slot = &store->slots[i];
+        KekStateStoreTransactionSlot* snapshot = &transaction->slots[i];
+        snapshot->descriptor = slot->descriptor;
+        snapshot->active_index = slot->active_index;
+        snapshot->version = slot->version;
+        snapshot->in_use = slot->in_use;
+        if (!slot->in_use || !slot->descriptor) {
+            continue;
+        }
+        snapshot->buffers[0] = (unsigned char*)malloc(slot->descriptor->size);
+        snapshot->buffers[1] = (unsigned char*)malloc(slot->descriptor->size);
+        if (!snapshot->buffers[0] || !snapshot->buffers[1]) {
+            state_store_transaction_clear(transaction);
+            return 0;
+        }
+        memcpy(snapshot->buffers[0], slot->buffers[0], slot->descriptor->size);
+        memcpy(snapshot->buffers[1], slot->buffers[1], slot->descriptor->size);
+    }
+    return 1;
+}
+
+void kek_state_store_transaction_commit(KekStateStoreTransaction* transaction) {
+    state_store_transaction_clear(transaction);
+}
+
+void kek_state_store_transaction_rollback(KekStateStoreTransaction* transaction) {
+    if (!transaction || !transaction->store) {
+        return;
+    }
+    KekStateStore* store = transaction->store;
+    for (size_t i = 0; i < store->slot_count; i++) {
+        state_slot_clear(&store->slots[i]);
+    }
+    store->slot_count = transaction->slot_count;
+    for (size_t i = 0; i < KEK_STATE_STORE_MAX_SLOTS; i++) {
+        KekStateStoreTransactionSlot* snapshot = &transaction->slots[i];
+        KekStateSlot* slot = &store->slots[i];
+        memset(slot, 0, sizeof(*slot));
+        if (i >= transaction->slot_count || !snapshot->in_use) {
+            continue;
+        }
+        slot->descriptor = snapshot->descriptor;
+        slot->buffers[0] = snapshot->buffers[0];
+        slot->buffers[1] = snapshot->buffers[1];
+        slot->active_index = snapshot->active_index;
+        slot->version = snapshot->version;
+        slot->in_use = snapshot->in_use;
+        snapshot->buffers[0] = NULL;
+        snapshot->buffers[1] = NULL;
+    }
+    state_store_transaction_clear(transaction);
 }

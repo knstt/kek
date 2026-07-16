@@ -70,7 +70,7 @@ The runtime does not depend on generated schema files. Generated code or applica
 
 Events are published into a global ring buffer. Dispatch removes events from the ring buffer in FIFO order and invokes active subscribers for the event type. State-change events can identify the generated state type, concrete slot instance, and version. When the changed state fits in the fixed snapshot capacity, the event also carries copied state bytes for hooks that need the event-version value.
 
-Generated hooks attach to the same dispatcher through `KekHookRegistry`. The registry keeps one event subscription per event type and invokes only descriptors whose trigger matches the event. Hook triggers may be state-wide across all slots of a generated state type or instance-specific to one resolved slot id.
+Generated hooks attach to the same dispatcher through `KekHookRegistry`. The registry keeps one event subscription per event type and invokes only descriptors whose trigger matches the event. Hook triggers may be state-wide across all slots of a generated state type, instance-specific to one resolved slot id, or filtered to specific changed field bits.
 
 ```mermaid
 flowchart LR

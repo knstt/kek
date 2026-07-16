@@ -73,12 +73,13 @@ static void update_timer_state(void* draft, void* context) {
     state->enabled = update->enabled != 0;
 }
 
-static void timer_publish(KekTimer* timer) {
+static int timer_publish(KekTimer* timer) {
     if (!timer || !timer->store) {
-        return;
+        return 0;
     }
     KekTimerStateUpdate update = {timer->tick, timer->interval_ms, timer->enabled};
-    kek_state_store_update(timer->store, timer->slot_id, update_timer_state, &update);
+    return kek_state_store_update(timer->store, timer->slot_id,
+                                  update_timer_state, &update);
 }
 
 static int timer_prepare(KekRuntime* runtime, KekRuntimeState* state,
@@ -96,26 +97,26 @@ static int timer_prepare(KekRuntime* runtime, KekRuntimeState* state,
     return 0;
 }
 
-static void timer_ready(KekRuntime* runtime, KekRuntimeState* state,
-                        const fd_set* read_fds, const fd_set* write_fds) {
+static int timer_ready(KekRuntime* runtime, KekRuntimeState* state,
+                       const fd_set* read_fds, const fd_set* write_fds) {
     (void)runtime;
     (void)read_fds;
     (void)write_fds;
     KekTimer* timer = (KekTimer*)state->data;
     if (!timer || !timer->enabled || timer->interval_ms == 0) {
-        return;
+        return 0;
     }
 
     struct timeval now = timer_now();
     if (timer_cmp(now, timer->next_tick) < 0) {
-        return;
+        return 0;
     }
 
     do {
         timer->tick++;
         timer->next_tick = timer_add_ms(timer->next_tick, timer->interval_ms);
     } while (timer_cmp(now, timer->next_tick) >= 0);
-    timer_publish(timer);
+    return timer_publish(timer) ? 0 : -1;
 }
 
 static void timer_destroy(KekRuntimeState* state) {

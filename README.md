@@ -89,6 +89,7 @@ Completed in the current runtime cleanup:
 - Derived event type count from the event enum sentinel.
 - Removed file-scope global hook execution state and moved active hook context into `KekStateStore`.
 - Added queue-capacity checks before generated state mutations that must publish events.
+- Added hook error propagation, hook self-updates for declared writable state types, changed-field event masks, and hook field filters.
 - Hardened stream readiness `EINTR` handling.
 - Hardened standard text bridge null/capacity checks.
 - Switched timers to monotonic time where available.
@@ -108,7 +109,6 @@ Remaining possible improvements:
 - Consider retaining tombstoned subscriber slots more compactly or periodically compacting subscriber lists.
 - Add runtime state unregister support if dynamic state lifetimes become a real use case.
 - Add stronger raw-mode fd validation for applications that manage multiple terminal fds.
-- Update runtime docs to match the exact hook self-write rule: the triggering slot is protected, not the whole triggering state type.
 
 ## Browser Editor
 

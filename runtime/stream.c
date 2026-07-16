@@ -30,9 +30,9 @@ static int stream_prepare(KekRuntime* runtime, KekRuntimeState* state,
     return 0;
 }
 
-static void publish_stream_event(KekRuntime* runtime, KekStream* stream,
-                                 KekEventType type, const char* data,
-                                 size_t data_len, int error_code) {
+static int publish_stream_event(KekRuntime* runtime, KekStream* stream,
+                                KekEventType type, const char* data,
+                                size_t data_len, int error_code) {
     KekEvent event;
     memset(&event, 0, sizeof(event));
     event.type = type;
@@ -45,28 +45,36 @@ static void publish_stream_event(KekRuntime* runtime, KekStream* stream,
         event.data_len = to_copy;
     }
 
-    kek_event_publish(kek_runtime_events(runtime), &event);
+    return kek_event_publish(kek_runtime_events(runtime), &event);
 }
 
-static void stream_ready(KekRuntime* runtime, KekRuntimeState* state,
-                         const fd_set* read_fds, const fd_set* write_fds) {
+static int stream_ready(KekRuntime* runtime, KekRuntimeState* state,
+                        const fd_set* read_fds, const fd_set* write_fds) {
     KekStream* stream = (KekStream*)state->data;
     if (!stream || stream->closed || stream->fd < 0) {
-        return;
+        return 0;
     }
 
     if (stream->mode == KEK_STREAM_READ && FD_ISSET(stream->fd, read_fds)) {
         char buffer[KEK_EVENT_DATA_CAPACITY];
         ssize_t bytes = read(stream->fd, buffer, sizeof(buffer));
         if (bytes > 0) {
-            publish_stream_event(runtime, stream, KEK_EVENT_STREAM_DATA, buffer,
-                                 (size_t)bytes, 0);
+            if (!publish_stream_event(runtime, stream, KEK_EVENT_STREAM_DATA,
+                                      buffer, (size_t)bytes, 0)) {
+                return -1;
+            }
         } else if (bytes == 0) {
             stream->closed = 1;
-            publish_stream_event(runtime, stream, KEK_EVENT_STREAM_EOF, NULL, 0, 0);
+            if (!publish_stream_event(runtime, stream, KEK_EVENT_STREAM_EOF,
+                                      NULL, 0, 0)) {
+                return -1;
+            }
         } else if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK) {
             stream->closed = 1;
-            publish_stream_event(runtime, stream, KEK_EVENT_STREAM_ERROR, NULL, 0, errno);
+            if (!publish_stream_event(runtime, stream, KEK_EVENT_STREAM_ERROR,
+                                      NULL, 0, errno)) {
+                return -1;
+            }
         }
     }
 
@@ -80,9 +88,13 @@ static void stream_ready(KekRuntime* runtime, KekRuntimeState* state,
         } else if (written < 0 && errno != EINTR && errno != EAGAIN &&
                    errno != EWOULDBLOCK) {
             stream->closed = 1;
-            publish_stream_event(runtime, stream, KEK_EVENT_STREAM_ERROR, NULL, 0, errno);
+            if (!publish_stream_event(runtime, stream, KEK_EVENT_STREAM_ERROR,
+                                      NULL, 0, errno)) {
+                return -1;
+            }
         }
     }
+    return 0;
 }
 
 static void stream_destroy(KekRuntimeState* state) {
