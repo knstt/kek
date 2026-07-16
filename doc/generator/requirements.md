@@ -8,7 +8,7 @@ Related documents:
 
 ## Scope
 
-The generator converts a restricted `.kek` state schema into plain C header and source files.
+The generator converts a restricted JSON state schema into plain C header and source files.
 
 It is responsible for data shape generation, default constructors, and invariant verification helpers. It is not responsible for runtime event handling or application behavior.
 
@@ -16,11 +16,11 @@ It is responsible for data shape generation, default constructors, and invariant
 
 | ID | Requirement | Current Status | Evidence |
 | --- | --- | --- | --- |
-| GEN-FR-001 | Parse `.kek` files containing `state` declarations. | Implemented | `tools/generate_states.py` |
-| GEN-FR-002 | Parse typed fields written as `name: Type`. | Implemented | `parse_states()` |
-| GEN-FR-003 | Reject duplicate fields in one state. | Implemented | `parse_states()` |
-| GEN-FR-004 | Support `default` blocks for initial state values. | Implemented | `State.defaults` |
-| GEN-FR-005 | Support `verify` blocks for simple invariants. | Implemented | `State.verify_rules` |
+| GEN-FR-001 | Parse JSON files containing state declarations. | Implemented | `tools/generate_states.py` |
+| GEN-FR-002 | Parse typed fields with `name`, `type`, `default`, and optional `min`/`max`. | Implemented | `parse_document()` |
+| GEN-FR-003 | Reject duplicate fields in one state. | Implemented | `parse_document()` |
+| GEN-FR-004 | Support per-field default values. | Implemented | `Field.default` |
+| GEN-FR-005 | Support per-field `min`/`max` constraints. | Implemented | `emit_field_checks()` |
 | GEN-FR-006 | Generate C structs for each state. | Implemented | `emit_header()` |
 | GEN-FR-007 | Generate one default constructor per state. | Implemented | `emit_source()` |
 | GEN-FR-008 | Generate one non-aborting check function per state. | Implemented | `emit_source()` |
@@ -35,6 +35,8 @@ It is responsible for data shape generation, default constructors, and invariant
 | GEN-FR-017 | Generate void-pointer descriptor adapters. | Implemented | `*_default_into()`, `*_check_void()`, `*_reset_void()` |
 | GEN-FR-018 | Parse hook declarations with state-change triggers and read/write dependencies. | Implemented | `parse_source()` |
 | GEN-FR-019 | Generate hook descriptor metadata. | Implemented | `KekGeneratedHookDescriptors` |
+| GEN-FR-020 | Generate a Markdown Mermaid graph of states and hook dependencies. | Implemented | `<name>.graph.md` |
+| GEN-FR-021 | Generate additional per-state constructors as partial overrides of the default constructor. | Implemented | `Constructor` |
 
 ## Non-Functional Requirements
 
@@ -47,6 +49,7 @@ It is responsible for data shape generation, default constructors, and invariant
 
 ## Out Of Scope
 
+- JSON Schema validation.
 - Full language parsing.
 - Function body compilation.
 - Transition body compilation.
@@ -64,9 +67,11 @@ flowchart LR
     Model[State Model]
     Header[C Header]
     Source[C Source]
+    Graph[Mermaid Graph Markdown]
 
     Schema --> Parser
     Parser --> Model
     Model --> Header
     Model --> Source
+    Model --> Graph
 ```

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import json
 import os
 import re
 import sys
@@ -22,14 +23,22 @@ TYPE_MAP = {
 class Field:
     name: str
     type_name: str
+    default: object
+    minimum: object | None = None
+    maximum: object | None = None
 
 
 @dataclass
 class State:
     name: str
     fields: list[Field] = field(default_factory=list)
-    defaults: dict[str, str] = field(default_factory=dict)
-    verify_rules: list[str] = field(default_factory=list)
+    constructors: list["Constructor"] = field(default_factory=list)
+
+
+@dataclass
+class Constructor:
+    name: str
+    values: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass
@@ -41,151 +50,115 @@ class Hook:
     writes: list[str] = field(default_factory=list)
 
 
-def strip_comment(line: str) -> str:
-    in_string = False
-    escaped = False
-    for index, char in enumerate(line):
-        if escaped:
-            escaped = False
-            continue
-        if char == "\\" and in_string:
-            escaped = True
-            continue
-        if char == '"':
-            in_string = not in_string
-            continue
-        if not in_string and char == "/" and index + 1 < len(line) and line[index + 1] == "/":
-            return line[:index]
-    return line
-
-
-def clean_line(line: str) -> str:
-    return strip_comment(line).strip().rstrip(",;").strip()
+def require_identifier(value: object, label: str) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value):
+        raise ValueError(f"{label} must be an identifier")
+    return value
 
 
 def parse_source(source: str) -> tuple[list[State], list[Hook]]:
-    lines = source.splitlines()
+    try:
+        document = json.loads(source)
+    except json.JSONDecodeError as error:
+        raise SyntaxError(f"invalid JSON: {error.msg} at line {error.lineno}") from error
+    return parse_document(document)
+
+
+def parse_document(document: object) -> tuple[list[State], list[Hook]]:
+    if not isinstance(document, dict):
+        raise ValueError("schema root must be an object")
+
+    state_items = document.get("states")
+    if not isinstance(state_items, list) or not state_items:
+        raise ValueError("schema must contain one or more states")
+
     states: list[State] = []
+    state_names: set[str] = set()
+    for state_index, state_item in enumerate(state_items):
+        if not isinstance(state_item, dict):
+            raise ValueError(f"states[{state_index}] must be an object")
+        state_name = require_identifier(state_item.get("name"), f"states[{state_index}].name")
+        if state_name in state_names:
+            raise ValueError(f"duplicate state {state_name}")
+        state_names.add(state_name)
+
+        field_items = state_item.get("fields")
+        if not isinstance(field_items, list) or not field_items:
+            raise ValueError(f"{state_name}: state must contain one or more fields")
+
+        fields: list[Field] = []
+        field_names: set[str] = set()
+        for field_index, field_item in enumerate(field_items):
+            if not isinstance(field_item, dict):
+                raise ValueError(f"{state_name}.fields[{field_index}] must be an object")
+            field_name = require_identifier(field_item.get("name"), f"{state_name}.fields[{field_index}].name")
+            if field_name in field_names:
+                raise ValueError(f"{state_name}: duplicate field {field_name}")
+            if "default" not in field_item:
+                raise ValueError(f"{state_name}.{field_name}: field must declare default")
+            field_names.add(field_name)
+            fields.append(
+                Field(
+                    field_name,
+                    require_identifier(field_item.get("type"), f"{state_name}.{field_name}.type"),
+                    field_item.get("default"),
+                    field_item.get("min"),
+                    field_item.get("max"),
+                )
+            )
+
+        constructors: list[Constructor] = []
+        constructor_names: set[str] = set()
+        for constructor_index, constructor_item in enumerate(state_item.get("constructors", [])):
+            if not isinstance(constructor_item, dict):
+                raise ValueError(f"{state_name}.constructors[{constructor_index}] must be an object")
+            constructor_name = require_identifier(constructor_item.get("name"), f"{state_name}.constructors[{constructor_index}].name")
+            if constructor_name == "default":
+                raise ValueError(f"{state_name}: constructor name default is reserved")
+            if constructor_name in constructor_names:
+                raise ValueError(f"{state_name}: duplicate constructor {constructor_name}")
+            values = constructor_item.get("values", {})
+            if not isinstance(values, dict):
+                raise ValueError(f"{state_name}.{constructor_name}: values must be an object")
+            for field_name in values:
+                if field_name not in field_names:
+                    raise ValueError(f"{state_name}.{constructor_name}: value for unknown field {field_name}")
+            constructor_names.add(constructor_name)
+            constructors.append(Constructor(constructor_name, values))
+
+        states.append(State(state_name, fields, constructors))
+
     hooks: list[Hook] = []
-    current: State | None = None
-    current_hook: Hook | None = None
-    section = "fields"
-    depth = 0
+    hook_names: set[str] = set()
+    for hook_index, hook_item in enumerate(document.get("hooks", [])):
+        if not isinstance(hook_item, dict):
+            raise ValueError(f"hooks[{hook_index}] must be an object")
+        hook_name = require_identifier(hook_item.get("name"), f"hooks[{hook_index}].name")
+        if hook_name in hook_names:
+            raise ValueError(f"duplicate hook {hook_name}")
+        on_item = hook_item.get("on", {})
+        if not isinstance(on_item, dict):
+            raise ValueError(f"{hook_name}.on must be an object")
+        if on_item.get("event") != "changed":
+            raise ValueError(f"{hook_name}: only changed events are supported")
+        hook = Hook(
+            hook_name,
+            "KEK_EVENT_STATE_CHANGED",
+            require_identifier(on_item.get("state"), f"{hook_name}.on.state"),
+            parse_json_name_list(hook_item.get("reads", []), f"{hook_name}.reads"),
+            parse_json_name_list(hook_item.get("writes", []), f"{hook_name}.writes"),
+        )
+        hook_names.add(hook_name)
+        hooks.append(hook)
 
-    for line_number, raw_line in enumerate(lines, start=1):
-        line = clean_line(raw_line)
-        if not line:
-            continue
-
-        state_match = re.fullmatch(r"state\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{?", line)
-        if state_match:
-            if current is not None or current_hook is not None:
-                raise SyntaxError(f"line {line_number}: nested declarations are not supported")
-            current = State(state_match.group(1))
-            section = "fields"
-            depth = 1 if line.endswith("{") else 0
-            if depth == 0:
-                raise SyntaxError(f"line {line_number}: expected '{{' after state name")
-            continue
-
-        hook_match = re.fullmatch(r"hook\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{?", line)
-        if hook_match:
-            if current is not None or current_hook is not None:
-                raise SyntaxError(f"line {line_number}: nested declarations are not supported")
-            current_hook = Hook(hook_match.group(1))
-            section = "hook"
-            depth = 1 if line.endswith("{") else 0
-            if depth == 0:
-                raise SyntaxError(f"line {line_number}: expected '{{' after hook name")
-            continue
-
-        if current is None and current_hook is None:
-            raise SyntaxError(f"line {line_number}: expected state or hook declaration")
-
-        if line == "}":
-            depth -= 1
-            if depth == 0 and current is not None:
-                states.append(current)
-                current = None
-                section = "fields"
-            elif depth == 0 and current_hook is not None:
-                hooks.append(current_hook)
-                current_hook = None
-                section = "fields"
-            elif depth == 1:
-                section = "fields"
-            elif depth < 0:
-                raise SyntaxError(f"line {line_number}: unmatched '}}'")
-            continue
-
-        if line in ("default {", "verify {"):
-            if depth != 1:
-                raise SyntaxError(f"line {line_number}: nested blocks are not supported")
-            section = "default" if line.startswith("default") else "verify"
-            depth += 1
-            continue
-
-        if section == "fields":
-            field_match = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Za-z_][A-Za-z0-9_]*)", line)
-            if not field_match:
-                raise SyntaxError(f"line {line_number}: expected field declaration")
-            field_name = field_match.group(1)
-            if any(item.name == field_name for item in current.fields):
-                raise SyntaxError(f"line {line_number}: duplicate field {field_name}")
-            current.fields.append(Field(field_match.group(1), field_match.group(2)))
-            continue
-
-        if section == "default":
-            default_match = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(.+)", line)
-            if not default_match:
-                raise SyntaxError(f"line {line_number}: expected default assignment")
-            field_name = default_match.group(1)
-            if field_name in current.defaults:
-                raise SyntaxError(f"line {line_number}: duplicate default for {field_name}")
-            current.defaults[field_name] = default_match.group(2).strip()
-            continue
-
-        if section == "verify":
-            current.verify_rules.append(line)
-            continue
-
-        if section == "hook":
-            on_match = re.fullmatch(r"on\s+([A-Za-z_][A-Za-z0-9_]*)\.(changed)", line)
-            if on_match:
-                current_hook.state_name = on_match.group(1)
-                current_hook.event_type = "KEK_EVENT_STATE_CHANGED"
-                continue
-
-            reads_match = re.fullmatch(r"reads\s+(.+)", line)
-            if reads_match:
-                current_hook.reads = parse_name_list(reads_match.group(1))
-                continue
-
-            writes_match = re.fullmatch(r"writes\s+(.+)", line)
-            if writes_match:
-                current_hook.writes = parse_name_list(writes_match.group(1))
-                continue
-
-            raise SyntaxError(f"line {line_number}: expected hook clause")
-
-    if current is not None:
-        raise SyntaxError(f"unterminated state {current.name}")
-    if current_hook is not None:
-        raise SyntaxError(f"unterminated hook {current_hook.name}")
+    validate_hooks(states, hooks)
     return states, hooks
 
 
-def parse_states(source: str) -> list[State]:
-    states, _hooks = parse_source(source)
-    return states
-
-
-def parse_name_list(value: str) -> list[str]:
-    names = [item.strip() for item in value.split(",")]
-    for name in names:
-        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
-            raise SyntaxError(f"invalid name {name}")
-    return names
+def parse_json_name_list(value: object, label: str) -> list[str]:
+    if not isinstance(value, list):
+        raise ValueError(f"{label} must be an array")
+    return [require_identifier(item, f"{label}[]") for item in value]
 
 
 def c_type(type_name: str) -> str:
@@ -227,47 +200,50 @@ def validate_hooks(states: list[State], hooks: list[Hook]) -> None:
                 raise ValueError(f"{hook.name}: hook references unknown state {name}")
 
 
-def translate_default(field_item: Field, value: str) -> str:
+def c_string_literal(value: str) -> str:
+    return json.dumps(value)
+
+
+def translate_default(field_item: Field, value: object) -> str:
     if field_item.type_name == "String":
-        return f"kek_string_from_cstr({value})"
+        if not isinstance(value, str):
+            raise ValueError(f"{field_item.name}: String value must be a string")
+        return f"kek_string_from_cstr({c_string_literal(value)})"
     if field_item.type_name == "bool":
-        if value == "true":
+        if value is True:
             return "true"
-        if value == "false":
+        if value is False:
             return "false"
-    return value
+        raise ValueError(f"{field_item.name}: bool value must be true or false")
+    if isinstance(value, bool):
+        raise ValueError(f"{field_item.name}: numeric value must not be boolean")
+    if isinstance(value, (int, float)):
+        return repr(value)
+    if isinstance(value, str):
+        return value
+    raise ValueError(f"{field_item.name}: unsupported default value")
 
 
-def translate_verify_rule(state: State, rule: str) -> str:
-    fields = field_map(state)
-    output = rule
+def translate_constraint_value(field_item: Field, value: object) -> str:
+    if field_item.type_name == "String":
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise ValueError(f"{field_item.name}: String min/max must be integer lengths")
+        return str(value)
+    return translate_default(field_item, value)
 
-    for name in re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\.len\(\)", rule):
-        if name not in fields:
-            raise ValueError(f"{state.name}: verify references unknown field {name}")
-        if fields[name].type_name != "String":
-            raise ValueError(f"{state.name}: len() is only supported for String field {name}")
 
-    for item in sorted(state.fields, key=lambda value: len(value.name), reverse=True):
-        if item.type_name == "String":
-            output = re.sub(
-                rf"\b{re.escape(item.name)}\.len\(\)",
-                f"kek_string_len(&state->{item.name})",
-                output,
-            )
-
-    def replace_name(match: re.Match[str]) -> str:
-        start = match.start()
-        if start >= 7 and output[start - 7:start] == "state->":
-            return match.group(0)
-        name = match.group(0)
-        if name in fields:
-            return f"state->{name}"
-        if name in {"true", "false"}:
-            return name
-        return name
-
-    return re.sub(r"\b[A-Za-z_][A-Za-z0-9_]*\b", replace_name, output)
+def emit_field_checks(state: State, lines: list[str]) -> None:
+    for item in state.fields:
+        if item.minimum is not None:
+            lhs = f"kek_string_len(&state->{item.name})" if item.type_name == "String" else f"state->{item.name}"
+            lines.append(f"    if ({lhs} < {translate_constraint_value(item, item.minimum)}) {{")
+            lines.append("        return 0;")
+            lines.append("    }")
+        if item.maximum is not None:
+            lhs = f"kek_string_len(&state->{item.name})" if item.type_name == "String" else f"state->{item.name}"
+            lines.append(f"    if ({lhs} > {translate_constraint_value(item, item.maximum)}) {{")
+            lines.append("        return 0;")
+            lines.append("    }")
 
 
 def emit_header(states: list[State], hooks: list[Hook], name: str) -> str:
@@ -308,6 +284,8 @@ def emit_header(states: list[State], hooks: list[Hook], name: str) -> str:
         lines.append(f"}} {state.name};")
         lines.append("")
         lines.append(f"{state.name} {state.name}_default(void);")
+        for constructor in state.constructors:
+            lines.append(f"{state.name} {state.name}_{constructor.name}(void);")
         lines.append(f"void {state.name}_default_into(void* state);")
         lines.append(f"int {state.name}_check(const {state.name}* state);")
         lines.append(f"int {state.name}_check_void(const void* state);")
@@ -362,13 +340,20 @@ def emit_source(states: list[State], hooks: list[Hook], name: str) -> str:
         fields = field_map(state)
         lines.append(f"{state.name} {state.name}_default(void) {{")
         lines.append(f"    {state.name} state = {{0}};")
-        for field_name, value in state.defaults.items():
-            if field_name not in fields:
-                raise ValueError(f"{state.name}: default for unknown field {field_name}")
-            lines.append(f"    state.{field_name} = {translate_default(fields[field_name], value)};")
+        for field_item in state.fields:
+            lines.append(f"    state.{field_item.name} = {translate_default(field_item, field_item.default)};")
         lines.append("    return state;")
         lines.append("}")
         lines.append("")
+
+        for constructor in state.constructors:
+            lines.append(f"{state.name} {state.name}_{constructor.name}(void) {{")
+            lines.append(f"    {state.name} state = {state.name}_default();")
+            for field_name, value in constructor.values.items():
+                lines.append(f"    state.{field_name} = {translate_default(fields[field_name], value)};")
+            lines.append("    return state;")
+            lines.append("}")
+            lines.append("")
 
         lines.append(f"void {state.name}_default_into(void* state) {{")
         lines.append("    if (state == 0) {")
@@ -382,10 +367,7 @@ def emit_source(states: list[State], hooks: list[Hook], name: str) -> str:
         lines.append("    if (state == 0) {")
         lines.append("        return 0;")
         lines.append("    }")
-        for rule in state.verify_rules:
-            lines.append(f"    if (!({translate_verify_rule(state, rule)})) {{")
-            lines.append("        return 0;")
-            lines.append("    }")
+        emit_field_checks(state, lines)
         lines.append("    return 1;")
         lines.append("}")
         lines.append("")
@@ -497,9 +479,36 @@ def emit_source(states: list[State], hooks: list[Hook], name: str) -> str:
 
     return "\n".join(lines)
 
+
+def emit_graph(states: list[State], hooks: list[Hook], name: str) -> str:
+    lines = [
+        "<!-- Generated by tools/generate_states.py. Do not edit manually. -->",
+        f"# {name} State Graph",
+        "",
+        "```mermaid",
+        "flowchart LR",
+    ]
+
+    for state in states:
+        lines.append(f"    S_{state.name}[\"{state.name}\"]")
+
+    for hook in hooks:
+        lines.append(f"    H_{hook.name}{{\"{hook.name}\"}}")
+
+    for hook in hooks:
+        lines.append(f"    S_{hook.state_name} -->|changed| H_{hook.name}")
+        for state_name in hook.reads:
+            lines.append(f"    S_{state_name} -. reads .-> H_{hook.name}")
+        for state_name in hook.writes:
+            lines.append(f"    H_{hook.name} -->|writes| S_{state_name}")
+
+    lines.extend(["```", ""])
+    return "\n".join(lines)
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Generate C structs from Kek state schema files.")
-    parser.add_argument("input", help="input .kek schema file")
+    parser = argparse.ArgumentParser(description="Generate C structs from Kek JSON schema files.")
+    parser.add_argument("input", help="input JSON schema file")
     parser.add_argument("--out-dir", default="generated", help="output directory")
     parser.add_argument("--name", default=None, help="base name for generated .h/.c files")
     args = parser.parse_args()
@@ -510,22 +519,22 @@ def main() -> int:
 
     try:
         states, hooks = parse_source(source)
-        if not states:
-            raise SyntaxError("no state declarations found")
-        validate_hooks(states, hooks)
 
         os.makedirs(args.out_dir, exist_ok=True)
         header_path = os.path.join(args.out_dir, f"{base_name}.h")
         source_path = os.path.join(args.out_dir, f"{base_name}.c")
+        graph_path = os.path.join(args.out_dir, f"{base_name}.graph.md")
         with open(header_path, "w", encoding="utf-8") as header_file:
             header_file.write(emit_header(states, hooks, base_name))
         with open(source_path, "w", encoding="utf-8") as c_file:
             c_file.write(emit_source(states, hooks, base_name))
+        with open(graph_path, "w", encoding="utf-8") as graph_file:
+            graph_file.write(emit_graph(states, hooks, base_name))
     except (SyntaxError, ValueError) as error:
         print(f"generate_states.py: {error}", file=sys.stderr)
         return 1
 
-    print(f"generated {header_path} and {source_path}")
+    print(f"generated {header_path}, {source_path}, and {graph_path}")
     return 0
 
 

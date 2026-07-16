@@ -18,52 +18,76 @@ Arguments:
 
 | Argument | Required | Default | Meaning |
 | --- | --- | --- | --- |
-| `input` | Yes | none | Input `.kek` schema file. |
+| `input` | Yes | none | Input JSON schema file. |
 | `--out-dir` | No | `generated` | Destination directory for generated files. |
 | `--name` | No | input file basename | Base name for generated `.h` and `.c` files. |
 
 The generator creates the output directory when it does not exist.
 
-## Schema Grammar Subset
+Generated files:
 
-The supported schema unit is a `state` declaration:
+| File | Meaning |
+| --- | --- |
+| `<name>.h` | C declarations for generated states and hook metadata. |
+| `<name>.c` | C definitions for generated states and hook metadata. |
+| `<name>.graph.md` | Markdown document containing a Mermaid graph of states and hook dependencies. |
 
-```text
-state StateName {
-  fieldName: TypeName
+## JSON Schema Subset
 
-  default {
-    fieldName: value
-  }
+The supported schema root is a JSON object:
 
-  verify {
-    expression
-  }
-}
-```
-
-The supported hook declaration is:
-
-```text
-hook HookName {
-  on StateName.changed
-  reads StateA, StateB
-  writes StateC
+```json
+{
+  "version": 1,
+  "states": [
+    {
+      "name": "Player",
+      "fields": [
+        {
+          "name": "health",
+          "type": "i32",
+          "default": 100,
+          "min": 0,
+          "max": 100
+        }
+      ],
+      "constructors": [
+        {
+          "name": "dead",
+          "values": {
+            "health": 0
+          }
+        }
+      ]
+    }
+  ],
+  "hooks": [
+    {
+      "name": "HandleInputChanged",
+      "on": {
+        "state": "StandardInput",
+        "event": "changed"
+      },
+      "reads": ["StandardInput"],
+      "writes": ["Player"]
+    }
+  ]
 }
 ```
 
 Parser rules:
 
 - State names must match `[A-Za-z_][A-Za-z0-9_]*`.
+- Each state must contain one or more fields.
 - Field names must match `[A-Za-z_][A-Za-z0-9_]*`.
 - Field type names must match `[A-Za-z_][A-Za-z0-9_]*`.
-- Field declarations use `name: Type`.
-- Default assignments use `name: value` or `name = value`.
-- Commas and semicolons are accepted as optional line endings.
-- `//` comments are ignored unless inside a string literal.
-- Nested states and nested blocks are rejected.
+- Each field must declare a `default` value.
+- Optional field `min` and `max` values generate verification checks.
+- For `String` fields, `min` and `max` constrain string length.
+- Constructor names must match `[A-Za-z_][A-Za-z0-9_]*` and must not be `default`.
+- Additional constructors are partial overrides layered on top of the default constructor.
 - Hook names and referenced state names must use identifiers.
-- Hook triggers currently support `StateName.changed`.
+- Hook triggers currently support `{ "event": "changed" }`.
 
 ## Type Mapping
 
@@ -91,6 +115,7 @@ The generated header contains:
 - `kek_string_len()` declaration.
 - One C struct per schema state.
 - One default function declaration per state.
+- One function declaration for each additional state constructor.
 - One non-aborting check function declaration per state.
 - One reset function declaration per state.
 - One aggregate state struct containing all states.
@@ -109,6 +134,7 @@ The generated source contains:
 
 - `KekString` helper implementations.
 - Per-state default constructors.
+- Per-state additional constructors.
 - Per-state non-aborting check functions.
 - Per-state reset functions.
 - Aggregate default constructor.
@@ -119,28 +145,34 @@ The generated source contains:
 - Generated hook read/write dependency arrays.
 - A generated hook descriptor table.
 
-Default constructors zero-initialize the state first and then assign explicit defaults.
+Default constructors zero-initialize the state first and then assign every field default.
 
-Check functions return `0` when the state pointer is null or any translated verification rule fails. They return `1` when all rules pass.
+Additional constructors call the default constructor first and then assign their partial override values.
+
+Check functions return `0` when the state pointer is null or any generated `min`/`max` constraint fails. They return `1` when all constraints pass.
 
 Reset functions return `0` when the state pointer is null. Otherwise, they assign the corresponding default value into the existing object and return the result of the corresponding check function.
 
 Generated structs expose their fields directly. Callers that need rollback-safe validation should update through `KekStateStorage`, which validates the complete draft before swapping it into place.
 
-Callers that need independent state instances should use `KekStateStore` with generated `KekStateDescriptor` entries. Multiple runtime slots may use the same descriptor.
-
 Generated hook descriptors reference user-provided C hook bodies by name. The generator does not compile hook bodies.
 
-## Verification Translation
+## Generated Graph
 
-The generator translates verification rules with simple text rewriting:
+The generated graph file is a Markdown document containing one Mermaid `flowchart LR` block.
 
-- `field.len()` on a `String` field becomes `kek_string_len(&state->field)`.
-- Known field identifiers become `state->field`.
-- `true` and `false` remain unchanged.
-- Operators and literals are copied directly.
+Graph nodes:
 
-The generator validates that `.len()` references known `String` fields.
+- Each schema state is emitted as a state node.
+- Each hook is emitted as a hook node.
+
+Graph edges:
+
+- `State --> Hook` labeled `changed` for the hook trigger declared by `on.state` and `event: changed`.
+- `State -.-> Hook` labeled `reads` for every state listed in `reads`.
+- `Hook --> State` labeled `writes` for every state listed in `writes`.
+
+The graph is documentation-only and does not affect generated C ABI or runtime behavior.
 
 ## Generated String ABI
 
@@ -157,23 +189,26 @@ typedef struct KekString {
 
 On parse or validation failure, the generator prints a diagnostic to stderr and exits with status `1`.
 
-On success, it writes both output files and prints their paths.
+On success, it writes the generated header, source, and graph files and prints their paths.
 
 ## Generation Flow
 
 ```mermaid
 sequenceDiagram
     participant CLI as CLI
-    participant Parser as parse_states()
+    participant Parser as parse_source()
     participant Model as State Model
     participant Header as emit_header()
     participant Source as emit_source()
+    participant Graph as emit_graph()
     participant FS as Filesystem
 
-    CLI->>Parser: source text
-    Parser-->>Model: states, fields, defaults, verify rules
+    CLI->>Parser: JSON source text
+    Parser-->>Model: states, fields, constructors, hooks
     Model->>Header: render declarations
     Model->>Source: render definitions
+    Model->>Graph: render Mermaid graph
     Header->>FS: write <name>.h
     Source->>FS: write <name>.c
+    Graph->>FS: write <name>.graph.md
 ```

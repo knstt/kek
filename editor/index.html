@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Kek Project Editor</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>Kek Editor</h1>
+        <p id="projectPath">Loading project...</p>
+      </div>
+      <div class="filebar">
+        <select id="schemaSelect" aria-label="Schema file"></select>
+        <button id="reloadButton" type="button">Reload</button>
+        <button id="saveButton" type="button">Save</button>
+        <button id="generateButton" type="button">Generate</button>
+      </div>
+    </header>
+
+    <main class="shell">
+      <section class="workspace" aria-label="Graph workspace">
+        <div class="toolbar">
+          <button id="addStateButton" type="button">Add State</button>
+          <button id="addHookButton" type="button">Add Hook</button>
+          <button id="autoLayoutButton" type="button">Auto Layout</button>
+          <button id="deleteButton" type="button">Delete Selected</button>
+        </div>
+        <div id="graph" class="graph"></div>
+      </section>
+
+      <aside class="inspector" aria-label="Inspector">
+        <h2 id="inspectorTitle">Nothing selected</h2>
+        <div id="inspectorBody" class="inspector-body"></div>
+      </aside>
+
+      <section class="preview" aria-label="Schema preview">
+        <div class="preview-title">
+          <h2>JSON Preview</h2>
+          <span id="status" class="status">Ready</span>
+        </div>
+        <textarea id="sourcePreview" spellcheck="false"></textarea>
+      </section>
+    </main>
+
+    <script src="https://unpkg.com/cytoscape@3.30.4/dist/cytoscape.min.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>
