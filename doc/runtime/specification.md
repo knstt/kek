@@ -107,7 +107,7 @@ Dispatch is synchronous: each active subscriber for the event type is called bef
 
 ## Hook Registry
 
-`KekHookRegistry` bridges generated hook descriptors to the event dispatcher. A registry stores hook descriptors, subscribes one internal handler to runtime event types, filters by event type and optional generated state type, and invokes matching hook functions with `KekHookContext`.
+`KekHookRegistry` bridges generated hook descriptors to the event dispatcher. A registry stores hook descriptors, subscribes one internal handler to runtime event types, filters by event type plus optional generated state type and slot id, and invokes matching hook functions with `KekHookContext`.
 
 `KekHookContext` contains:
 
@@ -118,7 +118,7 @@ Dispatch is synchronous: each active subscriber for the event type is called bef
 | `event` | Triggering event. |
 | `app_context` | Application-owned context pointer. |
 
-Hook descriptors declare read and write state type ids. During hook execution, `KekStateStore` write operations are rejected when the target state type is not listed in the running hook descriptor's `writes`. Direct writes to the state type that triggered the current hook are also rejected to prevent simple self-feedback cycles.
+Hook descriptors declare read and write state type ids. A descriptor may match all slots of a state type or one concrete slot id. During hook execution, `KekStateStore` write operations are rejected when the target state type is not listed in the running hook descriptor's `writes`. Direct writes to the exact slot that triggered the current hook are also rejected to prevent simple self-feedback cycles, while writes to another slot of the same state type are allowed when that state type is declared in `writes`.
 
 `kek_hook_event_state()` returns the copied event-version state snapshot when present. Hook bodies can use this when the triggering state value must match `event->state_version` instead of the current store value after later queued updates.
 

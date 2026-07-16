@@ -36,7 +36,7 @@ def emit_header(
         enum_declarations=render_enum_declarations(enums),
         state_type_enum=render_state_type_enum(states),
         state_declarations=render_state_declarations(states),
-        instance_declarations=render_instance_declarations(states, instances, name),
+        instance_declarations=render_instance_declarations(states, hooks, instances, name),
         hook_count=len(hooks),
         hook_declarations=render_hook_declarations(hooks),
     )
@@ -59,7 +59,7 @@ def emit_source(
         header_name=f"{name}.h",
         state_definitions=render_state_definitions(states, enums),
         descriptor_entries=render_descriptor_entries(states),
-        instance_definitions=render_instance_definitions(states, instances, name, enums),
+        instance_definitions=render_instance_definitions(states, hooks, instances, name, enums),
         hook_dependency_arrays=render_hook_dependency_arrays(hooks),
         hook_descriptor_table=render_hook_descriptor_table(hooks),
     )
@@ -191,7 +191,7 @@ def runtime_binding_name(name: str) -> str:
     return f"{name[:1].upper()}{name[1:]}RuntimeBinding"
 
 
-def render_instance_declarations(states: list[State], instances: list[Instance], name: str) -> str:
+def render_instance_declarations(states: list[State], hooks: list[Hook], instances: list[Instance], name: str) -> str:
     prefix = generated_prefix(name)
     slots_name = instance_slots_name(name)
     lines: list[str] = [f"typedef struct {slots_name} {{"]
@@ -213,6 +213,8 @@ def render_instance_declarations(states: list[State], instances: list[Instance],
     lines.append("    KekRuntime* runtime;")
     lines.append("    KekStateStore state_store;")
     lines.append("    KekHookRegistry hook_registry;")
+    if hooks:
+        lines.append(f"    KekHookDescriptor hook_descriptors[{len(hooks)}];")
     for instance in instances:
         state = next((item for item in states if item.name == instance.state_name), None)
         if state is None:
@@ -230,6 +232,7 @@ def render_instance_declarations(states: list[State], instances: list[Instance],
         snake = c_identifier_from_type(state.name)
         macro = state_type_macro(state.name)
         lines.append(f"size_t {prefix}_{snake}_create(KekStateStore* store);")
+        lines.append(f"size_t {prefix}_{snake}_create_with(KekStateStore* store, const {state.name}* initial);")
         lines.append(f"int {prefix}_{snake}_delete(KekStateStore* store, size_t slot_id);")
         lines.append(f"{state.name}* {prefix}_{snake}_slot(KekStateStore* store, size_t slot_id);")
         lines.append(f"const {state.name}* {prefix}_{snake}_slot_const(const KekStateStore* store, size_t slot_id);")
@@ -391,7 +394,7 @@ def render_descriptor_entries(states: list[State]) -> str:
     return "\n".join(lines)
 
 
-def render_instance_definitions(states: list[State], instances: list[Instance], name: str, enums: list[Enum] | None = None) -> str:
+def render_instance_definitions(states: list[State], hooks: list[Hook], instances: list[Instance], name: str, enums: list[Enum] | None = None) -> str:
     prefix = generated_prefix(name)
     slots_name = instance_slots_name(name)
     binding_name = runtime_binding_name(name)
@@ -505,7 +508,18 @@ def render_instance_definitions(states: list[State], instances: list[Instance], 
             "        return 0;",
             "    }",
             "    kek_hook_registry_init(&binding->hook_registry, runtime, &binding->state_store, app_context);",
-            "    if (!kek_hook_registry_add_many(&binding->hook_registry, KekGeneratedHookDescriptors, KEK_GENERATED_HOOK_COUNT)) {",
+        ]
+    )
+    if hooks:
+        lines.append("    memcpy(binding->hook_descriptors, KekGeneratedHookDescriptors, sizeof(binding->hook_descriptors));")
+        for index, hook in enumerate(hooks):
+            if hook.instance_name is not None:
+                lines.append(f"    binding->hook_descriptors[{index}].state_slot_id = binding->slots.{hook.instance_name};")
+        lines.append("    if (!kek_hook_registry_add_many(&binding->hook_registry, binding->hook_descriptors, KEK_GENERATED_HOOK_COUNT)) {")
+    else:
+        lines.append("    if (!kek_hook_registry_add_many(&binding->hook_registry, KekGeneratedHookDescriptors, KEK_GENERATED_HOOK_COUNT)) {")
+    lines.extend(
+        [
             "        kek_state_store_destroy(&binding->state_store);",
             "        memset(binding, 0, sizeof(*binding));",
             "        return 0;",
@@ -533,6 +547,10 @@ def render_instance_definitions(states: list[State], instances: list[Instance], 
             [
                 f"size_t {prefix}_{snake}_create(KekStateStore* store) {{",
                 f"    return kek_state_store_add_default(store, &KekGeneratedStateDescriptors[{macro}]);",
+                "}",
+                "",
+                f"size_t {prefix}_{snake}_create_with(KekStateStore* store, const {state.name}* initial) {{",
+                f"    return kek_state_store_add(store, &KekGeneratedStateDescriptors[{macro}], initial);",
                 "}",
                 "",
                 f"int {prefix}_{snake}_delete(KekStateStore* store, size_t slot_id) {{",
@@ -654,6 +672,10 @@ def render_hook_descriptor_table(hooks: list[Hook]) -> str:
         lines.append(f"        .name = \"{hook.name}\",")
         lines.append(f"        .event_type = {hook.event_type},")
         lines.append(f"        .state_type_id = {state_type_macro(hook.state_name)},")
+        if hook.instance_name is None:
+            lines.append("        .state_slot_id = KEK_HOOK_ANY_SLOT,")
+        else:
+            lines.append("        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,")
         lines.append(f"        .reads = {reads_name},")
         lines.append(f"        .read_count = {len(hook.reads)},")
         lines.append(f"        .writes = {writes_name},")
@@ -675,7 +697,11 @@ def render_graph_body(states: list[State], hooks: list[Hook], instances: list[In
         lines.append(f"    I_{instance.name}([\"{instance.name}: {instance.state_name}\"])")
         lines.append(f"    S_{instance.state_name} -. instance .-> I_{instance.name}")
     for hook in hooks:
-        lines.append(f"    S_{hook.state_name} -->|changed| H_{hook.name}")
+        event_name = hook.event_type.removeprefix("KEK_EVENT_STATE_").lower()
+        if hook.instance_name is None:
+            lines.append(f"    S_{hook.state_name} -->|{event_name}| H_{hook.name}")
+        else:
+            lines.append(f"    I_{hook.instance_name} -->|{event_name}| H_{hook.name}")
         for state_name in hook.reads:
             lines.append(f"    S_{state_name} -. reads .-> H_{hook.name}")
         for state_name in hook.writes:

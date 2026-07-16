@@ -7,6 +7,8 @@
 
 #define KEK_HOOK_MAX_DESCRIPTORS 64
 #define KEK_HOOK_ANY_STATE ((size_t)-1)
+#define KEK_HOOK_ANY_SLOT ((size_t)-1)
+#define KEK_HOOK_UNRESOLVED_SLOT ((size_t)-2)
 
 struct KekRuntime;
 struct KekStateStore;
@@ -24,6 +26,7 @@ typedef struct KekHookDescriptor {
     const char* name;
     KekEventType event_type;
     size_t state_type_id;
+    size_t state_slot_id;
     const size_t* reads;
     size_t read_count;
     const size_t* writes;
@@ -42,6 +45,7 @@ typedef struct KekHookRegistry {
 
 const KekHookDescriptor* kek_hook_current_descriptor(void);
 size_t kek_hook_current_trigger_state_type(void);
+size_t kek_hook_current_trigger_state_slot(void);
 
 void kek_hook_registry_init(KekHookRegistry* registry, struct KekRuntime* runtime,
                             struct KekStateStore* state_store, void* app_context);

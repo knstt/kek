@@ -4,6 +4,7 @@
 
 static const KekHookDescriptor* current_descriptor;
 static size_t current_trigger_state_type = KEK_HOOK_ANY_STATE;
+static size_t current_trigger_state_slot = KEK_HOOK_ANY_SLOT;
 
 static void hook_registry_event_handler(const KekEvent* event, void* context) {
     kek_hook_registry_dispatch((KekHookRegistry*)context, event);
@@ -88,6 +89,10 @@ void kek_hook_registry_dispatch(KekHookRegistry* registry, const KekEvent* event
             descriptor->state_type_id != event->state_type_id) {
             continue;
         }
+        if (descriptor->state_slot_id != KEK_HOOK_ANY_SLOT &&
+            descriptor->state_slot_id != event->state_slot_id) {
+            continue;
+        }
 
         KekHookContext context;
         context.runtime = registry->runtime;
@@ -96,11 +101,14 @@ void kek_hook_registry_dispatch(KekHookRegistry* registry, const KekEvent* event
         context.app_context = registry->app_context;
         const KekHookDescriptor* previous_descriptor = current_descriptor;
         size_t previous_trigger_state_type = current_trigger_state_type;
+        size_t previous_trigger_state_slot = current_trigger_state_slot;
         current_descriptor = descriptor;
         current_trigger_state_type = event->state_type_id;
+        current_trigger_state_slot = event->state_slot_id;
         descriptor->run(&context);
         current_descriptor = previous_descriptor;
         current_trigger_state_type = previous_trigger_state_type;
+        current_trigger_state_slot = previous_trigger_state_slot;
     }
 }
 
@@ -110,6 +118,10 @@ const KekHookDescriptor* kek_hook_current_descriptor(void) {
 
 size_t kek_hook_current_trigger_state_type(void) {
     return current_trigger_state_type;
+}
+
+size_t kek_hook_current_trigger_state_slot(void) {
+    return current_trigger_state_slot;
 }
 
 const void* kek_hook_event_state(const KekHookContext* context, size_t* size) {

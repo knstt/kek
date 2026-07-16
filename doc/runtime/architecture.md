@@ -70,7 +70,7 @@ The runtime does not depend on generated schema files. Generated code or applica
 
 Events are published into a global ring buffer. Dispatch removes events from the ring buffer in FIFO order and invokes active subscribers for the event type. State-change events can identify the generated state type, concrete slot instance, and version. When the changed state fits in the fixed snapshot capacity, the event also carries copied state bytes for hooks that need the event-version value.
 
-Generated hooks attach to the same dispatcher through `KekHookRegistry`. The registry keeps one event subscription per event type and invokes only descriptors whose trigger matches the event.
+Generated hooks attach to the same dispatcher through `KekHookRegistry`. The registry keeps one event subscription per event type and invokes only descriptors whose trigger matches the event. Hook triggers may be state-wide across all slots of a generated state type or instance-specific to one resolved slot id.
 
 ```mermaid
 flowchart LR
@@ -114,7 +114,7 @@ Several slots may share one descriptor, enabling multiple instances of one state
 
 ## Hook Architecture
 
-Hook descriptors declare their trigger plus read/write state type dependencies. The runtime hook registry filters events and invokes hook bodies supplied by application code. While a hook body runs, the state store checks writes against the active hook descriptor and rejects direct writes to the trigger state type.
+Hook descriptors declare their trigger plus read/write state type dependencies. The runtime hook registry filters events and invokes hook bodies supplied by application code. While a hook body runs, the state store checks writes against the active hook descriptor and rejects direct writes to the triggering slot.
 
 Hook bodies normally read current state through `KekStateStore`. When they need the exact triggering version, they can read the copied snapshot from the triggering event through `kek_hook_event_state()`.
 

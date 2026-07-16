@@ -104,7 +104,7 @@ The supported schema root is a JSON object:
     {
       "name": "HandleInputChanged",
       "on": {
-        "state": "StandardInput",
+        "instance": "standard_input",
         "event": "changed"
       },
       "reads": ["StandardInput"],
@@ -139,7 +139,8 @@ Parser rules:
 - Constructor names must match `[A-Za-z_][A-Za-z0-9_]*` and must not be `default`.
 - Additional constructors are partial overrides layered on top of the default constructor.
 - Hook names and referenced state names must use identifiers.
-- Hook triggers currently support `{ "event": "changed" }`.
+- Hook triggers support `{ "event": "changed" }`, `{ "event": "created" }`, and `{ "event": "deleted" }`.
+- Hook triggers must declare exactly one selector: `state` for all instances of a state type, or `instance` for one schema-declared named slot.
 - Optional root-level `instances` declare named initial `KekStateStore` slots.
 - Instance names must match `[A-Za-z_][A-Za-z0-9_]*`.
 - Instance `state` values must reference a declared state type.
@@ -185,7 +186,7 @@ The generated header contains:
 - A generated helper for adding one default `KekStateStore` slot per generated state type.
 - A generated named slot struct and helpers for adding/removing/resetting schema-declared instances in `KekStateStore`.
 - A generated runtime binding struct that owns `KekStateStore`, `KekHookRegistry`, and declared slot ids for a caller-owned `KekRuntime`.
-- Generated per-state create/delete/find helpers for dynamic instances.
+- Generated per-state create/create-with-initial/delete/find helpers for dynamic instances.
 - Generated typed accessors for named instances and arbitrary slot ids.
 - Generated string-field setter helpers for single-string states, useful for standard input/output bridge code.
 - Generated hook function declarations.
@@ -227,7 +228,7 @@ Generated structs expose their fields directly. Callers that need rollback-safe 
 
 `<name>_state_slots_reset_declared()` resets all currently declared slots through one transactional batch update.
 
-Generated `<name>_<state>_create()` and `<name>_<state>_delete()` helpers create and delete dynamic instances through `KekStateStore`.
+Generated `<name>_<state>_create()` and `<name>_<state>_create_with()` helpers create dynamic instances through `KekStateStore`. The `create_with` variant accepts an already initialized state value and publishes only the created event for that initialized value. Generated `<name>_<state>_delete()` helpers delete dynamic instances.
 
 `<name>_runtime_binding_init()` initializes a generated runtime binding for a caller-owned `KekRuntime`. It initializes the state store, adds declared instances, registers generated hook descriptors, and attaches the hook registry. `<name>_runtime_binding_destroy()` detaches hooks and destroys the generated state store.
 
@@ -246,7 +247,8 @@ Graph nodes:
 
 Graph edges:
 
-- `State --> Hook` labeled `changed` for the hook trigger declared by `on.state` and `event: changed`.
+- `State --> Hook` for state-wide hook triggers declared by `on.state`.
+- `Instance --> Hook` for instance-specific hook triggers declared by `on.instance`.
 - `State -.-> Hook` labeled `reads` for every state listed in `reads`.
 - `Hook --> State` labeled `writes` for every state listed in `writes`.
 

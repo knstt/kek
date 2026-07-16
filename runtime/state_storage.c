@@ -10,9 +10,6 @@ static int state_store_type_write_allowed(size_t state_type_id) {
     if (!hook) {
         return 1;
     }
-    if (state_type_id == kek_hook_current_trigger_state_type()) {
-        return 0;
-    }
     for (size_t i = 0; i < hook->write_count; i++) {
         if (hook->writes[i] == state_type_id) {
             return 1;
@@ -21,9 +18,12 @@ static int state_store_type_write_allowed(size_t state_type_id) {
     return 0;
 }
 
-static int state_store_write_allowed(const KekStateSlot* slot) {
+static int state_store_write_allowed(const KekStateSlot* slot, size_t slot_id) {
     if (!slot || !slot->descriptor) {
         return 1;
+    }
+    if (slot_id == kek_hook_current_trigger_state_slot()) {
+        return 0;
     }
     return state_store_type_write_allowed(slot->descriptor->type_id);
 }
@@ -246,7 +246,7 @@ int kek_state_store_remove(KekStateStore* store, size_t slot_id) {
     if (!slot) {
         return 0;
     }
-    if (!state_store_write_allowed(slot)) {
+    if (!state_store_write_allowed(slot, slot_id)) {
         return 0;
     }
 
@@ -321,7 +321,7 @@ int kek_state_store_update(KekStateStore* store, size_t slot_id,
         !slot->descriptor->check || !update) {
         return 0;
     }
-    if (!state_store_write_allowed(slot)) {
+    if (!state_store_write_allowed(slot, slot_id)) {
         return 0;
     }
 
@@ -372,7 +372,7 @@ int kek_state_store_update_many(KekStateStore* store,
         if (!slot || !slot->descriptor || !slot->descriptor->check) {
             return 0;
         }
-        if (!state_store_write_allowed(slot)) {
+        if (!state_store_write_allowed(slot, updates[i].slot_id)) {
             return 0;
         }
         slots[i] = slot;

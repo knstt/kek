@@ -35,8 +35,8 @@ def parse_document(document: object) -> tuple[list[Enum], list[State], list[Hook
 
     enums = parse_enums(document.get("enums", []))
     states = parse_states(state_items)
-    hooks = parse_hooks(document.get("hooks", []))
     instances = parse_instances(instance_items)
+    hooks = parse_hooks(document.get("hooks", []), instances)
     validate_field_values(enums, states)
     validate_hooks(states, hooks)
     validate_instances(states, instances)
@@ -246,12 +246,13 @@ def parse_constructors(
     return constructors
 
 
-def parse_hooks(hook_items: object) -> list[Hook]:
+def parse_hooks(hook_items: object, instances: list[Instance] | None = None) -> list[Hook]:
     if not isinstance(hook_items, list):
         raise ValueError("hooks must be an array")
 
     hooks: list[Hook] = []
     hook_names: set[str] = set()
+    instance_state_by_name = {item.name: item.state_name for item in instances or []}
     for hook_index, hook_item in enumerate(hook_items):
         if not isinstance(hook_item, dict):
             raise ValueError(f"hooks[{hook_index}] must be an object")
@@ -261,19 +262,43 @@ def parse_hooks(hook_items: object) -> list[Hook]:
         on_item = hook_item.get("on", {})
         if not isinstance(on_item, dict):
             raise ValueError(f"{hook_name}.on must be an object")
-        if on_item.get("event") != "changed":
-            raise ValueError(f"{hook_name}: only changed events are supported")
+        event_type = parse_hook_event(on_item.get("event"), hook_name)
+        has_state = "state" in on_item
+        has_instance = "instance" in on_item
+        if has_state == has_instance:
+            raise ValueError(f"{hook_name}.on must declare exactly one of state or instance")
+        instance_name = None
+        if has_instance:
+            instance_name = require_identifier(on_item.get("instance"), f"{hook_name}.on.instance")
+            state_name = instance_state_by_name.get(instance_name)
+            if state_name is None:
+                raise ValueError(f"{hook_name}: hook references unknown instance {instance_name}")
+        else:
+            state_name = require_identifier(on_item.get("state"), f"{hook_name}.on.state")
         hook_names.add(hook_name)
         hooks.append(
             Hook(
                 hook_name,
-                "KEK_EVENT_STATE_CHANGED",
-                require_identifier(on_item.get("state"), f"{hook_name}.on.state"),
+                event_type,
+                state_name,
+                instance_name,
                 parse_json_name_list(hook_item.get("reads", []), f"{hook_name}.reads"),
                 parse_json_name_list(hook_item.get("writes", []), f"{hook_name}.writes"),
             )
         )
     return hooks
+
+
+def parse_hook_event(value: object, hook_name: str) -> str:
+    events = {
+        "changed": "KEK_EVENT_STATE_CHANGED",
+        "created": "KEK_EVENT_STATE_CREATED",
+        "deleted": "KEK_EVENT_STATE_DELETED",
+    }
+    event_type = events.get(value)
+    if event_type is None:
+        raise ValueError(f"{hook_name}: event must be changed, created, or deleted")
+    return event_type
 
 
 def parse_instances(instance_items: object) -> list[Instance]:
