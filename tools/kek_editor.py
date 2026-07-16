@@ -167,17 +167,9 @@ class EditorHandler(BaseHTTPRequestHandler):
             try:
                 schema_path = self.project_path(params.get("file", [None])[0])
                 source = schema_path.read_text(encoding="utf-8")
-                states, hooks = generate_states.parse_source(source)
-                validate_source_model(states, hooks)
                 out_dir = ROOT_DIR / "generated"
-                out_dir.mkdir(parents=True, exist_ok=True)
                 base_name = schema_path.stem
-                header_path = out_dir / f"{base_name}.h"
-                source_path = out_dir / f"{base_name}.c"
-                graph_path = out_dir / f"{base_name}.graph.md"
-                header_path.write_text(generate_states.emit_header(states, hooks, base_name), encoding="utf-8")
-                source_path.write_text(generate_states.emit_source(states, hooks, base_name), encoding="utf-8")
-                graph_path.write_text(generate_states.emit_graph(states, hooks, base_name), encoding="utf-8")
+                header_path, source_path, graph_path = generate_states.write_generated_files(source, out_dir, base_name)
                 self.send_json(200, {"ok": True, "files": [str(path.relative_to(ROOT_DIR)) for path in (header_path, source_path, graph_path)]})
             except (OSError, SyntaxError, ValueError) as error:
                 self.send_json(400, {"error": str(error)})

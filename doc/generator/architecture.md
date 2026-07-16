@@ -8,35 +8,51 @@ Related documents:
 
 ## Overview
 
-The generator is a single Python script that performs parsing, validation, in-memory modeling, C emission, and Mermaid graph emission for states and hook metadata.
+The generator keeps the command-line entry point in `tools/generate_states.py`, while the implementation lives in the `tools/kekgen/` package. The package separates schema modeling, parsing, naming, rendering, filesystem output, and generated-file templates.
 
 ```mermaid
 flowchart TB
     Input[Input Schema]
-    Parser[JSON parse_source]
-    StateModel[State Field Constructor Hook dataclasses]
-    TypeMap[TYPE_MAP]
-    ConstraintEmitter[emit_field_checks]
-    DefaultTranslator[translate_default]
-    HeaderEmitter[emit_header]
-    SourceEmitter[emit_source]
-    GraphEmitter[emit_graph]
+    CLI[tools/generate_states.py]
+    Parser[kekgen/parser.py]
+    StateModel[kekgen/model.py dataclasses]
+    Naming[kekgen/naming.py]
+    Renderer[kekgen/render.py]
+    Templates[kekgen/templates]
+    Writer[kekgen/generator.py]
     Header[Generated Header]
     Source[Generated Source]
     Graph[Generated Graph Markdown]
 
-    Input --> Parser
+    Input --> CLI
+    CLI --> Parser
     Parser --> StateModel
-    StateModel --> TypeMap
-    StateModel --> ConstraintEmitter
-    StateModel --> DefaultTranslator
-    StateModel --> HeaderEmitter
-    StateModel --> SourceEmitter
-    StateModel --> GraphEmitter
-    HeaderEmitter --> Header
-    SourceEmitter --> Source
-    GraphEmitter --> Graph
+    StateModel --> Naming
+    StateModel --> Renderer
+    Naming --> Renderer
+    Renderer --> Templates
+    Templates --> Header
+    Templates --> Source
+    Templates --> Graph
+    Renderer --> Writer
+    Writer --> Header
+    Writer --> Source
+    Writer --> Graph
 ```
+
+`tools/generate_states.py` re-exports the historical public functions such as `parse_source()`, `emit_header()`, `emit_source()`, and `emit_graph()` so the local editor can keep importing `generate_states`.
+
+## Package Layout
+
+| Path | Responsibility |
+| --- | --- |
+| `tools/generate_states.py` | CLI wrapper and compatibility import surface. |
+| `tools/kekgen/model.py` | `Field`, `State`, `Constructor`, and `Hook` dataclasses. |
+| `tools/kekgen/parser.py` | JSON parsing and semantic validation. |
+| `tools/kekgen/naming.py` | Identifier validation and generated C naming rules. |
+| `tools/kekgen/render.py` | Rendering helpers that turn models into template variables. |
+| `tools/kekgen/generator.py` | High-level render/write helpers shared by CLI and editor. |
+| `tools/kekgen/templates/` | Header, source, and graph template files. |
 
 ## Internal Model
 
@@ -67,13 +83,15 @@ This keeps source parsing small and leaves room for a JSON Schema file later.
 
 ## Emission Strategy
 
-The header, source, and graph emitters render strings from the `State` and `Hook` models.
+The header, source, and graph emitters render strings from the `State` and `Hook` models using template files for the outer generated-file structure.
 
-The header emitter owns declarations and aggregate type layout.
+The header template owns boilerplate includes, the include guard shape, runtime includes, and declaration section placement. The renderer supplies state enum text, state declarations, aggregate declarations, and hook declarations.
 
-The source emitter owns helper implementations, default construction, additional constructors, field constraint checks, void-pointer adapters, state descriptor tables, and hook descriptor tables.
+The source template owns file-level boilerplate, string helper implementations, aggregate helper placement, descriptor helper placement, and hook descriptor placement. The renderer supplies per-state functions, aggregate field/check blocks, descriptor entries, hook dependency arrays, and the hook descriptor table.
 
-The graph emitter owns documentation-only Markdown containing a Mermaid flowchart of state nodes, hook nodes, trigger edges, read edges, and write edges.
+The graph template owns the Markdown and Mermaid shell. The renderer supplies state nodes, hook nodes, trigger edges, read edges, and write edges.
+
+This keeps generated-file layout readable without hiding model-dependent C snippets in a template language.
 
 ## Naming Strategy
 
@@ -90,15 +108,19 @@ The graph emitter owns documentation-only Markdown containing a Mermaid flowchar
 
 ```mermaid
 flowchart LR
-    Generator[tools/generate_states.py]
+    CLI[tools/generate_states.py]
+    Generator[tools/kekgen]
+    Templates[tools/kekgen/templates]
     GeneratedHeader[Generated Header]
     GeneratedSource[Generated Source]
     GeneratedGraph[Generated Graph Markdown]
     Consumer[C Consumer]
 
-    Generator --> GeneratedHeader
-    Generator --> GeneratedSource
-    Generator --> GeneratedGraph
+    CLI --> Generator
+    Generator --> Templates
+    Templates --> GeneratedHeader
+    Templates --> GeneratedSource
+    Templates --> GeneratedGraph
     GeneratedHeader --> Consumer
     GeneratedSource --> Consumer
 ```

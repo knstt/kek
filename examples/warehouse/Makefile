@@ -21,7 +21,7 @@ all: check $(TARGET)
 
 generate: $(GENERATED_C) $(GENERATED_H) $(GENERATED_GRAPH)
 
-$(GENERATED_C) $(GENERATED_H) $(GENERATED_GRAPH): $(SCHEMA) $(ROOT)/tools/generate_states.py
+$(GENERATED_C) $(GENERATED_H) $(GENERATED_GRAPH): $(SCHEMA) $(ROOT)/tools/generate_states.py $(wildcard $(ROOT)/tools/kekgen/*.py) $(wildcard $(ROOT)/tools/kekgen/templates/*)
 	$(PYTHON) $(ROOT)/tools/generate_states.py $(SCHEMA) --out-dir $(GENERATED_DIR) --name $(GENERATED_NAME)
 
 check: generate
