@@ -35,7 +35,7 @@ The build and short quit smoke test succeeded. The longer movement smoke test ex
 - Because of that include path assumption, the example can have its own Makefile but not fully self-contained generated output without changing the generator.
 - The generated header name is fixed by the generator output base name, so the C app must include `generated/warehouse.h` from the repository root rather than a local generated header.
 - A second example can easily overwrite or coexist in the shared root `generated/` directory, but there is no namespacing beyond the output base name.
-- Adding one example duplicated a large amount of app code from `example/main.c`: stream-to-state bridging, text buffer ownership, state slot registration, typed accessors, state-copy updates, reset helpers, and hook registry setup.
+- Adding one example duplicated a large amount of app code from `examples/game/main.c`: stream-to-state bridging, text buffer ownership, state slot registration, typed accessors, state-copy updates, reset helpers, and hook registry setup.
 - Slot registration is especially repetitive and error-prone. Every state needs a descriptor lookup, slot field, invalid-id check, and later typed accessor.
 - The app still needs to know generated enum spelling such as `KEK_STATE_TYPE_WAREHOUSEMAP` and `KEK_STATE_TYPE_GAMESTATUS`.
 - The generated schema cannot express board cells, walls, packages, or delivery zones as collections. The example uses scalar fields and fixed map dimensions instead.

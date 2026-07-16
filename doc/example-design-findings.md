@@ -31,7 +31,7 @@ Gameplay:
 
 ## Findings Before Implementation
 
-- The root `Makefile` is hard-coded to `example/game.json`, `example/main.c`, generated name `game`, and output `main`, so additional examples are not first-class.
+- The root `Makefile` used to be hard-coded to `example/game.json`, `example/main.c`, generated name `game`, and output `main`, so additional examples were not first-class.
 - The schema can describe state shape and hook dependency metadata, but all behavior still has to be handwritten in C.
 - Hook `reads` and `writes` are metadata only. The runtime does not enforce them.
 - Multi-state updates are not transactional. A gameplay action that updates several states can leave partial changes if a later update fails.

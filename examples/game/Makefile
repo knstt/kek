@@ -5,15 +5,15 @@ CFLAGS ?= -std=c11 -Wall -Wextra -Werror
 ROOT := ../..
 CPPFLAGS ?= -I$(ROOT) -I$(ROOT)/generated -I$(ROOT)/runtime
 
-SCHEMA := warehouse.json
+SCHEMA := game.json
 EXAMPLE_MAIN := main.c
 GENERATED_DIR := $(ROOT)/generated
-GENERATED_NAME := warehouse
+GENERATED_NAME := game
 GENERATED_C := $(GENERATED_DIR)/$(GENERATED_NAME).c
 GENERATED_H := $(GENERATED_DIR)/$(GENERATED_NAME).h
 GENERATED_GRAPH := $(GENERATED_DIR)/$(GENERATED_NAME).graph.md
 RUNTIME_LIB := $(ROOT)/lib/libkek_runtime.a
-TARGET := warehouse
+TARGET := game
 
 .PHONY: all generate check run clean
 
@@ -37,4 +37,4 @@ run: $(TARGET)
 	./$(TARGET)
 
 clean:
-	rm -f $(TARGET) $(GENERATED_DIR)/$(GENERATED_NAME).o $(GENERATED_C) $(GENERATED_H) $(GENERATED_GRAPH)
+	rm -f $(TARGET) $(GENERATED_DIR)/$(GENERATED_NAME).o $(GENERATED_C) $(GENERATED_H) $(GENERATED_GRAPH) keyboard_log.txt

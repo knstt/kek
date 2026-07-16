@@ -3,6 +3,11 @@ out/
 *.out
 *.o
 /main
+/build/
+/lib/
+/examples/game/game
+/examples/game/keyboard_log.txt
+/examples/warehouse/warehouse
 /keyboard_log.txt
 generated/
 __pycache__/

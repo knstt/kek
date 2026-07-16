@@ -1,33 +1,33 @@
-PYTHON ?= python3
 CC ?= cc
+AR ?= ar
 CFLAGS ?= -std=c11 -Wall -Wextra -Werror
-CPPFLAGS ?= -I. -Igenerated -Iruntime
+CPPFLAGS ?= -I. -Iruntime
 
-SCHEMA := example/game.json
-EXAMPLE_MAIN := example/main.c
-GENERATED_DIR := generated
-GENERATED_NAME := game
-GENERATED_C := $(GENERATED_DIR)/$(GENERATED_NAME).c
-GENERATED_H := $(GENERATED_DIR)/$(GENERATED_NAME).h
-GENERATED_GRAPH := $(GENERATED_DIR)/$(GENERATED_NAME).graph.md
+BUILD_DIR := build
+LIB_DIR := lib
+RUNTIME_LIB := $(LIB_DIR)/libkek_runtime.a
+RUNTIME_SRCS := \
+	runtime/event.c \
+	runtime/hook.c \
+	runtime/stream.c \
+	runtime/runtime.c \
+	runtime/state_storage.c
+RUNTIME_OBJS := $(RUNTIME_SRCS:runtime/%.c=$(BUILD_DIR)/runtime/%.o)
 
-.PHONY: all generate check runtime editor clean
+.PHONY: all runtime clean
 
-all: check runtime
+all: runtime
 
-generate: $(GENERATED_C) $(GENERATED_H) $(GENERATED_GRAPH)
+runtime: $(RUNTIME_LIB)
 
-$(GENERATED_C) $(GENERATED_H) $(GENERATED_GRAPH): $(SCHEMA) tools/generate_states.py
-	$(PYTHON) tools/generate_states.py $(SCHEMA) --out-dir $(GENERATED_DIR) --name $(GENERATED_NAME)
+$(RUNTIME_LIB): $(RUNTIME_OBJS) | $(LIB_DIR)
+	$(AR) rcs $@ $^
 
-check: generate
-	$(CC) $(CFLAGS) -c $(GENERATED_C) -o $(GENERATED_DIR)/$(GENERATED_NAME).o
+$(BUILD_DIR)/runtime/%.o: runtime/%.c | $(BUILD_DIR)/runtime
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-runtime: generate
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(EXAMPLE_MAIN) runtime/event.c runtime/hook.c runtime/stream.c runtime/runtime.c runtime/state_storage.c $(GENERATED_C) -o main
-
-editor:
-	$(PYTHON) tools/kek_editor.py example
+$(BUILD_DIR)/runtime $(LIB_DIR):
+	mkdir -p $@
 
 clean:
-	rm -f $(GENERATED_DIR)/$(GENERATED_NAME).o main keyboard_log.txt
+	rm -rf $(BUILD_DIR) $(LIB_DIR) main keyboard_log.txt

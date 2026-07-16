@@ -205,7 +205,7 @@ class EditorHandler(BaseHTTPRequestHandler):
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the local Kek browser editor.")
-    parser.add_argument("project", nargs="?", default="example", help="project folder containing JSON schema files")
+    parser.add_argument("project", nargs="?", default="examples/game", help="project folder containing JSON schema files")
     parser.add_argument("--host", default="127.0.0.1", help="bind host")
     parser.add_argument("--port", type=int, default=8080, help="bind port")
     args = parser.parse_args()

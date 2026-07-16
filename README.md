@@ -56,8 +56,9 @@ flowchart TD
 | `tools/kek_editor.py` | Local HTTP server for the browser editor. |
 | `editor/` | Plain HTML/CSS/JS project schema editor. |
 | `runtime/` | C runtime modules. |
+| `examples/` | Example schemas, applications, and per-example Makefiles. |
 | `generated/` | Generated C output. |
-| `Makefile` | Generation, compile-check, runtime build, and cleanup targets. |
+| `Makefile` | Builds the runtime library used by examples. |
 | `doc/generator/` | Generator documentation. |
 | `doc/runtime/` | Runtime documentation. |
 
@@ -65,18 +66,17 @@ flowchart TD
 
 | Command | Purpose |
 | --- | --- |
-| `make generate` | Run the schema generator. |
-| `make check` | Generate and compile generated C. |
-| `make runtime` | Build the runtime executable. |
-| `make editor` | Run the browser editor for the `example/` project folder. |
-| `make all` | Run `check` and build the runtime executable. |
-| `make clean` | Remove build/runtime artifacts. |
+| `make runtime` | Build `lib/libkek_runtime.a`. |
+| `make all` | Build `lib/libkek_runtime.a`. |
+| `make clean` | Remove runtime library build artifacts. |
+| `make -C examples/game` | Generate and build the game example. |
+| `make -C examples/warehouse` | Generate and build the warehouse example. |
 
 ## Browser Editor
 
-Run `make editor` and open `http://127.0.0.1:8080/`.
+Run `python3 tools/kek_editor.py examples/game` and open `http://127.0.0.1:8080/`.
 
-The editor serves the `example/` project folder. It loads JSON schema files from that
+The editor serves the `examples/game` project folder by default. It loads JSON schema files from that
 folder, saves schema changes back into that folder, and writes generated files to
 `generated/`.
 
@@ -85,7 +85,7 @@ small local API server and reuses the existing generator parser for validation.
 
 ## Runtime Example
 
-`example/main.c` builds a small terminal dungeon demo around the generated `GameState`.
+`examples/game/main.c` builds a small terminal dungeon demo around the generated `GameState`.
 It registers stdin, stdout, and log streams with the runtime, stores generated
 state through `KekStateStorage`, validates updates before swapping them in, and
 renders the current state after game actions.
