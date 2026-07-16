@@ -24,7 +24,6 @@
 typedef struct GameApp {
     KekRuntime runtime;
     Game_stateRuntimeBinding binding;
-    float timer_accumulator;
     bool should_quit;
 } GameApp;
 
@@ -66,9 +65,10 @@ typedef struct CameraFrameUpdate {
     float dt;
 } CameraFrameUpdate;
 
-typedef struct TimerTickUpdate {
+typedef struct FrameClockUpdate {
     uint64_t tick;
-} TimerTickUpdate;
+    float dt;
+} FrameClockUpdate;
 
 typedef struct WaveRuntimeUpdate {
     int active_enemies;
@@ -91,11 +91,17 @@ typedef struct ProjectileUpdate {
 typedef struct EnemyUpdate {
     Player player;
     float dt;
+    float speed;
+    float strafe;
 } EnemyUpdate;
 
 typedef struct EnemyDamageUpdate {
     int damage;
 } EnemyDamageUpdate;
+
+typedef struct EnemyResetUpdate {
+    Enemy enemy;
+} EnemyResetUpdate;
 
 typedef struct PickupUpdate {
     float dt;
@@ -146,6 +152,22 @@ static const Player* player_const(GameApp* app) {
 
 static const WaveDirector* wave_const(GameApp* app) {
     return game_state_wave_const(game_store(app), &app->binding.slots);
+}
+
+static bool is_declared_enemy_slot(const GameApp* app, size_t slot) {
+    return slot == app->binding.slots.grunt_enemy || slot == app->binding.slots.runner_enemy ||
+           slot == app->binding.slots.tank_enemy || slot == app->binding.slots.boss_enemy;
+}
+
+static int count_active_enemies(KekStateStore* store) {
+    int count = 0;
+    for (size_t slot = game_state_enemy_first(store); slot != KEK_STATE_INVALID_ID; slot = game_state_enemy_next(store, slot)) {
+        const Enemy* enemy = game_state_enemy_slot_const(store, slot);
+        if (enemy && enemy->active) {
+            count++;
+        }
+    }
+    return count;
 }
 
 static void set_mode_update(void* draft, void* context) {
@@ -224,12 +246,17 @@ static void camera_start_update(void* draft, void* context) {
     *camera = CameraRig_default();
 }
 
-static void timer_start_update(void* draft, void* context) {
+static void frame_clock_reset_update(void* draft, void* context) {
     (void)context;
-    Timer* timer = (Timer*)draft;
-    timer->tick = 0;
-    timer->interval_ms = 250;
-    timer->enabled = true;
+    FrameClock* frame = (FrameClock*)draft;
+    *frame = FrameClock_default();
+}
+
+static void frame_clock_update(void* draft, void* context) {
+    FrameClock* frame = (FrameClock*)draft;
+    const FrameClockUpdate* update = (const FrameClockUpdate*)context;
+    frame->tick = update->tick;
+    frame->dt = update->dt;
 }
 
 static void player_frame_update(void* draft, void* context) {
@@ -318,12 +345,6 @@ static void camera_frame_update(void* draft, void* context) {
     camera->zoom = 1.0f + (float)(update->player.level - 1) * 0.015f;
 }
 
-static void timer_tick_update(void* draft, void* context) {
-    Timer* timer = (Timer*)draft;
-    const TimerTickUpdate* update = (const TimerTickUpdate*)context;
-    timer->tick = update->tick;
-}
-
 static void wave_runtime_update(void* draft, void* context) {
     WaveDirector* wave = (WaveDirector*)draft;
     const WaveRuntimeUpdate* update = (const WaveRuntimeUpdate*)context;
@@ -366,24 +387,35 @@ static void projectile_pierce_update(void* draft, void* context) {
 static void enemy_update(void* draft, void* context) {
     Enemy* enemy = (Enemy*)draft;
     const EnemyUpdate* update = (const EnemyUpdate*)context;
+    if (!enemy->active) {
+        return;
+    }
     float dir_x = update->player.x - enemy->x;
     float dir_y = update->player.y - enemy->y;
     normalize_or(&dir_x, &dir_y, 0.0f, 0.0f);
 
-    float speed = 108.0f;
-    if (enemy->kind == EnemyKind_Runner) {
-        speed = 172.0f;
-    } else if (enemy->kind == EnemyKind_Tank) {
-        speed = 76.0f;
-    } else if (enemy->kind == EnemyKind_Boss) {
-        speed = 58.0f;
-    }
+    float move_x = dir_x - dir_y * update->strafe;
+    float move_y = dir_y + dir_x * update->strafe;
+    normalize_or(&move_x, &move_y, dir_x, dir_y);
 
-    enemy->vx = dir_x * speed;
-    enemy->vy = dir_y * speed;
+    enemy->vx = move_x * update->speed;
+    enemy->vy = move_y * update->speed;
     enemy->x = clampf(enemy->x + enemy->vx * update->dt, -ARENA_HALF_WIDTH - 160.0f, ARENA_HALF_WIDTH + 160.0f);
     enemy->y = clampf(enemy->y + enemy->vy * update->dt, -ARENA_HALF_HEIGHT - 160.0f, ARENA_HALF_HEIGHT + 160.0f);
     enemy->flash = clampf(enemy->flash - update->dt * 4.5f, 0.0f, 1.0f);
+}
+
+static float enemy_speed_for_kind(EnemyKind kind) {
+    if (kind == EnemyKind_Runner) {
+        return 172.0f;
+    }
+    if (kind == EnemyKind_Tank) {
+        return 76.0f;
+    }
+    if (kind == EnemyKind_Boss) {
+        return 58.0f;
+    }
+    return 108.0f;
 }
 
 static void enemy_damage_update(void* draft, void* context) {
@@ -394,6 +426,15 @@ static void enemy_damage_update(void* draft, void* context) {
         enemy->health = 0;
     }
     enemy->flash = 1.0f;
+    if (enemy->health <= 0) {
+        enemy->active = false;
+    }
+}
+
+static void enemy_reset_update(void* draft, void* context) {
+    Enemy* enemy = (Enemy*)draft;
+    const EnemyResetUpdate* update = (const EnemyResetUpdate*)context;
+    *enemy = update->enemy;
 }
 
 static void pickup_update(void* draft, void* context) {
@@ -423,7 +464,9 @@ static void clear_dynamic_entities(GameApp* app) {
     KekStateStore* store = game_store(app);
     for (size_t slot = game_state_enemy_first(store); slot != KEK_STATE_INVALID_ID;) {
         size_t next = game_state_enemy_next(store, slot);
-        (void)game_state_enemy_delete(store, slot);
+        if (!is_declared_enemy_slot(app, slot)) {
+            (void)game_state_enemy_delete(store, slot);
+        }
         slot = next;
     }
     for (size_t slot = game_state_projectile_first(store); slot != KEK_STATE_INVALID_ID;) {
@@ -441,6 +484,37 @@ static void clear_dynamic_entities(GameApp* app) {
         (void)game_state_hud_message_delete(store, slot);
         slot = next;
     }
+}
+
+static void reset_declared_enemies(GameApp* app) {
+    Enemy grunt = Enemy_default();
+    grunt.kind = EnemyKind_Grunt;
+    grunt.x = -440.0f;
+    grunt.y = -220.0f;
+
+    Enemy runner = Enemy_runner();
+    runner.x = 430.0f;
+    runner.y = -190.0f;
+
+    Enemy tank = Enemy_tank();
+    tank.x = -520.0f;
+    tank.y = 240.0f;
+
+    Enemy boss = Enemy_boss();
+    boss.x = 540.0f;
+    boss.y = 250.0f;
+
+    EnemyResetUpdate grunt_update = {grunt};
+    EnemyResetUpdate runner_update = {runner};
+    EnemyResetUpdate tank_update = {tank};
+    EnemyResetUpdate boss_update = {boss};
+    KekStateStoreUpdateItem updates[] = {
+        {app->binding.slots.grunt_enemy, enemy_reset_update, &grunt_update, KEK_EVENT_CHANGED_FIELDS_UNKNOWN},
+        {app->binding.slots.runner_enemy, enemy_reset_update, &runner_update, KEK_EVENT_CHANGED_FIELDS_UNKNOWN},
+        {app->binding.slots.tank_enemy, enemy_reset_update, &tank_update, KEK_EVENT_CHANGED_FIELDS_UNKNOWN},
+        {app->binding.slots.boss_enemy, enemy_reset_update, &boss_update, KEK_EVENT_CHANGED_FIELDS_UNKNOWN},
+    };
+    (void)kek_state_store_update_many(game_store(app), updates, sizeof(updates) / sizeof(updates[0]));
 }
 
 static void add_hud_message(GameApp* app, HudMessageKind kind, float x, float y, int value) {
@@ -476,15 +550,15 @@ static void add_pickup(GameApp* app, float x, float y, int score_value) {
 
 static void start_game(GameApp* app) {
     clear_dynamic_entities(app);
-    app->timer_accumulator = 0.0f;
     KekStateStoreUpdateItem updates[] = {
+        {app->binding.slots.frame, frame_clock_reset_update, NULL, KEK_EVENT_CHANGED_FIELDS_UNKNOWN},
         {app->binding.slots.session, session_start_update, NULL, KEK_EVENT_CHANGED_FIELDS_UNKNOWN},
         {app->binding.slots.player, player_start_update, NULL, KEK_EVENT_CHANGED_FIELDS_UNKNOWN},
         {app->binding.slots.wave, wave_start_update, NULL, KEK_EVENT_CHANGED_FIELDS_UNKNOWN},
         {app->binding.slots.camera, camera_start_update, NULL, KEK_EVENT_CHANGED_FIELDS_UNKNOWN},
-        {app->binding.slots.timer, timer_start_update, NULL, KEK_EVENT_CHANGED_FIELDS_UNKNOWN},
     };
     (void)kek_state_store_update_many(game_store(app), updates, sizeof(updates) / sizeof(updates[0]));
+    reset_declared_enemies(app);
     add_hud_message(app, HudMessageKind_Info, 0.0f, -60.0f, HUD_VALUE_WARNING);
     (void)kek_event_dispatch_pending(kek_runtime_events(&app->runtime));
 }
@@ -587,25 +661,16 @@ static void spawn_enemy(GameApp* app) {
                                             KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_BOSS_SPAWNED);
 }
 
-static void advance_timer(GameApp* app, float dt) {
-    Timer* timer = game_state_timer(game_store(app), &app->binding.slots);
-    if (!timer || !timer->enabled || timer->interval_ms == 0) {
+static void advance_frame_clock(GameApp* app, float dt) {
+    const FrameClock* frame = game_state_frame_const(game_store(app), &app->binding.slots);
+    if (!frame) {
         return;
     }
-    app->timer_accumulator += dt;
-    float interval = (float)timer->interval_ms / 1000.0f;
-    while (app->timer_accumulator >= interval) {
-        app->timer_accumulator -= interval;
-        TimerTickUpdate update = {timer->tick + 1};
-        (void)kek_state_store_update_fields(game_store(app), app->binding.slots.timer,
-                                            timer_tick_update, &update,
-                                            KEK_STATE_TYPE_TIMER_FIELD_TICK);
-        (void)kek_event_dispatch_pending(kek_runtime_events(&app->runtime));
-        timer = game_state_timer(game_store(app), &app->binding.slots);
-        if (!timer) {
-            return;
-        }
-    }
+    FrameClockUpdate update = {frame->tick + 1, dt};
+    (void)kek_state_store_update_fields(game_store(app), app->binding.slots.frame,
+                                        frame_clock_update, &update,
+                                        KEK_STATE_TYPE_FRAME_CLOCK_FIELD_TICK |
+                                            KEK_STATE_TYPE_FRAME_CLOCK_FIELD_DT);
 }
 
 static void update_projectiles(GameApp* app, float dt) {
@@ -635,7 +700,7 @@ static void update_projectiles(GameApp* app, float dt) {
                 size_t next_enemy = game_state_enemy_next(store, enemy_slot);
                 const Enemy* enemy = game_state_enemy_slot_const(store, enemy_slot);
                 projectile = game_state_projectile_slot_const(store, projectile_slot);
-                if (!enemy || !projectile) {
+                if (!enemy || !enemy->active || !projectile) {
                     enemy_slot = next_enemy;
                     continue;
                 }
@@ -666,7 +731,9 @@ static void update_projectiles(GameApp* app, float dt) {
                                                                 KEK_STATE_TYPE_PLAYER_FIELD_MAX_HEALTH);
                         add_pickup(app, enemy->x, enemy->y, reward / 3);
                         add_hud_message(app, HudMessageKind_Reward, enemy->x, enemy->y, reward);
-                        (void)game_state_enemy_delete(store, enemy_slot);
+                        if (!is_declared_enemy_slot(app, enemy_slot)) {
+                            (void)game_state_enemy_delete(store, enemy_slot);
+                        }
                     }
                     if (!projectile || projectile->pierce <= 0) {
                         remove_projectile = true;
@@ -692,10 +759,10 @@ static void update_enemies(GameApp* app, float dt) {
     }
     for (size_t enemy_slot = game_state_enemy_first(store); enemy_slot != KEK_STATE_INVALID_ID; enemy_slot = game_state_enemy_next(store, enemy_slot)) {
         const Enemy* enemy = game_state_enemy_slot_const(store, enemy_slot);
-        if (!enemy) {
+        if (!enemy || !enemy->active || is_declared_enemy_slot(app, enemy_slot)) {
             continue;
         }
-        EnemyUpdate update = {*player, dt};
+        EnemyUpdate update = {*player, dt, enemy_speed_for_kind(enemy->kind), 0.0f};
         (void)kek_state_store_update_fields(store, enemy_slot, enemy_update, &update,
                                             KEK_STATE_TYPE_ENEMY_FIELD_X |
                                                 KEK_STATE_TYPE_ENEMY_FIELD_Y |
@@ -705,7 +772,7 @@ static void update_enemies(GameApp* app, float dt) {
 
         enemy = game_state_enemy_slot_const(store, enemy_slot);
         player = player_const(app);
-        if (!enemy || !player || player->invulnerable_timer > 0.0f) {
+        if (!enemy || !enemy->active || !player || player->invulnerable_timer > 0.0f) {
             continue;
         }
         float distance = vec_len(player->x - enemy->x, player->y - enemy->y);
@@ -791,7 +858,7 @@ static void update_hud_messages(GameApp* app, float dt) {
 
 static void update_wave_runtime(GameApp* app, float dt) {
     WaveRuntimeUpdate update = {
-        count_slots(game_store(app), game_state_enemy_first, game_state_enemy_next),
+        count_active_enemies(game_store(app)),
         dt,
     };
     (void)kek_state_store_update_fields(game_store(app), app->binding.slots.wave,
@@ -847,7 +914,7 @@ static void update_playing(GameApp* app, InputIntent input, float dt) {
     };
     (void)kek_state_store_update_many(store, updates, sizeof(updates) / sizeof(updates[0]));
 
-    advance_timer(app, dt);
+    advance_frame_clock(app, dt);
     update_projectiles(app, dt);
     update_enemies(app, dt);
     update_pickups(app, dt);
@@ -927,7 +994,7 @@ static void update_game(GameApp* app, float dt) {
     (void)kek_event_dispatch_pending(kek_runtime_events(&app->runtime));
 }
 
-int OnFrameTimer(KekHookContext* context) {
+int OnFrameClock(KekHookContext* context) {
     GameApp* app = (GameApp*)context->app_context;
     const GameSession* session = game_state_session_const(context->state_store, &app->binding.slots);
     const WaveDirector* wave = game_state_wave_const(context->state_store, &app->binding.slots);
@@ -935,7 +1002,7 @@ int OnFrameTimer(KekHookContext* context) {
         return 1;
     }
     if (wave->spawn_budget == 0 &&
-        count_slots(context->state_store, game_state_enemy_first, game_state_enemy_next) == 0) {
+        count_active_enemies(context->state_store) == 0) {
         WaveDirector next = *wave;
         if (wave->wave >= 5) {
             next.wave = 6;
@@ -957,6 +1024,44 @@ int OnFrameTimer(KekHookContext* context) {
                                              KEK_EVENT_CHANGED_FIELDS_UNKNOWN);
     }
     return 1;
+}
+
+static int move_declared_enemy(KekHookContext* context, size_t slot, float speed, float strafe) {
+    GameApp* app = (GameApp*)context->app_context;
+    const GameSession* session = game_state_session_const(context->state_store, &app->binding.slots);
+    const Player* player = game_state_player_const(context->state_store, &app->binding.slots);
+    const FrameClock* frame = game_state_frame_const(context->state_store, &app->binding.slots);
+    const Enemy* enemy = game_state_enemy_slot_const(context->state_store, slot);
+    if (!session || !player || !frame || !enemy || !enemy->active || session->mode != GameMode_Playing) {
+        return 1;
+    }
+    EnemyUpdate update = {*player, frame->dt, speed, strafe};
+    return kek_state_store_update_fields(context->state_store, slot, enemy_update, &update,
+                                         KEK_STATE_TYPE_ENEMY_FIELD_X |
+                                             KEK_STATE_TYPE_ENEMY_FIELD_Y |
+                                             KEK_STATE_TYPE_ENEMY_FIELD_VX |
+                                             KEK_STATE_TYPE_ENEMY_FIELD_VY |
+                                             KEK_STATE_TYPE_ENEMY_FIELD_FLASH);
+}
+
+int MoveGruntEnemy(KekHookContext* context) {
+    GameApp* app = (GameApp*)context->app_context;
+    return move_declared_enemy(context, app->binding.slots.grunt_enemy, 108.0f, 0.0f);
+}
+
+int MoveRunnerEnemy(KekHookContext* context) {
+    GameApp* app = (GameApp*)context->app_context;
+    return move_declared_enemy(context, app->binding.slots.runner_enemy, 182.0f, 0.18f);
+}
+
+int MoveTankEnemy(KekHookContext* context) {
+    GameApp* app = (GameApp*)context->app_context;
+    return move_declared_enemy(context, app->binding.slots.tank_enemy, 70.0f, -0.10f);
+}
+
+int MoveBossEnemy(KekHookContext* context) {
+    GameApp* app = (GameApp*)context->app_context;
+    return move_declared_enemy(context, app->binding.slots.boss_enemy, 54.0f, 0.28f);
 }
 
 int OnPlayerHealthChanged(KekHookContext* context) {
@@ -1088,7 +1193,7 @@ static void draw_world(GameApp* app) {
 
     for (size_t slot = game_state_enemy_first(store); slot != KEK_STATE_INVALID_ID; slot = game_state_enemy_next(store, slot)) {
         const Enemy* enemy = game_state_enemy_slot_const(store, slot);
-        if (!enemy) {
+        if (!enemy || !enemy->active) {
             continue;
         }
         DrawCircleV((Vector2){enemy->x, enemy->y}, enemy->radius, enemy_color(enemy));
@@ -1147,7 +1252,7 @@ static void draw_overlay(GameApp* app, Camera2D view) {
     if (session->debug) {
         DrawRectangle(SCREEN_WIDTH - 318, 18, 300, 120, Fade(BLACK, 0.75f));
         DrawText(TextFormat("FPS %d", GetFPS()), SCREEN_WIDTH - 300, 30, 18, GREEN);
-        DrawText(TextFormat("Enemies %d Projectiles %d", count_slots(store, game_state_enemy_first, game_state_enemy_next),
+        DrawText(TextFormat("Enemies %d Projectiles %d", count_active_enemies(store),
                             count_slots(store, game_state_projectile_first, game_state_projectile_next)),
                  SCREEN_WIDTH - 300, 54, 18, RAYWHITE);
         DrawText(TextFormat("Pickups %d HUD %d", count_slots(store, game_state_pickup_first, game_state_pickup_next),

@@ -20,12 +20,11 @@
   ],
   "states": [
     {
-      "name": "timer",
-      "type": "Timer",
-      "values": {
-        "interval_ms": 250,
-        "enabled": true
-      }
+      "name": "FrameClock",
+      "fields": [
+        {"name": "tick", "type": "u64", "default": 0},
+        {"name": "dt", "type": "f32", "default": 0, "min": 0, "max": 0.1}
+      ]
     },
     {
       "name": "GameSession",
@@ -112,7 +111,8 @@
         {"name": "health", "type": "i32", "default": 25, "min": 0, "max": 600},
         {"name": "damage", "type": "i32", "default": 8, "min": 1, "max": 40},
         {"name": "radius", "type": "f32", "default": 16, "min": 8, "max": 60},
-        {"name": "flash", "type": "f32", "default": 0, "min": 0, "max": 1}
+        {"name": "flash", "type": "f32", "default": 0, "min": 0, "max": 1},
+        {"name": "active", "type": "bool", "default": true}
       ],
       "constructors": [
         {"name": "runner", "values": {"kind": "Runner", "health": 18, "damage": 6, "radius": 13}},
@@ -155,18 +155,47 @@
     }
   ],
   "instances": [
+    {"name": "frame", "state": "FrameClock"},
     {"name": "session", "state": "GameSession"},
     {"name": "input", "state": "InputIntent"},
     {"name": "player", "state": "Player"},
     {"name": "wave", "state": "WaveDirector"},
-    {"name": "camera", "state": "CameraRig"}
+    {"name": "camera", "state": "CameraRig"},
+    {"name": "grunt_enemy", "state": "Enemy", "values": {"kind": "Grunt", "x": -440, "y": -220}},
+    {"name": "runner_enemy", "state": "Enemy", "constructor": "runner", "values": {"x": 430, "y": -190}},
+    {"name": "tank_enemy", "state": "Enemy", "constructor": "tank", "values": {"x": -520, "y": 240}},
+    {"name": "boss_enemy", "state": "Enemy", "constructor": "boss", "values": {"x": 540, "y": 250}}
   ],
   "hooks": [
     {
-      "name": "OnFrameTimer",
-      "on": {"instance": "timer", "event": "changed", "fields": ["tick"]},
-      "reads": ["Timer", "GameSession", "WaveDirector"],
+      "name": "OnFrameClock",
+      "on": {"instance": "frame", "event": "changed", "fields": ["tick"]},
+      "reads": ["FrameClock", "GameSession", "WaveDirector"],
       "writes": ["WaveDirector"]
+    },
+    {
+      "name": "MoveGruntEnemy",
+      "on": {"instance": "frame", "event": "changed", "fields": ["tick"]},
+      "reads": ["FrameClock", "GameSession", "Player", "Enemy"],
+      "writes": ["Enemy"]
+    },
+    {
+      "name": "MoveRunnerEnemy",
+      "on": {"instance": "frame", "event": "changed", "fields": ["tick"]},
+      "reads": ["FrameClock", "GameSession", "Player", "Enemy"],
+      "writes": ["Enemy"]
+    },
+    {
+      "name": "MoveTankEnemy",
+      "on": {"instance": "frame", "event": "changed", "fields": ["tick"]},
+      "reads": ["FrameClock", "GameSession", "Player", "Enemy"],
+      "writes": ["Enemy"]
+    },
+    {
+      "name": "MoveBossEnemy",
+      "on": {"instance": "frame", "event": "changed", "fields": ["tick"]},
+      "reads": ["FrameClock", "GameSession", "Player", "Enemy"],
+      "writes": ["Enemy"]
     },
     {
       "name": "OnPlayerHealthChanged",

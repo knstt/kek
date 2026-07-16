@@ -31,17 +31,19 @@ The folder also contains the upstream `raylib-6.0.tar.gz` source archive and the
 
 - `GameSession`: menu/play/pause/upgrade/game-over/victory mode, score, combo, timers, shake, debug flag.
 - `Player`: position, velocity, health, shield, level, cooldowns, invulnerability.
+- `FrameClock`: Raylib frame tick and delta time, written once per playing frame.
 - `WaveDirector`: current wave, spawn budget, spawn timer, active enemy count, boss state.
 - `InputIntent`: normalized input snapshot written every frame.
 - `CameraRig`: camera smoothing and zoom.
-- Dynamic `Enemy`, `Projectile`, `Pickup`, and `HudMessage` slots.
-- Standard `Timer`, driven manually from raylib frame time so the example stays inside raylib's game loop.
+- Named `Enemy` instances for the showcase grunt, runner, tank, and boss.
+- Dynamic `Enemy`, `Projectile`, `Pickup`, and `HudMessage` slots for wave spawns and temporary entities.
 
 Hooks generated from the schema are implemented in `main.c`:
 
-- `OnFrameTimer` advances waves when the arena is clear.
+- `OnFrameClock` advances waves when the arena is clear.
+- `MoveGruntEnemy`, `MoveRunnerEnemy`, `MoveTankEnemy`, and `MoveBossEnemy` move the four named enemy instances with different movement parameters.
 - `OnPlayerHealthChanged` moves the session to game-over.
 - `OnWaveChanged` moves the session to victory.
 - `OnScoreChanged` opens an upgrade state at score thresholds.
 
-The raylib code handles input and drawing; authoritative game data lives in `KekStateStore` slots generated from the schema.
+The raylib code handles input, drawing, and writes `FrameClock` from `GetFrameTime()`. Authoritative game data lives in `KekStateStore` slots generated from the schema.
