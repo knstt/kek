@@ -1,8 +1,11 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "timer.h"
 
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 typedef struct KekTimerStateUpdate {
     uint64_t tick;
@@ -17,9 +20,15 @@ typedef struct KekStandardTimerState {
 } KekStandardTimerState;
 
 static struct timeval timer_now(void) {
-    struct timeval now;
-    gettimeofday(&now, NULL);
-    return now;
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) == 0) {
+        struct timeval result;
+        result.tv_sec = now.tv_sec;
+        result.tv_usec = now.tv_nsec / 1000;
+        return result;
+    }
+    struct timeval fallback = {0, 0};
+    return fallback;
 }
 
 static struct timeval timer_add_ms(struct timeval value, uint32_t interval_ms) {

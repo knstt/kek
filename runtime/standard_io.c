@@ -25,7 +25,8 @@ void kek_standard_text_bridge_init(KekStandardTextBridge* bridge,
 int kek_standard_text_bridge_append(KekStandardTextBridge* bridge,
                                     const char* data, size_t len) {
     if (!bridge || !bridge->store || !bridge->buffer || bridge->capacity == 0 ||
-        !bridge->set_text || (!data && len > 0)) {
+        bridge->len >= bridge->capacity || !bridge->set_text ||
+        (!data && len > 0)) {
         return 0;
     }
     size_t available = bridge->capacity - bridge->len - 1;
@@ -40,7 +41,9 @@ int kek_standard_text_bridge_append(KekStandardTextBridge* bridge,
 
 int kek_standard_text_bridge_track_output(KekStandardTextBridge* bridge,
                                           const char* data, size_t len) {
-    if (!bridge || !bridge->buffer || bridge->capacity == 0) {
+    if (!bridge || !bridge->store || !bridge->buffer || bridge->capacity == 0 ||
+        bridge->len >= bridge->capacity || !bridge->set_text ||
+        (!data && len > 0)) {
         return 0;
     }
     size_t available = bridge->capacity - bridge->len - 1;

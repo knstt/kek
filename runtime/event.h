@@ -8,8 +8,6 @@
 #define KEK_EVENT_QUEUE_CAPACITY 256
 #define KEK_EVENT_DATA_CAPACITY 1024
 #define KEK_EVENT_STATE_SNAPSHOT_CAPACITY 1024
-#define KEK_EVENT_TYPE_COUNT 7
-
 typedef union KekEventStateSnapshot {
     max_align_t align;
     unsigned char data[KEK_EVENT_STATE_SNAPSHOT_CAPACITY];
@@ -22,7 +20,8 @@ typedef enum KekEventType {
     KEK_EVENT_STATE_CHANGED = 3,
     KEK_EVENT_STATE_CREATED = 4,
     KEK_EVENT_STATE_DELETED = 5,
-    KEK_EVENT_STATE_BATCH_CHANGED = 6
+    KEK_EVENT_STATE_BATCH_CHANGED = 6,
+    KEK_EVENT_TYPE_COUNT = 7
 } KekEventType;
 
 typedef struct KekEvent {
@@ -61,12 +60,13 @@ typedef struct KekEventDispatcher {
 } KekEventDispatcher;
 
 void kek_event_dispatcher_init(KekEventDispatcher* dispatcher);
-void kek_event_subscribe(KekEventDispatcher* dispatcher, KekEventType type,
-                         KekEventHandler handler, void* context);
-void kek_event_unsubscribe(KekEventDispatcher* dispatcher, KekEventType type,
-                           KekEventHandler handler, void* context);
+int kek_event_subscribe(KekEventDispatcher* dispatcher, KekEventType type,
+                        KekEventHandler handler, void* context);
+int kek_event_unsubscribe(KekEventDispatcher* dispatcher, KekEventType type,
+                          KekEventHandler handler, void* context);
 int kek_event_publish(KekEventDispatcher* dispatcher, const KekEvent* event);
 void kek_event_dispatch_pending(KekEventDispatcher* dispatcher);
 int kek_event_has_pending(const KekEventDispatcher* dispatcher);
+size_t kek_event_capacity_remaining(const KekEventDispatcher* dispatcher);
 
 #endif

@@ -56,6 +56,7 @@ flowchart TD
 | `tools/kek_editor.py` | Local HTTP server for the browser editor. |
 | `editor/` | Plain HTML/CSS/JS project schema editor. |
 | `runtime/` | C runtime modules. |
+| `examples/runtime_smoke/` | Comprehensive runtime smoke example. |
 | `Makefile` | Builds the runtime library used by examples. |
 | `doc/generator/` | Generator documentation. |
 | `doc/runtime/` | Runtime documentation. |
@@ -66,7 +67,48 @@ flowchart TD
 | --- | --- |
 | `make runtime` | Build `lib/libkek_runtime.a`. |
 | `make all` | Build `lib/libkek_runtime.a`. |
+| `make smoke` | Build and run the runtime smoke example. |
 | `make clean` | Remove runtime library build artifacts. |
+
+## Runtime Smoke Example
+
+`examples/runtime_smoke/main.c` exercises the runtime as an integration smoke test. It covers runtime initialization and destruction, event subscription and dispatch, stream read/write states, standard text bridge helpers, generated-style state slots, transactional state events, timer state updates, hook dispatch, hook write authorization, state snapshots, drain behavior, and raw-mode no-op behavior for a non-TTY fd.
+
+Run it with `make smoke`.
+
+## Runtime Todo List
+
+Completed in the current runtime cleanup:
+
+- Fixed idle write-stream readiness so streams do not keep `select()` alive when no fd is actually selected.
+- Deduplicated runtime prepare/select/ready logic shared by run and drain.
+- Fixed drain to wait on the same read/write fd sets it prepares.
+- Propagated runtime state `prepare()` failures.
+- Added event subscription/unsubscription status returns.
+- Stopped event dispatch from invoking subscribers added during the same event dispatch pass.
+- Derived event type count from the event enum sentinel.
+- Removed file-scope global hook execution state and moved active hook context into `KekStateStore`.
+- Added queue-capacity checks before generated state mutations that must publish events.
+- Hardened stream readiness `EINTR` handling.
+- Hardened standard text bridge null/capacity checks.
+- Switched timers to monotonic time where available.
+- Restored raw terminal mode during runtime destruction.
+- Added a comprehensive runtime smoke example.
+
+Remaining possible improvements:
+
+- Add focused unit tests for event queue capacity, subscription mutation during dispatch, stream idle behavior, drain behavior, hook write authorization, state rollback, timer behavior, and standard IO edge cases.
+- Split `runtime/state_storage.c` into smaller implementation files for simple storage, slot store, transactional updates, event publishing, and hook authorization.
+- Replace library-internal `perror()`/stdio error reporting with explicit error codes or an optional runtime error callback.
+- Consider opaque public structs for ABI flexibility once the prototype API stabilizes.
+- Add configurable runtime capacities if fixed compile-time bounds become limiting.
+- Add a readiness backend abstraction if `poll()` or platform-specific APIs become necessary.
+- Decide whether `KekRuntimeStateReadyFn` should return status so ready-handler failures can propagate.
+- Add duplicate-subscription policy and document whether duplicate handlers are allowed.
+- Consider retaining tombstoned subscriber slots more compactly or periodically compacting subscriber lists.
+- Add runtime state unregister support if dynamic state lifetimes become a real use case.
+- Add stronger raw-mode fd validation for applications that manage multiple terminal fds.
+- Update runtime docs to match the exact hook self-write rule: the triggering slot is protected, not the whole triggering state type.
 
 ## Browser Editor
 

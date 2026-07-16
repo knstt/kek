@@ -15,13 +15,16 @@ static int stream_prepare(KekRuntime* runtime, KekRuntimeState* state,
         return 0;
     }
 
+    int selected = 0;
     if (stream->mode == KEK_STREAM_READ) {
         FD_SET(stream->fd, read_fds);
+        selected = 1;
     } else if (stream->length > 0) {
         FD_SET(stream->fd, write_fds);
+        selected = 1;
     }
 
-    if (stream->fd > *max_fd) {
+    if (selected && stream->fd > *max_fd) {
         *max_fd = stream->fd;
     }
     return 0;
@@ -61,7 +64,7 @@ static void stream_ready(KekRuntime* runtime, KekRuntimeState* state,
         } else if (bytes == 0) {
             stream->closed = 1;
             publish_stream_event(runtime, stream, KEK_EVENT_STREAM_EOF, NULL, 0, 0);
-        } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
+        } else if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK) {
             stream->closed = 1;
             publish_stream_event(runtime, stream, KEK_EVENT_STREAM_ERROR, NULL, 0, errno);
         }
@@ -74,7 +77,8 @@ static void stream_ready(KekRuntime* runtime, KekRuntimeState* state,
             size_t count = (size_t)written;
             memmove(stream->buffer, stream->buffer + count, stream->length - count);
             stream->length -= count;
-        } else if (written < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+        } else if (written < 0 && errno != EINTR && errno != EAGAIN &&
+                   errno != EWOULDBLOCK) {
             stream->closed = 1;
             publish_stream_event(runtime, stream, KEK_EVENT_STREAM_ERROR, NULL, 0, errno);
         }

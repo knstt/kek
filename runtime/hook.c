@@ -1,10 +1,7 @@
 #include "hook.h"
 
 #include "runtime.h"
-
-static const KekHookDescriptor* current_descriptor;
-static size_t current_trigger_state_type = KEK_HOOK_ANY_STATE;
-static size_t current_trigger_state_slot = KEK_HOOK_ANY_SLOT;
+#include "state_storage.h"
 
 static void hook_registry_event_handler(const KekEvent* event, void* context) {
     kek_hook_registry_dispatch((KekHookRegistry*)context, event);
@@ -56,8 +53,14 @@ void kek_hook_registry_attach(KekHookRegistry* registry) {
 
     KekEventDispatcher* dispatcher = kek_runtime_events(registry->runtime);
     for (size_t i = 0; i < KEK_EVENT_TYPE_COUNT; i++) {
-        kek_event_subscribe(dispatcher, (KekEventType)i, hook_registry_event_handler,
-                            registry);
+        if (!kek_event_subscribe(dispatcher, (KekEventType)i,
+                                 hook_registry_event_handler, registry)) {
+            for (size_t j = 0; j < i; j++) {
+                kek_event_unsubscribe(dispatcher, (KekEventType)j,
+                                      hook_registry_event_handler, registry);
+            }
+            return;
+        }
     }
     registry->attached = 1;
 }
@@ -99,29 +102,12 @@ void kek_hook_registry_dispatch(KekHookRegistry* registry, const KekEvent* event
         context.state_store = registry->state_store;
         context.event = event;
         context.app_context = registry->app_context;
-        const KekHookDescriptor* previous_descriptor = current_descriptor;
-        size_t previous_trigger_state_type = current_trigger_state_type;
-        size_t previous_trigger_state_slot = current_trigger_state_slot;
-        current_descriptor = descriptor;
-        current_trigger_state_type = event->state_type_id;
-        current_trigger_state_slot = event->state_slot_id;
+        KekStateStoreHookExecution previous_hook;
+        kek_state_store_begin_hook(registry->state_store, descriptor,
+                                   event->state_slot_id, &previous_hook);
         descriptor->run(&context);
-        current_descriptor = previous_descriptor;
-        current_trigger_state_type = previous_trigger_state_type;
-        current_trigger_state_slot = previous_trigger_state_slot;
+        kek_state_store_end_hook(registry->state_store, &previous_hook);
     }
-}
-
-const KekHookDescriptor* kek_hook_current_descriptor(void) {
-    return current_descriptor;
-}
-
-size_t kek_hook_current_trigger_state_type(void) {
-    return current_trigger_state_type;
-}
-
-size_t kek_hook_current_trigger_state_slot(void) {
-    return current_trigger_state_slot;
 }
 
 const void* kek_hook_event_state(const KekHookContext* context, size_t* size) {

@@ -16,6 +16,7 @@ typedef struct KekRuntime {
     size_t state_count;
     int quit_requested;
     int raw_mode_enabled;
+    int raw_mode_fd;
     struct termios original_termios;
 } KekRuntime;
 

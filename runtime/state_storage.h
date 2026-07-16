@@ -8,6 +8,7 @@
 
 typedef int (*KekStateStorageCheckFn)(const void* state);
 typedef void (*KekStateStorageUpdateFn)(void* draft, void* context);
+struct KekHookDescriptor;
 
 typedef struct KekStateStoreUpdateItem {
     size_t slot_id;
@@ -38,10 +39,16 @@ typedef struct KekStateSlot {
     int in_use;
 } KekStateSlot;
 
+typedef struct KekStateStoreHookExecution {
+    const struct KekHookDescriptor* descriptor;
+    size_t trigger_state_slot;
+} KekStateStoreHookExecution;
+
 typedef struct KekStateStore {
     KekRuntime* runtime;
     KekStateSlot slots[KEK_STATE_STORE_MAX_SLOTS];
     size_t slot_count;
+    KekStateStoreHookExecution active_hook;
 } KekStateStore;
 
 typedef struct KekStateStorage {
@@ -84,5 +91,11 @@ int kek_state_store_update(KekStateStore* store, size_t slot_id,
 int kek_state_store_update_many(KekStateStore* store,
                                 const KekStateStoreUpdateItem* updates,
                                 size_t update_count);
+void kek_state_store_begin_hook(KekStateStore* store,
+                                const struct KekHookDescriptor* descriptor,
+                                size_t trigger_state_slot,
+                                KekStateStoreHookExecution* previous);
+void kek_state_store_end_hook(KekStateStore* store,
+                              const KekStateStoreHookExecution* previous);
 
 #endif

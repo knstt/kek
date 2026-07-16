@@ -5,8 +5,9 @@
 
 #include "hook.h"
 
-static int state_store_type_write_allowed(size_t state_type_id) {
-    const KekHookDescriptor* hook = kek_hook_current_descriptor();
+static int state_store_type_write_allowed(const KekStateStore* store,
+                                          size_t state_type_id) {
+    const KekHookDescriptor* hook = store ? store->active_hook.descriptor : NULL;
     if (!hook) {
         return 1;
     }
@@ -18,14 +19,16 @@ static int state_store_type_write_allowed(size_t state_type_id) {
     return 0;
 }
 
-static int state_store_write_allowed(const KekStateSlot* slot, size_t slot_id) {
+static int state_store_write_allowed(const KekStateStore* store,
+                                     const KekStateSlot* slot, size_t slot_id) {
     if (!slot || !slot->descriptor) {
         return 1;
     }
-    if (slot_id == kek_hook_current_trigger_state_slot()) {
+    if (store && store->active_hook.descriptor &&
+        slot_id == store->active_hook.trigger_state_slot) {
         return 0;
     }
-    return state_store_type_write_allowed(slot->descriptor->type_id);
+    return state_store_type_write_allowed(store, slot->descriptor->type_id);
 }
 
 int kek_state_storage_init(KekStateStorage* storage, KekRuntime* runtime,
@@ -100,6 +103,9 @@ int kek_state_storage_update(KekStateStorage* storage,
     if (!storage || !storage->runtime || !storage->check || !update) {
         return 0;
     }
+    if (kek_event_capacity_remaining(kek_runtime_events(storage->runtime)) == 0) {
+        return 0;
+    }
 
     size_t inactive_index = storage->active_index == 0 ? 1u : 0u;
     void* current = storage->buffers[storage->active_index];
@@ -113,8 +119,14 @@ int kek_state_storage_update(KekStateStorage* storage,
     }
 
     storage->active_index = inactive_index;
-    kek_runtime_publish_state_changed(storage->runtime, kek_state_storage_current(storage));
-    return 1;
+    if (kek_runtime_publish_state_changed(storage->runtime,
+                                          kek_state_storage_current(storage))) {
+        return 1;
+    }
+
+    storage->active_index = inactive_index == 0 ? 1u : 0u;
+    memcpy(draft, current, storage->state_size);
+    return 0;
 }
 
 void kek_state_store_init(KekStateStore* store, KekRuntime* runtime) {
@@ -123,6 +135,7 @@ void kek_state_store_init(KekStateStore* store, KekRuntime* runtime) {
     }
     memset(store, 0, sizeof(*store));
     store->runtime = runtime;
+    store->active_hook.trigger_state_slot = KEK_STATE_INVALID_ID;
 }
 
 static void state_slot_clear(KekStateSlot* slot) {
@@ -187,7 +200,10 @@ size_t kek_state_store_add(KekStateStore* store,
         !descriptor->check) {
         return KEK_STATE_INVALID_ID;
     }
-    if (!state_store_type_write_allowed(descriptor->type_id)) {
+    if (!state_store_type_write_allowed(store, descriptor->type_id)) {
+        return KEK_STATE_INVALID_ID;
+    }
+    if (kek_event_capacity_remaining(kek_runtime_events(store->runtime)) == 0) {
         return KEK_STATE_INVALID_ID;
     }
 
@@ -232,7 +248,13 @@ size_t kek_state_store_add(KekStateStore* store,
     slot->active_index = 0;
     slot->version = 1;
     slot->in_use = 1;
-    state_store_publish_slot_event(store, slot, slot_id, KEK_EVENT_STATE_CREATED);
+    if (!state_store_publish_slot_event(store, slot, slot_id, KEK_EVENT_STATE_CREATED)) {
+        state_slot_clear(slot);
+        while (store->slot_count > 0 && !store->slots[store->slot_count - 1].in_use) {
+            store->slot_count--;
+        }
+        return KEK_STATE_INVALID_ID;
+    }
     return slot_id;
 }
 
@@ -246,11 +268,16 @@ int kek_state_store_remove(KekStateStore* store, size_t slot_id) {
     if (!slot) {
         return 0;
     }
-    if (!state_store_write_allowed(slot, slot_id)) {
+    if (!state_store_write_allowed(store, slot, slot_id)) {
+        return 0;
+    }
+    if (kek_event_capacity_remaining(kek_runtime_events(store->runtime)) == 0) {
         return 0;
     }
 
-    state_store_publish_slot_event(store, slot, slot_id, KEK_EVENT_STATE_DELETED);
+    if (!state_store_publish_slot_event(store, slot, slot_id, KEK_EVENT_STATE_DELETED)) {
+        return 0;
+    }
     state_slot_clear(slot);
     while (store->slot_count > 0 && !store->slots[store->slot_count - 1].in_use) {
         store->slot_count--;
@@ -321,7 +348,10 @@ int kek_state_store_update(KekStateStore* store, size_t slot_id,
         !slot->descriptor->check || !update) {
         return 0;
     }
-    if (!state_store_write_allowed(slot, slot_id)) {
+    if (!state_store_write_allowed(store, slot, slot_id)) {
+        return 0;
+    }
+    if (kek_event_capacity_remaining(kek_runtime_events(store->runtime)) == 0) {
         return 0;
     }
 
@@ -339,8 +369,15 @@ int kek_state_store_update(KekStateStore* store, size_t slot_id,
     slot->active_index = inactive_index;
     slot->version++;
 
-    state_store_publish_slot_event(store, slot, slot_id, KEK_EVENT_STATE_CHANGED);
-    return 1;
+    if (state_store_publish_slot_event(store, slot, slot_id,
+                                       KEK_EVENT_STATE_CHANGED)) {
+        return 1;
+    }
+
+    slot->active_index = inactive_index == 0 ? 1u : 0u;
+    slot->version--;
+    memcpy(draft, current, slot->descriptor->size);
+    return 0;
 }
 
 int kek_state_store_update_many(KekStateStore* store,
@@ -351,6 +388,10 @@ int kek_state_store_update_many(KekStateStore* store,
     }
     if (update_count == 0) {
         return 1;
+    }
+    if (kek_event_capacity_remaining(kek_runtime_events(store->runtime)) <
+        update_count + 1) {
+        return 0;
     }
 
     KekStateSlot* slots[KEK_STATE_STORE_MAX_SLOTS];
@@ -372,7 +413,7 @@ int kek_state_store_update_many(KekStateStore* store,
         if (!slot || !slot->descriptor || !slot->descriptor->check) {
             return 0;
         }
-        if (!state_store_write_allowed(slot, updates[i].slot_id)) {
+        if (!state_store_write_allowed(store, slot, updates[i].slot_id)) {
             return 0;
         }
         slots[i] = slot;
@@ -402,9 +443,37 @@ int kek_state_store_update_many(KekStateStore* store,
     }
 
     for (size_t i = 0; i < update_count; i++) {
-        state_store_publish_slot_event(store, slots[i], updates[i].slot_id,
-                                       KEK_EVENT_STATE_CHANGED);
+        if (!state_store_publish_slot_event(store, slots[i], updates[i].slot_id,
+                                            KEK_EVENT_STATE_CHANGED)) {
+            return 0;
+        }
     }
-    state_store_publish_batch_event(store);
-    return 1;
+    return state_store_publish_batch_event(store);
+}
+
+void kek_state_store_begin_hook(KekStateStore* store,
+                                const struct KekHookDescriptor* descriptor,
+                                size_t trigger_state_slot,
+                                KekStateStoreHookExecution* previous) {
+    if (!store) {
+        return;
+    }
+    if (previous) {
+        *previous = store->active_hook;
+    }
+    store->active_hook.descriptor = descriptor;
+    store->active_hook.trigger_state_slot = trigger_state_slot;
+}
+
+void kek_state_store_end_hook(KekStateStore* store,
+                              const KekStateStoreHookExecution* previous) {
+    if (!store) {
+        return;
+    }
+    if (previous) {
+        store->active_hook = *previous;
+        return;
+    }
+    store->active_hook.descriptor = NULL;
+    store->active_hook.trigger_state_slot = KEK_STATE_INVALID_ID;
 }

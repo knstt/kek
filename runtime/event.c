@@ -1,16 +1,15 @@
 #include "event.h"
 
-#include <stdio.h>
 #include <string.h>
 
 void kek_event_dispatcher_init(KekEventDispatcher* dispatcher) {
     memset(dispatcher, 0, sizeof(*dispatcher));
 }
 
-void kek_event_subscribe(KekEventDispatcher* dispatcher, KekEventType type,
-                         KekEventHandler handler, void* context) {
+int kek_event_subscribe(KekEventDispatcher* dispatcher, KekEventType type,
+                        KekEventHandler handler, void* context) {
     if (!dispatcher || type < 0 || type >= KEK_EVENT_TYPE_COUNT || !handler) {
-        return;
+        return 0;
     }
 
     KekEventSubscriberList* list = &dispatcher->subscriber_lists[type];
@@ -20,25 +19,26 @@ void kek_event_subscribe(KekEventDispatcher* dispatcher, KekEventType type,
             subscriber->handler = handler;
             subscriber->context = context;
             subscriber->active = 1;
-            return;
+            return 1;
         }
     }
 
     if (list->count >= KEK_EVENT_MAX_SUBSCRIBERS) {
-        fprintf(stderr, "event subscriber list full\n");
-        return;
+        return 0;
     }
 
     list->subscribers[list->count].handler = handler;
     list->subscribers[list->count].context = context;
     list->subscribers[list->count].active = 1;
     list->count++;
+    return 1;
 }
 
-void kek_event_unsubscribe(KekEventDispatcher* dispatcher, KekEventType type,
-                           KekEventHandler handler, void* context) {
+int kek_event_unsubscribe(KekEventDispatcher* dispatcher, KekEventType type,
+                          KekEventHandler handler, void* context) {
+    int removed = 0;
     if (!dispatcher || type < 0 || type >= KEK_EVENT_TYPE_COUNT || !handler) {
-        return;
+        return 0;
     }
 
     KekEventSubscriberList* list = &dispatcher->subscriber_lists[type];
@@ -46,8 +46,10 @@ void kek_event_unsubscribe(KekEventDispatcher* dispatcher, KekEventType type,
         KekEventSubscriber* subscriber = &list->subscribers[i];
         if (subscriber->handler == handler && subscriber->context == context) {
             subscriber->active = 0;
+            removed = 1;
         }
     }
+    return removed;
 }
 
 int kek_event_publish(KekEventDispatcher* dispatcher, const KekEvent* event) {
@@ -55,7 +57,6 @@ int kek_event_publish(KekEventDispatcher* dispatcher, const KekEvent* event) {
         return 0;
     }
     if (dispatcher->queue_size >= KEK_EVENT_QUEUE_CAPACITY) {
-        fprintf(stderr, "event queue full, event dropped\n");
         return 0;
     }
 
@@ -80,7 +81,8 @@ void kek_event_dispatch_pending(KekEventDispatcher* dispatcher) {
         }
 
         KekEventSubscriberList* list = &dispatcher->subscriber_lists[event.type];
-        for (size_t i = 0; i < list->count; i++) {
+        size_t dispatch_count = list->count;
+        for (size_t i = 0; i < dispatch_count; i++) {
             KekEventSubscriber* subscriber = &list->subscribers[i];
             if (subscriber->active) {
                 subscriber->handler(&event, subscriber->context);
@@ -91,4 +93,11 @@ void kek_event_dispatch_pending(KekEventDispatcher* dispatcher) {
 
 int kek_event_has_pending(const KekEventDispatcher* dispatcher) {
     return dispatcher && dispatcher->queue_size > 0;
+}
+
+size_t kek_event_capacity_remaining(const KekEventDispatcher* dispatcher) {
+    if (!dispatcher || dispatcher->queue_size >= KEK_EVENT_QUEUE_CAPACITY) {
+        return 0;
+    }
+    return KEK_EVENT_QUEUE_CAPACITY - dispatcher->queue_size;
 }

@@ -43,10 +43,6 @@ typedef struct KekHookRegistry {
     int attached;
 } KekHookRegistry;
 
-const KekHookDescriptor* kek_hook_current_descriptor(void);
-size_t kek_hook_current_trigger_state_type(void);
-size_t kek_hook_current_trigger_state_slot(void);
-
 void kek_hook_registry_init(KekHookRegistry* registry, struct KekRuntime* runtime,
                             struct KekStateStore* state_store, void* app_context);
 int kek_hook_registry_add(KekHookRegistry* registry,

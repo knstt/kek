@@ -1,7 +1,6 @@
 #include "runtime.h"
 
 #include <errno.h>
-#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -17,14 +16,70 @@ static void runtime_min_timeout(struct timeval* timeout,
     }
 }
 
+static void runtime_timeout_unset(struct timeval* timeout) {
+    timeout->tv_sec = -1;
+    timeout->tv_usec = 0;
+}
+
+static int runtime_prepare_states(KekRuntime* runtime, fd_set* read_fds,
+                                  fd_set* write_fds, int* max_fd,
+                                  struct timeval* timeout) {
+    FD_ZERO(read_fds);
+    FD_ZERO(write_fds);
+    *max_fd = -1;
+    runtime_timeout_unset(timeout);
+
+    for (size_t i = 0; i < runtime->state_count; i++) {
+        KekRuntimeState* state = &runtime->states[i];
+        if (state->prepare) {
+            struct timeval state_timeout;
+            runtime_timeout_unset(&state_timeout);
+            if (state->prepare(runtime, state, read_fds, write_fds, max_fd,
+                               &state_timeout) < 0) {
+                return -1;
+            }
+            runtime_min_timeout(timeout, &state_timeout);
+        }
+    }
+    return 0;
+}
+
+static void runtime_ready_states(KekRuntime* runtime, const fd_set* read_fds,
+                                 const fd_set* write_fds) {
+    for (size_t i = 0; i < runtime->state_count; i++) {
+        KekRuntimeState* state = &runtime->states[i];
+        if (state->ready) {
+            state->ready(runtime, state, read_fds, write_fds);
+        }
+    }
+}
+
+static int runtime_wait(fd_set* read_fds, fd_set* write_fds, int max_fd,
+                        struct timeval* timeout) {
+    int result = select(max_fd + 1, read_fds, write_fds, NULL,
+                        timeout->tv_sec >= 0 ? timeout : NULL);
+    if (result < 0) {
+        if (errno == EINTR) {
+            return 1;
+        }
+        return -1;
+    }
+    return 0;
+}
+
 void kek_runtime_init(KekRuntime* runtime) {
     memset(runtime, 0, sizeof(*runtime));
+    runtime->raw_mode_fd = -1;
     kek_event_dispatcher_init(&runtime->events);
 }
 
 void kek_runtime_destroy(KekRuntime* runtime) {
     if (!runtime) {
         return;
+    }
+
+    if (runtime->raw_mode_enabled) {
+        kek_runtime_disable_raw_mode(runtime, runtime->raw_mode_fd);
     }
 
     for (size_t i = runtime->state_count; i > 0; i--) {
@@ -90,7 +145,6 @@ int kek_runtime_enable_raw_mode(KekRuntime* runtime, int fd) {
     }
 
     if (tcgetattr(fd, &runtime->original_termios) == -1) {
-        perror("tcgetattr");
         return -1;
     }
 
@@ -100,11 +154,11 @@ int kek_runtime_enable_raw_mode(KekRuntime* runtime, int fd) {
     raw.c_cc[VTIME] = 0;
 
     if (tcsetattr(fd, TCSAFLUSH, &raw) == -1) {
-        perror("tcsetattr");
         return -1;
     }
 
     runtime->raw_mode_enabled = 1;
+    runtime->raw_mode_fd = fd;
     return 0;
 }
 
@@ -112,6 +166,7 @@ void kek_runtime_disable_raw_mode(KekRuntime* runtime, int fd) {
     if (runtime && runtime->raw_mode_enabled) {
         tcsetattr(fd, TCSAFLUSH, &runtime->original_termios);
         runtime->raw_mode_enabled = 0;
+        runtime->raw_mode_fd = -1;
     }
 }
 
@@ -123,23 +178,12 @@ int kek_runtime_run(KekRuntime* runtime) {
     while (!runtime->quit_requested) {
         fd_set read_fds;
         fd_set write_fds;
-        FD_ZERO(&read_fds);
-        FD_ZERO(&write_fds);
         int max_fd = -1;
         struct timeval timeout;
-        timeout.tv_sec = -1;
-        timeout.tv_usec = 0;
 
-        for (size_t i = 0; i < runtime->state_count; i++) {
-            KekRuntimeState* state = &runtime->states[i];
-            if (state->prepare) {
-                struct timeval state_timeout;
-                state_timeout.tv_sec = -1;
-                state_timeout.tv_usec = 0;
-                state->prepare(runtime, state, &read_fds, &write_fds, &max_fd,
-                               &state_timeout);
-                runtime_min_timeout(&timeout, &state_timeout);
-            }
+        if (runtime_prepare_states(runtime, &read_fds, &write_fds, &max_fd,
+                                   &timeout) < 0) {
+            return -1;
         }
 
         if (kek_event_has_pending(&runtime->events)) {
@@ -151,22 +195,15 @@ int kek_runtime_run(KekRuntime* runtime) {
             break;
         }
 
-        int result = select(max_fd + 1, &read_fds, &write_fds, NULL,
-                            timeout.tv_sec >= 0 ? &timeout : NULL);
-        if (result < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-            perror("select");
+        int wait_result = runtime_wait(&read_fds, &write_fds, max_fd, &timeout);
+        if (wait_result > 0) {
+            continue;
+        }
+        if (wait_result < 0) {
             return -1;
         }
 
-        for (size_t i = 0; i < runtime->state_count; i++) {
-            KekRuntimeState* state = &runtime->states[i];
-            if (state->ready) {
-                state->ready(runtime, state, &read_fds, &write_fds);
-            }
-        }
+        runtime_ready_states(runtime, &read_fds, &write_fds);
 
         kek_event_dispatch_pending(&runtime->events);
     }
@@ -211,45 +248,27 @@ int kek_runtime_drain(KekRuntime* runtime) {
 
         fd_set read_fds;
         fd_set write_fds;
-        FD_ZERO(&read_fds);
-        FD_ZERO(&write_fds);
         int max_fd = -1;
         struct timeval timeout;
-        timeout.tv_sec = -1;
-        timeout.tv_usec = 0;
 
-        for (size_t i = 0; i < runtime->state_count; i++) {
-            KekRuntimeState* state = &runtime->states[i];
-            if (state->prepare) {
-                struct timeval state_timeout;
-                state_timeout.tv_sec = -1;
-                state_timeout.tv_usec = 0;
-                state->prepare(runtime, state, &read_fds, &write_fds, &max_fd,
-                               &state_timeout);
-                runtime_min_timeout(&timeout, &state_timeout);
-            }
+        if (runtime_prepare_states(runtime, &read_fds, &write_fds, &max_fd,
+                                   &timeout) < 0) {
+            return -1;
         }
 
         if (max_fd < 0 && timeout.tv_sec < 0) {
             continue;
         }
 
-        int result = select(max_fd + 1, NULL, &write_fds, NULL,
-                            timeout.tv_sec >= 0 ? &timeout : NULL);
-        if (result < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-            perror("select");
+        int wait_result = runtime_wait(&read_fds, &write_fds, max_fd, &timeout);
+        if (wait_result > 0) {
+            continue;
+        }
+        if (wait_result < 0) {
             return -1;
         }
 
-        for (size_t i = 0; i < runtime->state_count; i++) {
-            KekRuntimeState* state = &runtime->states[i];
-            if (state->ready) {
-                state->ready(runtime, state, &read_fds, &write_fds);
-            }
-        }
+        runtime_ready_states(runtime, &read_fds, &write_fds);
     }
 
     return 0;
