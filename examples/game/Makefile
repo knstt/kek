@@ -13,6 +13,7 @@ GENERATED_C := $(GENERATED_DIR)/$(GENERATED_NAME).c
 GENERATED_H := $(GENERATED_DIR)/$(GENERATED_NAME).h
 GENERATED_GRAPH := $(GENERATED_DIR)/$(GENERATED_NAME).graph.md
 RUNTIME_LIB := $(ROOT)/lib/libkek_runtime.a
+RUNTIME_DEPS := $(ROOT)/Makefile $(wildcard $(ROOT)/runtime/*.c) $(wildcard $(ROOT)/runtime/*.h)
 TARGET := game
 
 .PHONY: all generate check run clean
@@ -27,7 +28,7 @@ $(GENERATED_C) $(GENERATED_H) $(GENERATED_GRAPH): $(SCHEMA) $(ROOT)/tools/genera
 check: generate
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $(GENERATED_C) -o $(GENERATED_DIR)/$(GENERATED_NAME).o
 
-$(RUNTIME_LIB):
+$(RUNTIME_LIB): $(RUNTIME_DEPS)
 	$(MAKE) -C $(ROOT) runtime
 
 $(TARGET): generate $(EXAMPLE_MAIN) $(RUNTIME_LIB)

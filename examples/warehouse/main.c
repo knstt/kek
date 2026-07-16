@@ -9,7 +9,6 @@
 #include "runtime/state_storage.h"
 #include "runtime/stream.h"
 
-#define WAREHOUSE_TEXT_CAPACITY 1001
 #define WAREHOUSE_PACKAGE_COUNT 2
 
 typedef struct WarehouseApp {
@@ -17,8 +16,6 @@ typedef struct WarehouseApp {
     KekStream* stdin_stream;
     KekStream* stdout_stream;
     WarehouseRuntimeBinding binding;
-    char input_buffer[WAREHOUSE_TEXT_CAPACITY];
-    char output_buffer[WAREHOUSE_TEXT_CAPACITY];
     size_t input_len;
     size_t handled_input_len;
     size_t output_len;
@@ -122,35 +119,37 @@ static void status_set_message(GameStatus* status, const char* message) {
 }
 
 static void app_set_input_state(WarehouseApp* app, const char* data, size_t len) {
-    size_t available = sizeof(app->input_buffer) - app->input_len - 1;
+    size_t capacity = sizeof(app->binding.standard_input_input_buffer);
+    size_t available = capacity - app->input_len - 1;
     size_t to_copy = len < available ? len : available;
     if (to_copy > 0) {
-        memcpy(app->input_buffer + app->input_len, data, to_copy);
+        memcpy(app->binding.standard_input_input_buffer + app->input_len, data, to_copy);
         app->input_len += to_copy;
-        app->input_buffer[app->input_len] = '\0';
+        app->binding.standard_input_input_buffer[app->input_len] = '\0';
     }
 
     warehouse_standard_input_set_input(APP_STORE(app), app->binding.slots.standard_input,
-                                        app->input_buffer, app->input_len);
+                                        app->binding.standard_input_input_buffer, app->input_len);
 }
 
 static void app_track_output_state(WarehouseApp* app, const char* data, size_t len) {
-    size_t available = sizeof(app->output_buffer) - app->output_len - 1;
+    size_t capacity = sizeof(app->binding.standard_output_output_buffer);
+    size_t available = capacity - app->output_len - 1;
     if (available == 0) {
         app->output_len = 0;
-        app->output_buffer[0] = '\0';
-        available = sizeof(app->output_buffer) - 1;
+        app->binding.standard_output_output_buffer[0] = '\0';
+        available = capacity - 1;
     }
 
     size_t to_copy = len < available ? len : available;
     if (to_copy > 0) {
-        memcpy(app->output_buffer + app->output_len, data, to_copy);
+        memcpy(app->binding.standard_output_output_buffer + app->output_len, data, to_copy);
         app->output_len += to_copy;
-        app->output_buffer[app->output_len] = '\0';
+        app->binding.standard_output_output_buffer[app->output_len] = '\0';
     }
 
     warehouse_standard_output_set_output(APP_STORE(app), app->binding.slots.standard_output,
-                                          app->output_buffer, app->output_len);
+                                          app->binding.standard_output_output_buffer, app->output_len);
 }
 
 static void app_write_raw(WarehouseApp* app, const char* data, size_t len) {

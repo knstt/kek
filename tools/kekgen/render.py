@@ -59,7 +59,7 @@ def emit_source(
         header_name=f"{name}.h",
         state_definitions=render_state_definitions(states, enums),
         descriptor_entries=render_descriptor_entries(states),
-        instance_definitions=render_instance_definitions(states, instances, name),
+        instance_definitions=render_instance_definitions(states, instances, name, enums),
         hook_dependency_arrays=render_hook_dependency_arrays(hooks),
         hook_descriptor_table=render_hook_descriptor_table(hooks),
     )
@@ -203,16 +203,24 @@ def render_instance_declarations(states: list[State], instances: list[Instance],
     lines.append(f"}} {slots_name};")
     lines.append("")
     lines.append(f"void {prefix}_state_slots_init_invalid({slots_name}* slots);")
-    lines.append(f"int {prefix}_state_slots_add_declared(KekStateStore* store, {slots_name}* slots);")
+    binding_name = runtime_binding_name(name)
+    lines.append(f"typedef struct {binding_name} {binding_name};")
+    lines.append(f"int {prefix}_state_slots_add_declared(KekStateStore* store, {slots_name}* slots, {binding_name}* binding);")
     lines.append(f"int {prefix}_state_slots_remove_declared(KekStateStore* store, {slots_name}* slots);")
     lines.append("")
-    binding_name = runtime_binding_name(name)
-    lines.append(f"typedef struct {binding_name} {{")
+    lines.append(f"struct {binding_name} {{")
     lines.append("    KekRuntime* runtime;")
     lines.append("    KekStateStore state_store;")
     lines.append("    KekHookRegistry hook_registry;")
+    for instance in instances:
+        state = next((item for item in states if item.name == instance.state_name), None)
+        if state is None:
+            continue
+        for field in state.fields:
+            if field.type_name == "String" and field.array_length is None and isinstance(field.maximum, int):
+                lines.append(f"    char {instance.name}_{field.name}_buffer[{field.maximum + 1}];")
     lines.append(f"    {slots_name} slots;")
-    lines.append(f"}} {binding_name};")
+    lines.append("};")
     lines.append("")
     lines.append(f"int {prefix}_runtime_binding_init({binding_name}* binding, KekRuntime* runtime, void* app_context);")
     lines.append(f"void {prefix}_runtime_binding_destroy({binding_name}* binding);")
@@ -328,6 +336,21 @@ def render_field_default_assignment(target: str, field_item: Field, value: objec
     return lines
 
 
+def instance_string_buffer_fields(state: State) -> list[Field]:
+    return [
+        field
+        for field in state.fields
+        if field.type_name == "String" and field.array_length is None and isinstance(field.maximum, int)
+    ]
+
+
+def state_field_by_name(state: State, field_name: str) -> Field:
+    for field in state.fields:
+        if field.name == field_name:
+            return field
+    raise ValueError(f"{state.name}: unknown field {field_name}")
+
+
 def render_field_checks(state: State, enums: dict[str, Enum] | None = None) -> list[str]:
     lines: list[str] = []
     for item in state.fields:
@@ -367,11 +390,12 @@ def render_descriptor_entries(states: list[State]) -> str:
     return "\n".join(lines)
 
 
-def render_instance_definitions(states: list[State], instances: list[Instance], name: str) -> str:
+def render_instance_definitions(states: list[State], instances: list[Instance], name: str, enums: list[Enum] | None = None) -> str:
     prefix = generated_prefix(name)
     slots_name = instance_slots_name(name)
     binding_name = runtime_binding_name(name)
     state_by_name = {state.name: state for state in states}
+    enum_by_name = enum_map(enums or [])
     lines: list[str] = [
         f"void {prefix}_state_slots_init_invalid({slots_name}* slots) {{",
         "    if (slots == 0) {",
@@ -387,8 +411,8 @@ def render_instance_definitions(states: list[State], instances: list[Instance], 
 
     lines.extend(
         [
-            f"int {prefix}_state_slots_add_declared(KekStateStore* store, {slots_name}* slots) {{",
-            "    if (store == 0 || slots == 0) {",
+            f"int {prefix}_state_slots_add_declared(KekStateStore* store, {slots_name}* slots, {binding_name}* binding) {{",
+            "    if (store == 0 || slots == 0 || binding == 0) {",
             "        return 0;",
             "    }",
             f"    {prefix}_state_slots_init_invalid(slots);",
@@ -397,8 +421,13 @@ def render_instance_definitions(states: list[State], instances: list[Instance], 
     for instance in instances:
         state = state_by_name[instance.state_name]
         initial_expr = "0"
-        if instance.constructor_name is not None:
-            lines.append(f"    {state.name} {instance.name}_initial = {state.name}_{instance.constructor_name}();")
+        if instance.constructor_name is not None or instance.values or instance_string_buffer_fields(state):
+            constructor = f"{state.name}_{instance.constructor_name}" if instance.constructor_name is not None else f"{state.name}_default"
+            lines.append(f"    {state.name} {instance.name}_initial = {constructor}();")
+            for field in instance_string_buffer_fields(state):
+                lines.append(f"    {instance.name}_initial.{field.name} = (KekString){{binding->{instance.name}_{field.name}_buffer, 0}};")
+            for field_name, value in instance.values.items():
+                lines.extend(render_field_default_assignment(f"{instance.name}_initial", state_field_by_name(state, field_name), value, enum_by_name))
             initial_expr = f"&{instance.name}_initial"
         lines.append(
             f"    slots->{instance.name} = kek_state_store_add(store, "
@@ -435,7 +464,7 @@ def render_instance_definitions(states: list[State], instances: list[Instance], 
             "    memset(binding, 0, sizeof(*binding));",
             "    binding->runtime = runtime;",
             "    kek_state_store_init(&binding->state_store, runtime);",
-            f"    if (!{prefix}_state_slots_add_declared(&binding->state_store, &binding->slots)) {{",
+            f"    if (!{prefix}_state_slots_add_declared(&binding->state_store, &binding->slots, binding)) {{",
             "        kek_state_store_destroy(&binding->state_store);",
             "        memset(binding, 0, sizeof(*binding));",
             "        return 0;",

@@ -11,30 +11,8 @@
     }
   ],
   "states": [
-    {
-      "name": "StandardInput",
-      "fields": [
-        {
-          "name": "input",
-          "type": "String",
-          "default": "",
-          "max": 1000
-        }
-      ],
-      "constructors": []
-    },
-    {
-      "name": "StandardOutput",
-      "fields": [
-        {
-          "name": "output",
-          "type": "String",
-          "default": "",
-          "max": 1000
-        }
-      ],
-      "constructors": []
-    },
+    { "name": "standard_input", "type": "StandardInput", "config": { "buffer_size": 1000 } },
+    { "name": "standard_output", "type": "StandardOutput", "config": { "buffer_size": 1000 } },
     {
       "name": "PlayerCommand",
       "fields": [
@@ -232,8 +210,6 @@
     }
   ],
   "instances": [
-    { "name": "standard_input", "state": "StandardInput" },
-    { "name": "standard_output", "state": "StandardOutput" },
     { "name": "player_command", "state": "PlayerCommand" },
     { "name": "worker", "state": "Worker" },
     { "name": "warehouse_map", "state": "WarehouseMap" },

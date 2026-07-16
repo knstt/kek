@@ -5,6 +5,18 @@
 #include <string.h>
 #include <unistd.h>
 
+static void runtime_min_timeout(struct timeval* timeout,
+                                const struct timeval* candidate) {
+    if (!timeout || !candidate) {
+        return;
+    }
+
+    if (timeout->tv_sec < 0 || candidate->tv_sec < timeout->tv_sec ||
+        (candidate->tv_sec == timeout->tv_sec && candidate->tv_usec < timeout->tv_usec)) {
+        *timeout = *candidate;
+    }
+}
+
 void kek_runtime_init(KekRuntime* runtime) {
     memset(runtime, 0, sizeof(*runtime));
     kek_event_dispatcher_init(&runtime->events);
@@ -114,11 +126,19 @@ int kek_runtime_run(KekRuntime* runtime) {
         FD_ZERO(&read_fds);
         FD_ZERO(&write_fds);
         int max_fd = -1;
+        struct timeval timeout;
+        timeout.tv_sec = -1;
+        timeout.tv_usec = 0;
 
         for (size_t i = 0; i < runtime->state_count; i++) {
             KekRuntimeState* state = &runtime->states[i];
             if (state->prepare) {
-                state->prepare(runtime, state, &read_fds, &write_fds, &max_fd);
+                struct timeval state_timeout;
+                state_timeout.tv_sec = -1;
+                state_timeout.tv_usec = 0;
+                state->prepare(runtime, state, &read_fds, &write_fds, &max_fd,
+                               &state_timeout);
+                runtime_min_timeout(&timeout, &state_timeout);
             }
         }
 
@@ -127,11 +147,12 @@ int kek_runtime_run(KekRuntime* runtime) {
             continue;
         }
 
-        if (max_fd < 0) {
+        if (max_fd < 0 && timeout.tv_sec < 0) {
             break;
         }
 
-        int result = select(max_fd + 1, &read_fds, &write_fds, NULL, NULL);
+        int result = select(max_fd + 1, &read_fds, &write_fds, NULL,
+                            timeout.tv_sec >= 0 ? &timeout : NULL);
         if (result < 0) {
             if (errno == EINTR) {
                 continue;
@@ -193,19 +214,28 @@ int kek_runtime_drain(KekRuntime* runtime) {
         FD_ZERO(&read_fds);
         FD_ZERO(&write_fds);
         int max_fd = -1;
+        struct timeval timeout;
+        timeout.tv_sec = -1;
+        timeout.tv_usec = 0;
 
         for (size_t i = 0; i < runtime->state_count; i++) {
             KekRuntimeState* state = &runtime->states[i];
             if (state->prepare) {
-                state->prepare(runtime, state, &read_fds, &write_fds, &max_fd);
+                struct timeval state_timeout;
+                state_timeout.tv_sec = -1;
+                state_timeout.tv_usec = 0;
+                state->prepare(runtime, state, &read_fds, &write_fds, &max_fd,
+                               &state_timeout);
+                runtime_min_timeout(&timeout, &state_timeout);
             }
         }
 
-        if (max_fd < 0) {
+        if (max_fd < 0 && timeout.tv_sec < 0) {
             continue;
         }
 
-        int result = select(max_fd + 1, NULL, &write_fds, NULL, NULL);
+        int result = select(max_fd + 1, NULL, &write_fds, NULL,
+                            timeout.tv_sec >= 0 ? &timeout : NULL);
         if (result < 0) {
             if (errno == EINTR) {
                 continue;

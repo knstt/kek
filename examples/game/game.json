@@ -1,30 +1,7 @@
 {
   "version": 1,
+  "enums": [],
   "states": [
-    {
-      "name": "StandardInput",
-      "fields": [
-        {
-          "name": "input",
-          "type": "String",
-          "default": "",
-          "max": 1000
-        }
-      ],
-      "constructors": []
-    },
-    {
-      "name": "StandardOutput",
-      "fields": [
-        {
-          "name": "output",
-          "type": "String",
-          "default": "",
-          "max": 1000
-        }
-      ],
-      "constructors": []
-    },
     {
       "name": "Player",
       "fields": [
@@ -186,13 +163,67 @@
     }
   ],
   "instances": [
-    { "name": "standard_input", "state": "StandardInput" },
-    { "name": "standard_output", "state": "StandardOutput" },
-    { "name": "player", "state": "Player" },
-    { "name": "dungeon_map", "state": "DungeonMap" },
-    { "name": "treasure", "state": "Treasure" },
-    { "name": "goblin", "state": "Goblin" },
-    { "name": "game_progress", "state": "GameProgress" }
+    {
+      "name": "standard_input",
+      "state": "StandardInput",
+      "values": {},
+      "config": {
+        "buffer_size": 1000
+      }
+    },
+    {
+      "name": "standard_output",
+      "state": "StandardOutput",
+      "values": {},
+      "config": {
+        "buffer_size": 1000
+      }
+    },
+    {
+      "name": "timer",
+      "state": "Timer",
+      "values": {
+        "enabled": true,
+        "interval_ms": 1000
+      },
+      "config": {}
+    },
+    {
+      "name": "player",
+      "state": "Player",
+      "values": {},
+      "config": {}
+    },
+    {
+      "name": "dungeon_map",
+      "state": "DungeonMap",
+      "values": {},
+      "config": {}
+    },
+    {
+      "name": "treasure",
+      "state": "Treasure",
+      "values": {},
+      "config": {}
+    },
+    {
+      "name": "goblin",
+      "state": "Goblin",
+      "values": {},
+      "config": {}
+    },
+    {
+      "name": "game_progress",
+      "state": "GameProgress",
+      "values": {},
+      "config": {}
+    },
+    {
+      "name": "instance9",
+      "state": "Player",
+      "values": {},
+      "config": {}
+    }
   ],
   "hooks": [
     {
@@ -223,6 +254,26 @@
       ],
       "writes": [
         "Player",
+        "Goblin",
+        "GameProgress"
+      ]
+    },
+    {
+      "name": "SpawnOnTimerChanged",
+      "on": {
+        "state": "Timer",
+        "event": "changed"
+      },
+      "reads": [
+        "Timer",
+        "Player",
+        "DungeonMap",
+        "Treasure",
+        "Goblin",
+        "GameProgress"
+      ],
+      "writes": [
+        "Treasure",
         "Goblin",
         "GameProgress"
       ]

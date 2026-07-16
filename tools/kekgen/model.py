@@ -35,6 +35,8 @@ class Instance:
     name: str
     state_name: str
     constructor_name: str | None = None
+    values: dict[str, object] = field(default_factory=dict)
+    config: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass

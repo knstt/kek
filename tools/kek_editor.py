@@ -62,18 +62,29 @@ def instance_to_dict(instance: generate_states.Instance) -> dict:
     }
     if instance.constructor_name is not None:
         result["constructor"] = instance.constructor_name
+    if instance.values:
+        result["values"] = instance.values
+    if instance.config:
+        result["config"] = instance.config
     return result
 
 
 def model_from_source(source: str) -> dict:
     enums, states, hooks, instances = generate_states.parse_source(source)
     validate_source_model(enums, states, hooks, instances)
+    document = json.loads(source)
+    return normalize_editor_model(document)
+
+
+def normalize_editor_model(document: object) -> dict:
+    if not isinstance(document, dict):
+        raise ValueError("schema root must be an object")
     return {
-        "version": 1,
-        "enums": [enum_to_dict(enum) for enum in enums],
-        "states": [state_to_dict(state) for state in states],
-        "instances": [instance_to_dict(instance) for instance in instances],
-        "hooks": [hook_to_dict(hook) for hook in hooks],
+        "version": document.get("version", 1),
+        "enums": document.get("enums", []),
+        "states": document.get("states", []),
+        "instances": document.get("instances", []),
+        "hooks": document.get("hooks", []),
     }
 
 

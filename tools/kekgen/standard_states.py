@@ -42,6 +42,9 @@ STANDARD_STATES = [
     },
 ]
 
-
 def standard_states_payload() -> list[dict]:
     return STANDARD_STATES
+
+
+def standard_states_by_type() -> dict[str, dict]:
+    return {item["state"]["name"]: item for item in STANDARD_STATES}

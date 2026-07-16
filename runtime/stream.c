@@ -6,8 +6,10 @@
 #include <unistd.h>
 
 static int stream_prepare(KekRuntime* runtime, KekRuntimeState* state,
-                          fd_set* read_fds, fd_set* write_fds, int* max_fd) {
+                          fd_set* read_fds, fd_set* write_fds, int* max_fd,
+                          struct timeval* timeout) {
     (void)runtime;
+    (void)timeout;
     KekStream* stream = (KekStream*)state->data;
     if (!stream || stream->closed || stream->fd < 0) {
         return 0;

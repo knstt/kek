@@ -8,8 +8,10 @@
 #include "runtime/hook.h"
 #include "runtime/state_storage.h"
 #include "runtime/stream.h"
+#include "runtime/timer.h"
 
-#define GAME_TEXT_CAPACITY 1001
+#define GAME_MAX_TREASURES 3
+#define GAME_MAX_GOBLINS 3
 
 typedef struct GameApp {
     KekRuntime* runtime;
@@ -17,8 +19,6 @@ typedef struct GameApp {
     KekStream* stdout_stream;
     KekStream* log_stream;
     GameRuntimeBinding binding;
-    char input_buffer[GAME_TEXT_CAPACITY];
-    char output_buffer[GAME_TEXT_CAPACITY];
     size_t input_len;
     size_t handled_input_len;
     size_t output_len;
@@ -65,39 +65,45 @@ static const StandardInput* app_standard_input_const(const GameApp* app) {
     return game_standard_input_const(APP_STORE(app), APP_SLOTS(app));
 }
 
+static const Timer* app_timer_const(const GameApp* app) {
+    return game_timer_const(APP_STORE(app), APP_SLOTS(app));
+}
+
 static void game_set_message_on_state(GameProgress* progress, const char* message) {
     progress->message = kek_string_from_cstr(message);
 }
 
 static void app_set_input_state(GameApp* app, const char* data, size_t len) {
-    size_t available = sizeof(app->input_buffer) - app->input_len - 1;
+    size_t capacity = sizeof(app->binding.standard_input_input_buffer);
+    size_t available = capacity - app->input_len - 1;
     size_t to_copy = len < available ? len : available;
     if (to_copy > 0) {
-        memcpy(app->input_buffer + app->input_len, data, to_copy);
+        memcpy(app->binding.standard_input_input_buffer + app->input_len, data, to_copy);
         app->input_len += to_copy;
-        app->input_buffer[app->input_len] = '\0';
+        app->binding.standard_input_input_buffer[app->input_len] = '\0';
     }
 
     game_standard_input_set_input(APP_STORE(app), app->binding.slots.standard_input,
-                                  app->input_buffer, app->input_len);
+                                  app->binding.standard_input_input_buffer, app->input_len);
 }
 
 static void app_track_output_state(GameApp* app, const char* data, size_t len) {
-    size_t available = sizeof(app->output_buffer) - app->output_len - 1;
+    size_t capacity = sizeof(app->binding.standard_output_output_buffer);
+    size_t available = capacity - app->output_len - 1;
     if (available == 0) {
         app->output_len = 0;
-        app->output_buffer[0] = '\0';
-        available = sizeof(app->output_buffer) - 1;
+        app->binding.standard_output_output_buffer[0] = '\0';
+        available = capacity - 1;
     }
     size_t to_copy = len < available ? len : available;
     if (to_copy > 0) {
-        memcpy(app->output_buffer + app->output_len, data, to_copy);
+        memcpy(app->binding.standard_output_output_buffer + app->output_len, data, to_copy);
         app->output_len += to_copy;
-        app->output_buffer[app->output_len] = '\0';
+        app->binding.standard_output_output_buffer[app->output_len] = '\0';
     }
 
     game_standard_output_set_output(APP_STORE(app), app->binding.slots.standard_output,
-                                    app->output_buffer, app->output_len);
+                                    app->binding.standard_output_output_buffer, app->output_len);
 }
 
 static void app_write_raw(GameApp* app, const char* data, size_t len) {
@@ -142,6 +148,24 @@ static void update_reset_state(void* draft, void* context) {
 }
 
 static void game_reset(GameApp* app) {
+    size_t slot = game_treasure_first(APP_STORE(app));
+    while (slot != KEK_STATE_INVALID_ID) {
+        size_t next = game_treasure_next(APP_STORE(app), slot);
+        if (slot != app->binding.slots.treasure) {
+            game_treasure_delete(APP_STORE(app), slot);
+        }
+        slot = next;
+    }
+
+    slot = game_goblin_first(APP_STORE(app));
+    while (slot != KEK_STATE_INVALID_ID) {
+        size_t next = game_goblin_next(APP_STORE(app), slot);
+        if (slot != app->binding.slots.goblin) {
+            game_goblin_delete(APP_STORE(app), slot);
+        }
+        slot = next;
+    }
+
     size_t slots[] = {app->binding.slots.player, app->binding.slots.dungeon_map,
                       app->binding.slots.treasure, app->binding.slots.goblin,
                       app->binding.slots.game_progress};
@@ -162,11 +186,21 @@ static char game_cell_at(const GameApp* app, int x, int y) {
     if (player_x == x && player_y == y) {
         return '@';
     }
-    if (!player->has_treasure && treasure->treasure_x == x && treasure->treasure_y == y) {
-        return '$';
+    (void)treasure;
+    for (size_t slot = game_treasure_first(APP_STORE(app)); slot != KEK_STATE_INVALID_ID;
+         slot = game_treasure_next(APP_STORE(app), slot)) {
+        const Treasure* item = game_treasure_slot_const(APP_STORE(app), slot);
+        if (item && item->treasure_x == x && item->treasure_y == y) {
+            return '$';
+        }
     }
-    if (goblin->goblin_alive && goblin->goblin_x == x && goblin->goblin_y == y) {
-        return 'g';
+    (void)goblin;
+    for (size_t slot = game_goblin_first(APP_STORE(app)); slot != KEK_STATE_INVALID_ID;
+         slot = game_goblin_next(APP_STORE(app), slot)) {
+        const Goblin* enemy = game_goblin_slot_const(APP_STORE(app), slot);
+        if (enemy && enemy->goblin_alive && enemy->goblin_x == x && enemy->goblin_y == y) {
+            return 'g';
+        }
     }
     if (progress->exit_x == x && progress->exit_y == y) {
         return '>';
@@ -288,8 +322,7 @@ static int app_commit_state_copy(GameApp* app, size_t slot_id, const void* value
 static int game_apply_move(GameApp* app, const MoveUpdate* move) {
     Player player = *app_player_const(app);
     const DungeonMap* map = app_dungeon_map_const(app);
-    const Treasure* treasure = app_treasure_const(app);
-    Goblin goblin = *app_goblin_const(app);
+    (void)app_treasure_const(app);
     GameProgress progress = *app_game_progress_const(app);
 
     if (progress.game_over) {
@@ -312,22 +345,35 @@ static int game_apply_move(GameApp* app, const MoveUpdate* move) {
     progress.turn++;
     game_set_message_on_state(&progress, "You move carefully through the dungeon.");
 
-    if (!player.has_treasure && player.x == treasure->treasure_x &&
-        player.y == treasure->treasure_y) {
-        player.has_treasure = true;
-        player.gold += 10;
-        game_set_message_on_state(&progress, "You found the treasure. Now get to the exit!");
+    for (size_t slot = game_treasure_first(APP_STORE(app)); slot != KEK_STATE_INVALID_ID;) {
+        size_t next = game_treasure_next(APP_STORE(app), slot);
+        const Treasure* treasure = game_treasure_slot_const(APP_STORE(app), slot);
+        if (treasure && player.x == treasure->treasure_x && player.y == treasure->treasure_y) {
+            player.has_treasure = true;
+            player.gold += 10;
+            game_set_message_on_state(&progress, "You found treasure. Now get to the exit!");
+            if (slot != app->binding.slots.treasure) {
+                game_treasure_delete(APP_STORE(app), slot);
+            }
+        }
+        slot = next;
     }
 
-    if (goblin.goblin_alive && player.x == goblin.goblin_x &&
-        player.y == goblin.goblin_y) {
-        goblin.goblin_alive = false;
-        game_damage_player(&player, 35);
-        player.gold += 3;
-        game_set_message_on_state(&progress, "You defeat the goblin, but it lands a heavy hit.");
-    } else if (game_state_is_next_to_goblin(&player, &goblin)) {
-        game_damage_player(&player, 10);
-        game_set_message_on_state(&progress, "The goblin swipes at you from the shadows.");
+    for (size_t slot = game_goblin_first(APP_STORE(app)); slot != KEK_STATE_INVALID_ID;) {
+        size_t next = game_goblin_next(APP_STORE(app), slot);
+        Goblin goblin = *game_goblin_slot_const(APP_STORE(app), slot);
+        if (goblin.goblin_alive && player.x == goblin.goblin_x &&
+            player.y == goblin.goblin_y) {
+            goblin.goblin_alive = false;
+            game_damage_player(&player, 35);
+            player.gold += 3;
+            game_set_message_on_state(&progress, "You defeat a goblin, but it lands a heavy hit.");
+            app_commit_state_copy(app, slot, &goblin, sizeof(goblin));
+        } else if (game_state_is_next_to_goblin(&player, &goblin)) {
+            game_damage_player(&player, 10);
+            game_set_message_on_state(&progress, "A goblin swipes at you from the shadows.");
+        }
+        slot = next;
     }
 
     if (player.x == progress.exit_x && player.y == progress.exit_y) {
@@ -342,16 +388,108 @@ static int game_apply_move(GameApp* app, const MoveUpdate* move) {
 
     game_finish_if_health_empty(&player, &progress);
 
-    if (!Player_check(&player) || !Goblin_check(&goblin) ||
-        !GameProgress_check(&progress)) {
+    if (!Player_check(&player) || !GameProgress_check(&progress)) {
         return 0;
     }
 
     int ok = app_commit_state_copy(app, app->binding.slots.player, &player, sizeof(player));
-    ok = app_commit_state_copy(app, app->binding.slots.goblin, &goblin, sizeof(goblin)) && ok;
     ok = app_commit_state_copy(app, app->binding.slots.game_progress, &progress,
                                sizeof(progress)) && ok;
     return ok;
+}
+
+static int game_count_treasures(GameApp* app) {
+    int count = 0;
+    for (size_t slot = game_treasure_first(APP_STORE(app)); slot != KEK_STATE_INVALID_ID;
+         slot = game_treasure_next(APP_STORE(app), slot)) {
+        count++;
+    }
+    return count;
+}
+
+static int game_count_living_goblins(GameApp* app) {
+    int count = 0;
+    for (size_t slot = game_goblin_first(APP_STORE(app)); slot != KEK_STATE_INVALID_ID;
+         slot = game_goblin_next(APP_STORE(app), slot)) {
+        const Goblin* goblin = game_goblin_slot_const(APP_STORE(app), slot);
+        if (goblin && goblin->goblin_alive) {
+            count++;
+        }
+    }
+    return count;
+}
+
+static int game_spawn_cell_is_free(GameApp* app, int x, int y) {
+    const Player* player = app_player_const(app);
+    const GameProgress* progress = app_game_progress_const(app);
+    if ((player && player->x == x && player->y == y) ||
+        (progress && progress->exit_x == x && progress->exit_y == y)) {
+        return 0;
+    }
+    return game_cell_at(app, x, y) == '.';
+}
+
+static int game_pick_spawn_cell(GameApp* app, uint64_t seed, int* x, int* y) {
+    const DungeonMap* map = app_dungeon_map_const(app);
+    if (!map || !x || !y) {
+        return 0;
+    }
+    int width = map->width - 2;
+    int height = map->height - 2;
+    for (int attempt = 0; attempt < width * height; attempt++) {
+        int candidate_x = 1 + (int)((seed + (uint64_t)(attempt * 3)) % (uint64_t)width);
+        int candidate_y = 1 + (int)(((seed / 3u) + (uint64_t)(attempt * 2)) % (uint64_t)height);
+        if (game_spawn_cell_is_free(app, candidate_x, candidate_y)) {
+            *x = candidate_x;
+            *y = candidate_y;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void SpawnOnTimerChanged(KekHookContext* context) {
+    GameApp* app = (GameApp*)context->app_context;
+    if (!app) {
+        return;
+    }
+
+    const Timer* timer = app_timer_const(app);
+    const GameProgress* progress = app_game_progress_const(app);
+    if (!timer || !timer->enabled || timer->tick == 0 || (progress && progress->game_over)) {
+        return;
+    }
+
+    int changed = 0;
+    if (timer->tick % 5u == 0 && game_count_treasures(app) < GAME_MAX_TREASURES) {
+        int x = 0;
+        int y = 0;
+        if (game_pick_spawn_cell(app, timer->tick * 11u, &x, &y)) {
+            size_t slot = game_treasure_create(APP_STORE(app));
+            Treasure treasure = {x, y};
+            if (slot != KEK_STATE_INVALID_ID) {
+                app_commit_state_copy(app, slot, &treasure, sizeof(treasure));
+                changed = 1;
+            }
+        }
+    }
+
+    if (timer->tick % 7u == 0 && game_count_living_goblins(app) < GAME_MAX_GOBLINS) {
+        int x = 0;
+        int y = 0;
+        if (game_pick_spawn_cell(app, timer->tick * 17u, &x, &y)) {
+            size_t slot = game_goblin_create(APP_STORE(app));
+            Goblin goblin = {x, y, true};
+            if (slot != KEK_STATE_INVALID_ID) {
+                app_commit_state_copy(app, slot, &goblin, sizeof(goblin));
+                changed = 1;
+            }
+        }
+    }
+
+    if (changed) {
+        game_set_message(app, "The dungeon shifts. New danger and loot appear.");
+    }
 }
 
 static void game_move(GameApp* app, int dx, int dy) {
@@ -482,6 +620,12 @@ static int app_init(GameApp* app, KekRuntime* runtime, KekStream* stdin_stream,
     app->stdout_stream = stdout_stream;
     app->log_stream = log_stream;
     if (!game_runtime_binding_init(&app->binding, runtime, app)) {
+        return -1;
+    }
+    const Timer* timer = app_timer_const(app);
+    if (!timer || kek_runtime_register_timer(runtime, APP_STORE(app), app->binding.slots.timer,
+                                             timer->interval_ms) < 0) {
+        game_runtime_binding_destroy(&app->binding);
         return -1;
     }
     return 0;

@@ -1,7 +1,9 @@
 import json
+import copy
 
 from .model import Constructor, Enum, Field, Hook, Instance, State
 from .naming import require_identifier
+from .standard_states import standard_states_by_type
 
 
 def parse_source(source: str) -> tuple[list[Enum], list[State], list[Hook], list[Instance]]:
@@ -16,18 +18,118 @@ def parse_document(document: object) -> tuple[list[Enum], list[State], list[Hook
     if not isinstance(document, dict):
         raise ValueError("schema root must be an object")
 
-    state_items = document.get("states")
-    if not isinstance(state_items, list) or not state_items:
+    schema_state_items = document.get("states", [])
+    if not isinstance(schema_state_items, list):
+        raise ValueError("states must be an array")
+
+    custom_instance_items = document.get("instances", [])
+    if not isinstance(custom_instance_items, list):
+        raise ValueError("instances must be an array")
+
+    state_type_items, state_instance_items = split_state_items(schema_state_items)
+    instance_items = state_instance_items + custom_instance_items
+    standard_state_items = standard_state_definitions_for_instances(instance_items)
+    state_items = standard_state_items + state_type_items
+    if not state_items:
         raise ValueError("schema must contain one or more states")
 
     enums = parse_enums(document.get("enums", []))
     states = parse_states(state_items)
     hooks = parse_hooks(document.get("hooks", []))
-    instances = parse_instances(document.get("instances", []))
+    instances = parse_instances(instance_items)
     validate_field_values(enums, states)
     validate_hooks(states, hooks)
     validate_instances(states, instances)
+    validate_instance_values(enums, states, instances)
+    validate_standard_instances(instances)
     return enums, states, hooks, instances
+
+
+def split_state_items(state_items: list[object]) -> tuple[list[object], list[object]]:
+    state_type_items: list[object] = []
+    state_instance_items: list[object] = []
+    for state_index, state_item in enumerate(state_items):
+        if not isinstance(state_item, dict):
+            raise ValueError(f"states[{state_index}] must be an object")
+        has_fields = "fields" in state_item
+        has_type = "type" in state_item
+        if has_fields and has_type:
+            raise ValueError(f"states[{state_index}] must declare either fields or type, not both")
+        if has_type:
+            values = state_item.get("values", {})
+            if not isinstance(values, dict):
+                raise ValueError(f"states[{state_index}].values must be an object")
+            config = state_item.get("config", {})
+            if not isinstance(config, dict):
+                raise ValueError(f"states[{state_index}].config must be an object")
+            state_instance_items.append(
+                {
+                    "name": require_identifier(state_item.get("name"), f"states[{state_index}].name"),
+                    "state": require_identifier(state_item.get("type"), f"states[{state_index}].type"),
+                    "values": values,
+                    "config": config,
+                    **({"constructor": state_item["constructor"]} if "constructor" in state_item else {}),
+                }
+            )
+        else:
+            state_type_items.append(state_item)
+    return state_type_items, state_instance_items
+
+
+def standard_state_definitions_for_instances(instance_items: list[object]) -> list[object]:
+    standard_by_type = standard_states_by_type()
+    definitions: list[object] = []
+    seen: set[str] = set()
+    config_by_type: dict[str, dict] = {}
+    for instance_item in instance_items:
+        if not isinstance(instance_item, dict):
+            continue
+        state_name = instance_item.get("state")
+        if state_name not in standard_by_type:
+            continue
+        config = instance_item.get("config", {})
+        if not isinstance(config, dict):
+            continue
+        if state_name in config_by_type and config_by_type[state_name] != config:
+            raise ValueError(f"{state_name}: all instances must use the same config")
+        config_by_type[state_name] = config
+        if state_name not in seen:
+            seen.add(state_name)
+            definition = copy.deepcopy(standard_by_type[state_name]["state"])
+            apply_standard_config(definition, instance_item)
+            definitions.append(definition)
+    return definitions
+
+
+def apply_standard_config(definition: dict, instance_item: object) -> None:
+    if not isinstance(instance_item, dict):
+        return
+    config = instance_item.get("config", {})
+    if not isinstance(config, dict):
+        return
+
+    state_name = definition.get("name")
+    if state_name in ("StandardInput", "StandardOutput"):
+        allowed = {"buffer_size"}
+        unknown = set(config) - allowed
+        if unknown:
+            raise ValueError(f"{state_name}: unknown config keys {sorted(unknown)}")
+        if "buffer_size" in config:
+            buffer_size = config["buffer_size"]
+            if not isinstance(buffer_size, int) or isinstance(buffer_size, bool) or buffer_size <= 0:
+                raise ValueError(f"{state_name}.config.buffer_size must be a positive integer")
+            fields = definition.get("fields", [])
+            if fields:
+                fields[0]["max"] = buffer_size
+        return
+
+    if state_name == "Timer":
+        if config:
+            raise ValueError("Timer does not support config; use values for interval_ms and enabled")
+        return
+
+    if config:
+        raise ValueError(f"{state_name}: config is only supported for standard states")
 
 
 def parse_enums(enum_items: object) -> list[Enum]:
@@ -200,8 +302,14 @@ def parse_instances(instance_items: object) -> list[Instance]:
                 constructor_value,
                 f"instances[{instance_index}].constructor",
             )
+        values = instance_item.get("values", {})
+        if not isinstance(values, dict):
+            raise ValueError(f"instances[{instance_index}].values must be an object")
+        config = instance_item.get("config", {})
+        if not isinstance(config, dict):
+            raise ValueError(f"instances[{instance_index}].config must be an object")
         instance_names.add(instance_name)
-        instances.append(Instance(instance_name, state_name, constructor_name))
+        instances.append(Instance(instance_name, state_name, constructor_name, values, config))
     return instances
 
 
@@ -234,6 +342,18 @@ def validate_field_values(enums: list[Enum], states: list[State]) -> None:
                 validate_field_default(enum_values, f"{state.name}.{constructor.name}", fields[field_name], value)
 
 
+def validate_instance_values(enums: list[Enum], states: list[State], instances: list[Instance]) -> None:
+    enum_values = {enum.name: set(enum.values) for enum in enums}
+    state_by_name = {state.name: state for state in states}
+    for instance in instances:
+        state_item = state_by_name.get(instance.state_name)
+        if state_item is None:
+            continue
+        fields = field_map(state_item)
+        for field_name, value in instance.values.items():
+            validate_field_default(enum_values, instance.name, fields[field_name], value)
+
+
 def field_map(state: State) -> dict[str, Field]:
     return {field_item.name: field_item for field_item in state.fields}
 
@@ -264,10 +384,26 @@ def validate_instances(states: list[State], instances: list[Instance]) -> None:
         if state_item is None:
             raise ValueError(f"{instance.name}: instance references unknown state {instance.state_name}")
         if instance.constructor_name is None:
-            continue
-        constructor_names = {constructor.name for constructor in state_item.constructors}
-        if instance.constructor_name not in constructor_names:
-            raise ValueError(
-                f"{instance.name}: instance references unknown constructor "
-                f"{instance.state_name}.{instance.constructor_name}"
-            )
+            fields = field_map(state_item)
+        else:
+            constructor_names = {constructor.name for constructor in state_item.constructors}
+            if instance.constructor_name not in constructor_names:
+                raise ValueError(
+                    f"{instance.name}: instance references unknown constructor "
+                    f"{instance.state_name}.{instance.constructor_name}"
+                )
+            fields = field_map(state_item)
+        for field_name in instance.values:
+            if field_name not in fields:
+                raise ValueError(f"{instance.name}: value for unknown field {field_name}")
+
+
+def validate_standard_instances(instances: list[Instance]) -> None:
+    singleton_counts = {"StandardInput": 0, "StandardOutput": 0}
+    for instance in instances:
+        if instance.state_name in singleton_counts:
+            singleton_counts[instance.state_name] += 1
+
+    for state_name, count in singleton_counts.items():
+        if count > 1:
+            raise ValueError(f"{state_name} may only be declared once")

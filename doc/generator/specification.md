@@ -47,6 +47,21 @@ The supported schema root is a JSON object:
   ],
   "states": [
     {
+      "name": "standard_input",
+      "type": "StandardInput",
+      "config": { "buffer_size": 4096 }
+    },
+    {
+      "name": "standard_output",
+      "type": "StandardOutput",
+      "config": { "buffer_size": 4096 }
+    },
+    {
+      "name": "timer",
+      "type": "Timer",
+      "values": { "interval_ms": 1000, "enabled": true }
+    },
+    {
       "name": "Player",
       "fields": [
         {
@@ -106,7 +121,13 @@ Parser rules:
 - Enum declarations must contain one or more values.
 - Enum field defaults and constructor overrides are strings that must match a declared enum value.
 - State names must match `[A-Za-z_][A-Za-z0-9_]*`.
-- Each state must contain one or more fields.
+- Entries in `states` either define a state type with `fields` or declare a named state slot with `type`.
+- A typed state slot can reference standard types `StandardInput`, `StandardOutput`, and `Timer` without repeating their fields.
+- Typed state slots may use `values` to override initial field values for that slot.
+- `StandardInput` and `StandardOutput` support `config.buffer_size`, which sets the generated String `max` constraint and generated binding buffer size for their text field.
+- `Timer` interval and enablement are configured through `values.interval_ms` and `values.enabled`.
+- `StandardInput` and `StandardOutput` may only be declared once. `Timer` may be declared multiple times.
+- Each custom state type must contain one or more fields.
 - Field names must match `[A-Za-z_][A-Za-z0-9_]*`.
 - Field type names must match `[A-Za-z_][A-Za-z0-9_]*`.
 - Each field must declare a `default` value.

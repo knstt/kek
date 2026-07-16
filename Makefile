@@ -10,6 +10,7 @@ RUNTIME_SRCS := \
 	runtime/event.c \
 	runtime/hook.c \
 	runtime/stream.c \
+	runtime/timer.c \
 	runtime/runtime.c \
 	runtime/state_storage.c
 RUNTIME_OBJS := $(RUNTIME_SRCS:runtime/%.c=$(BUILD_DIR)/runtime/%.o)

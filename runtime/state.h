@@ -5,7 +5,8 @@
 
 typedef enum KekRuntimeStateKind {
     KEK_RUNTIME_STATE_STREAM = 0,
-    KEK_RUNTIME_STATE_CUSTOM = 1
+    KEK_RUNTIME_STATE_TIMER = 1,
+    KEK_RUNTIME_STATE_CUSTOM = 2
 } KekRuntimeStateKind;
 
 struct KekRuntime;
@@ -14,7 +15,8 @@ struct KekRuntimeState;
 typedef int (*KekRuntimeStatePrepareFn)(struct KekRuntime* runtime,
                                         struct KekRuntimeState* state,
                                         fd_set* read_fds, fd_set* write_fds,
-                                        int* max_fd);
+                                        int* max_fd,
+                                        struct timeval* timeout);
 typedef void (*KekRuntimeStateReadyFn)(struct KekRuntime* runtime,
                                        struct KekRuntimeState* state,
                                        const fd_set* read_fds,

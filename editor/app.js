@@ -60,6 +60,55 @@ function stateNames() {
   return state.model.states.map((item) => item.name);
 }
 
+function customStates() {
+  return state.model.states.filter((item) => !item.type);
+}
+
+function standardTypes() {
+  return state.standardStates.map((item) => item.state.name);
+}
+
+function standardPresetByType(type) {
+  return state.standardStates.find((item) => item.state.name === type) || null;
+}
+
+function stateDefinitionByType(type) {
+  const custom = state.model.states.find((item) => !item.type && item.name === type);
+  if (custom) return custom;
+  const preset = standardPresetByType(type);
+  return preset ? preset.state : null;
+}
+
+function stateDefinitionNames() {
+  return Array.from(new Set([...customStates().map((item) => item.name), ...standardTypes()]));
+}
+
+function graphStateNames() {
+  return Array.from(new Set([...stateDefinitionNames(), ...state.model.instances.map((item) => item.state)]));
+}
+
+function isStandardType(type) {
+  return standardTypes().includes(type);
+}
+
+function migrateStandardStateSlots() {
+  const migrated = [];
+  state.model.states = state.model.states.filter((item) => {
+    if (!item.type || !isStandardType(item.type)) {
+      return true;
+    }
+    migrated.push({
+      name: item.name,
+      state: item.type,
+      ...(item.constructor ? { constructor: item.constructor } : {}),
+      values: item.values || {},
+      config: item.config || {},
+    });
+    return false;
+  });
+  state.model.instances.unshift(...migrated);
+}
+
 
 function enumNames() {
   return state.model.enums.map((item) => item.name);
@@ -92,6 +141,7 @@ function sanitizeModel() {
   state.model.states = state.model.states || [];
   state.model.instances = state.model.instances || [];
   state.model.hooks = state.model.hooks || [];
+  migrateStandardStateSlots();
   for (const item of state.model.states) {
     item.name = item.name || "State";
     item.fields = item.fields || [];
@@ -107,14 +157,16 @@ function sanitizeModel() {
   for (const hook of state.model.hooks) {
     hook.name = hook.name || "Hook";
     hook.on = hook.on || {};
-    hook.on.state = hook.on.state || state.model.states[0]?.name || "";
+    hook.on.state = hook.on.state || graphStateNames()[0] || "";
     hook.on.event = "changed";
     hook.reads = hook.reads || [];
     hook.writes = hook.writes || [];
   }
   for (const instance of state.model.instances) {
     instance.name = instance.name || "instance";
-    instance.state = instance.state || state.model.states[0]?.name || "";
+    instance.state = instance.state || stateDefinitionNames()[0] || "";
+    instance.values = instance.values || {};
+    instance.config = instance.config || {};
   }
 }
 
@@ -164,6 +216,26 @@ function fieldTypeOptions(currentType) {
     options.push(currentType);
   }
   return options;
+}
+
+function fieldsForStateType(type) {
+  return stateDefinitionByType(type)?.fields || [];
+}
+
+function defaultValuesForStandardType(type) {
+  if (type === "Timer") return { interval_ms: 1000, enabled: true };
+  return {};
+}
+
+function defaultConfigForStandardType(type) {
+  if (type === "StandardInput" || type === "StandardOutput") return { buffer_size: 1000 };
+  return {};
+}
+
+function defaultSlotNameForStandardType(type) {
+  const preset = standardPresetByType(type);
+  if (preset?.instance?.name) return preset.instance.name;
+  return type ? type.charAt(0).toLowerCase() + type.slice(1) : "standard_slot";
 }
 
 function valueForInput(value) {
@@ -219,23 +291,53 @@ function graphElements() {
   const instanceIds = new Map();
 
   state.model.states.forEach((item, index) => {
+    const name = item.name;
+    const definition = stateDefinitionByType(name);
     const id = graphNodeId("state", item);
     const position = graphPositions.get(id) || defaultPosition("state", index);
-    if (!stateIds.has(item.name)) {
-      stateIds.set(item.name, id);
+    if (!stateIds.has(name)) {
+      stateIds.set(name, id);
     }
-    const meta = `${item.fields.length} fields, ${item.constructors.length} constructors`;
+    const fieldCount = definition?.fields?.length || 0;
+    const constructorCount = definition?.constructors?.length || 0;
+    const meta = `${fieldCount} fields, ${constructorCount} constructors`;
     elements.push({
       data: {
         id,
         type: "state",
         index,
         label: item.name,
-        displayLabel: `${item.name}\n${meta}`,
+        displayLabel: `${name}\n${meta}`,
         meta,
       },
       position,
       classes: state.selected?.type === "state" && state.selected.index === index ? "selected" : "",
+    });
+  });
+
+  graphStateNames().forEach((name, index) => {
+    if (stateIds.has(name)) return;
+    const definition = stateDefinitionByType(name);
+    const id = `state-type:${name}`;
+    const position = graphPositions.get(id) || defaultPosition("state", state.model.states.length + index);
+    stateIds.set(name, id);
+    const fieldCount = definition?.fields?.length || 0;
+    const constructorCount = definition?.constructors?.length || 0;
+    const isStandard = isStandardType(name);
+    const meta = isStandard
+      ? `global standard, ${fieldCount} fields`
+      : `${fieldCount} fields, ${constructorCount} constructors`;
+    elements.push({
+      data: {
+        id,
+        type: "state-type",
+        index,
+        label: name,
+        displayLabel: `${name}\n${meta}`,
+        meta,
+      },
+      position,
+      classes: isStandard ? "standard-state" : "",
     });
   });
 
@@ -264,7 +366,7 @@ function graphElements() {
     const id = graphNodeId("instance", instance);
     const position = graphPositions.get(id) || { x: 60 + (index % 3) * 280, y: 580 + Math.floor(index / 3) * 140 };
     instanceIds.set(instance.name, id);
-    const meta = `instance of ${instance.state}`;
+    const meta = isStandardType(instance.state) ? `standard instance of ${instance.state}` : `instance of ${instance.state}`;
     elements.push({
       data: {
         id,
@@ -275,7 +377,10 @@ function graphElements() {
         meta,
       },
       position,
-      classes: state.selected?.type === "instance" && state.selected.index === index ? "selected" : "",
+      classes: [
+        isStandardType(instance.state) ? "standard-instance" : "",
+        state.selected?.type === "instance" && state.selected.index === index ? "selected" : "",
+      ].filter(Boolean).join(" "),
     });
   });
 
@@ -353,6 +458,21 @@ function graphStyles() {
       style: {
         "background-color": "#14342f",
         "border-color": "#2dd4bf",
+      },
+    },
+    {
+      selector: "node.standard-state",
+      style: {
+        "background-color": "#3b2508",
+        "border-color": "#f59e0b",
+      },
+    },
+    {
+      selector: "node.standard-instance",
+      style: {
+        "background-color": "#422006",
+        "border-color": "#fbbf24",
+        "border-style": "dashed",
       },
     },
     {
@@ -553,7 +673,7 @@ function input(label, value, onChange) {
   labelElement.textContent = label;
   const inputElement = document.createElement("input");
   inputElement.value = value || "";
-  inputElement.addEventListener("input", () => onChange(inputElement.value));
+  inputElement.addEventListener("change", () => onChange(inputElement.value));
   group.append(labelElement, inputElement);
   return group;
 }
@@ -728,7 +848,7 @@ function checkboxList(title, selected, onChange) {
   titleElement.textContent = title;
   const list = document.createElement("div");
   list.className = "check-list";
-  for (const name of stateNames()) {
+  for (const name of stateDefinitionNames()) {
     const row = document.createElement("label");
     row.className = "check-row";
     const box = document.createElement("input");
@@ -751,14 +871,14 @@ function checkboxList(title, selected, onChange) {
 }
 
 function renderHookInspector(hook) {
-  hook.on = hook.on || { state: state.model.states[0]?.name || "", event: "changed" };
+  hook.on = hook.on || { state: stateDefinitionNames()[0] || "", event: "changed" };
   elements.inspectorTitle.textContent = `Hook: ${hook.name}`;
   elements.inspectorBody.innerHTML = "";
   elements.inspectorBody.appendChild(input("Name", hook.name, (value) => {
     hook.name = value;
     rerenderAll();
   }));
-  elements.inspectorBody.appendChild(select("On State.changed", hook.on.state, stateNames(), (value) => {
+  elements.inspectorBody.appendChild(select("On State.changed", hook.on.state, stateDefinitionNames(), (value) => {
     hook.on.state = value;
     hook.on.event = "changed";
     rerenderAll();
@@ -774,31 +894,73 @@ function renderHookInspector(hook) {
 }
 
 function constructorNamesForState(stateName) {
-  const item = state.model.states.find((candidate) => candidate.name === stateName);
-  return item ? item.constructors.map((constructor) => constructor.name) : [];
+  const item = stateDefinitionByType(stateName);
+  return item?.constructors ? item.constructors.map((constructor) => constructor.name) : [];
+}
+
+function renderStandardInstanceFields(instance) {
+  if (instance.state === "StandardInput" || instance.state === "StandardOutput") {
+    elements.inspectorBody.appendChild(input("Buffer Size", valueForInput(instance.config.buffer_size), (value) => {
+      const parsed = Number(value);
+      if (Number.isInteger(parsed) && parsed > 0) {
+        instance.config.buffer_size = parsed;
+      } else if (value === "") {
+        delete instance.config.buffer_size;
+      }
+      rerenderAll();
+    }));
+  }
 }
 
 function renderInstanceInspector(instance) {
-  elements.inspectorTitle.textContent = `Instance: ${instance.name}`;
+  instance.values = instance.values || {};
+  instance.config = instance.config || {};
+  const isStandard = isStandardType(instance.state);
+  elements.inspectorTitle.textContent = `${isStandard ? "Standard Instance" : "Instance"}: ${instance.name}`;
   elements.inspectorBody.innerHTML = "";
   elements.inspectorBody.appendChild(input("Name", instance.name, (value) => {
     instance.name = value;
     rerenderAll();
   }));
-  elements.inspectorBody.appendChild(select("State", instance.state, stateNames(), (value) => {
+  elements.inspectorBody.appendChild(select("State", instance.state, stateDefinitionNames(), (value) => {
     instance.state = value;
     delete instance.constructor;
+    instance.values = defaultValuesForStandardType(value);
+    instance.config = defaultConfigForStandardType(value);
     rerenderAll();
   }));
-  const constructorOptions = ["", ...constructorNamesForState(instance.state)];
-  elements.inspectorBody.appendChild(select("Constructor", instance.constructor || "", constructorOptions, (value) => {
-    if (value === "") {
-      delete instance.constructor;
-    } else {
-      instance.constructor = value;
+  if (!isStandard) {
+    const constructorOptions = ["", ...constructorNamesForState(instance.state)];
+    elements.inspectorBody.appendChild(select("Constructor", instance.constructor || "", constructorOptions, (value) => {
+      if (value === "") {
+        delete instance.constructor;
+      } else {
+        instance.constructor = value;
+      }
+      rerenderAll();
+    }));
+  }
+  renderStandardInstanceFields(instance);
+  const fields = fieldsForStateType(instance.state);
+  if (fields.length > 0) {
+    const valuesTitle = document.createElement("div");
+    valuesTitle.className = "list-title";
+    valuesTitle.textContent = "Initial Values";
+    elements.inspectorBody.appendChild(valuesTitle);
+  }
+  for (const field of fields) {
+    if (isStandard && field.type === "String") {
+      continue;
     }
-    rerenderAll();
-  }));
+    elements.inspectorBody.appendChild(input(field.name, valueForDefaultInput(instance.values[field.name]), (value) => {
+      if (value === "") {
+        delete instance.values[field.name];
+      } else {
+        instance.values[field.name] = parseDefaultValue(field, value);
+      }
+      rerenderAll();
+    }));
+  }
 }
 
 function renderInspector() {
@@ -862,6 +1024,7 @@ async function loadSchema() {
   state.file = elements.schemaSelect.value;
   const payload = await requestJson(`/api/schema?file=${encodeURIComponent(state.file)}`);
   state.model = payload.model;
+  sanitizeModel();
   state.source = payload.source;
   state.selected = null;
   elements.sourcePreview.value = state.source;
@@ -893,7 +1056,7 @@ elements.saveButton.addEventListener("click", () => saveSchema().catch((error) =
 elements.generateButton.addEventListener("click", () => generateSchema().catch((error) => setStatus(error.message, true)));
 elements.autoLayoutButton.addEventListener("click", () => runAutoLayout());
 elements.addStateButton.addEventListener("click", () => {
-  const name = uniqueName("State", stateNames());
+  const name = uniqueName("State", customStates().map((item) => item.name));
   state.model.states.push({ name, fields: [{ name: "field1", type: "i32", default: 0 }], constructors: [] });
   selectItem("state", state.model.states.length - 1);
   rerenderAll();
@@ -908,28 +1071,35 @@ elements.addStandardStateButton.addEventListener("click", () => {
     setStatus("Invalid standard state selection", true);
     return;
   }
-  if (!state.model.states.some((item) => item.name === preset.state.name)) {
-    state.model.states.push(JSON.parse(JSON.stringify(preset.state)));
+  const type = preset.state.name;
+  if ((type === "StandardInput" || type === "StandardOutput") && state.model.instances.some((item) => item.state === type)) {
+    setStatus(`${type} may only be added once`, true);
+    return;
   }
-  if (preset.instance && !state.model.instances.some((item) => item.name === preset.instance.name)) {
-    state.model.instances.push(JSON.parse(JSON.stringify(preset.instance)));
-  }
-  state.selected = null;
+  const baseName = defaultSlotNameForStandardType(type);
+  const name = uniqueName(baseName, [...state.model.states.map((item) => item.name), ...state.model.instances.map((item) => item.name)]);
+  state.model.instances.push({
+    name,
+    state: type,
+    config: defaultConfigForStandardType(type),
+    values: defaultValuesForStandardType(type),
+  });
+  selectItem("instance", state.model.instances.length - 1);
   rerenderAll();
 });
 elements.addInstanceButton.addEventListener("click", () => {
-  if (state.model.states.length === 0) {
+  if (stateDefinitionNames().length === 0) {
     setStatus("Add a state before adding an instance", true);
     return;
   }
   const name = uniqueName("instance", state.model.instances.map((instance) => instance.name));
-  state.model.instances.push({ name, state: state.model.states[0].name });
+  state.model.instances.push({ name, state: stateDefinitionNames()[0], values: {} });
   selectItem("instance", state.model.instances.length - 1);
   rerenderAll();
 });
 elements.addHookButton.addEventListener("click", () => {
   const name = uniqueName("Hook", state.model.hooks.map((hook) => hook.name));
-  state.model.hooks.push({ name, on: { state: state.model.states[0]?.name || "", event: "changed" }, reads: [], writes: [] });
+  state.model.hooks.push({ name, on: { state: stateDefinitionNames()[0] || "", event: "changed" }, reads: [], writes: [] });
   selectItem("hook", state.model.hooks.length - 1);
   rerenderAll();
 });
@@ -943,7 +1113,7 @@ elements.deleteButton.addEventListener("click", () => {
     for (const hook of state.model.hooks) {
       hook.on = hook.on || {};
       if (hook.on.state === removed.name) {
-        hook.on.state = state.model.states[0]?.name || "";
+        hook.on.state = stateDefinitionNames()[0] || "";
         hook.on.event = "changed";
       }
       hook.reads = hook.reads.filter((name) => name !== removed.name);
@@ -965,6 +1135,7 @@ elements.sourcePreview.addEventListener("change", async () => {
       body: JSON.stringify({ source: elements.sourcePreview.value }),
     });
     state.model = payload.model;
+    sanitizeModel();
     state.source = payload.source;
     state.selected = null;
     setStatus("Preview parsed");

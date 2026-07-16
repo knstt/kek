@@ -102,6 +102,8 @@ Implemented in the generator:
 - Per-field `min`/`max` constraints emitted as non-aborting `*_check()` functions.
 - Extra constructors as partial overrides of default constructors.
 - Schema-declared named instances stored as `KekStateStore` slots.
+- Typed standard state slots for standard input, output, and timer states.
+- Per-slot initial `values` and fixed generated buffers for configured standard IO sizes.
 - Generated `*_reset()` functions that restore defaults.
 - C header/source generation.
 - Snake-case generated state type macros.
