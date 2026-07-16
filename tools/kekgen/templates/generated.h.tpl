@@ -24,8 +24,6 @@ $state_type_enum
 
 $state_declarations
 
-$aggregate_declarations
-
 $instance_declarations
 
 extern const KekStateDescriptor KekGeneratedStateDescriptors[KEK_STATE_TYPE_COUNT];

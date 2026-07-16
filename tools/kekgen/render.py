@@ -3,7 +3,7 @@ from importlib import resources
 from string import Template
 
 from .model import Enum, Field, Hook, Instance, State
-from .naming import aggregate_state_name, c_identifier_from_type, generated_guard, state_type_macro
+from .naming import c_identifier_from_type, generated_guard, state_type_macro
 
 
 TYPE_MAP = {
@@ -36,7 +36,6 @@ def emit_header(
         enum_declarations=render_enum_declarations(enums),
         state_type_enum=render_state_type_enum(states),
         state_declarations=render_state_declarations(states),
-        aggregate_declarations=render_aggregate_declarations(states, name),
         instance_declarations=render_instance_declarations(states, instances, name),
         hook_count=len(hooks),
         hook_declarations=render_hook_declarations(hooks),
@@ -55,14 +54,10 @@ def emit_source(
         instances = []
     instances = instances if isinstance(instances, list) else []
     enums = enums or []
-    aggregate_name = aggregate_state_name(name)
     return render_template(
         "generated.c.tpl",
         header_name=f"{name}.h",
         state_definitions=render_state_definitions(states, enums),
-        aggregate_name=aggregate_name,
-        aggregate_field_defaults=render_aggregate_field_defaults(states),
-        aggregate_checks=render_aggregate_checks(states),
         descriptor_entries=render_descriptor_entries(states),
         instance_definitions=render_instance_definitions(states, instances, name),
         hook_dependency_arrays=render_hook_dependency_arrays(hooks),
@@ -182,19 +177,6 @@ def render_state_declarations(states: list[State]) -> str:
         lines.append(f"int {state.name}_reset_void(void* state);")
         lines.append("")
     return "\n".join(lines).rstrip()
-
-
-def render_aggregate_declarations(states: list[State], name: str) -> str:
-    aggregate_name = aggregate_state_name(name)
-    lines = [f"typedef struct {aggregate_name} {{"]
-    for state in states:
-        lines.append(f"    {state.name} {c_identifier_from_type(state.name)};")
-    lines.append(f"}} {aggregate_name};")
-    lines.append("")
-    lines.append(f"{aggregate_name} {aggregate_name}_default(void);")
-    lines.append(f"int {aggregate_name}_check(const {aggregate_name}* state);")
-    lines.append(f"int {aggregate_name}_reset({aggregate_name}* state);")
-    return "\n".join(lines)
 
 
 def generated_prefix(name: str) -> str:
@@ -369,21 +351,6 @@ def render_single_value_checks(field_item: Field, lhs: str, enums: dict[str, Enu
         lines.append("        return 0;")
         lines.append("    }")
     return lines
-
-
-def render_aggregate_field_defaults(states: list[State]) -> str:
-    return "\n".join(
-        f"    state.{c_identifier_from_type(state.name)} = {state.name}_default();" for state in states
-    )
-
-
-def render_aggregate_checks(states: list[State]) -> str:
-    lines: list[str] = []
-    for state in states:
-        lines.append(f"    if (!{state.name}_check(&state->{c_identifier_from_type(state.name)})) {{")
-        lines.append("        return 0;")
-        lines.append("    }")
-    return "\n".join(lines)
 
 
 def render_descriptor_entries(states: list[State]) -> str:

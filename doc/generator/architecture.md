@@ -92,9 +92,9 @@ This keeps source parsing small and leaves room for a JSON Schema file later.
 
 The header, source, and graph emitters render strings from the `State` and `Hook` models using template files for the outer generated-file structure.
 
-The header template owns boilerplate includes, the include guard shape, runtime includes, and declaration section placement. The renderer supplies schema enum declarations, generated state enum text, state declarations, aggregate declarations, and hook declarations.
+The header template owns boilerplate includes, the include guard shape, runtime includes, and declaration section placement. The renderer supplies schema enum declarations, generated state enum text, state declarations, instance declarations, and hook declarations.
 
-The source template owns file-level boilerplate, string helper implementations, aggregate helper placement, descriptor helper placement, and hook descriptor placement. The renderer supplies per-state functions, aggregate field/check blocks, descriptor entries, hook dependency arrays, and the hook descriptor table.
+The source template owns file-level boilerplate, string helper implementations, descriptor helper placement, and hook descriptor placement. The renderer supplies per-state functions, descriptor entries, instance helpers, hook dependency arrays, and the hook descriptor table.
 
 Generated runtime binding helpers are emitted beside the instance helpers. They do not own `KekRuntime`; they only bind a caller-owned runtime to generated `KekStateStore` slots and generated hook descriptors.
 
@@ -107,8 +107,6 @@ This keeps generated-file layout readable without hiding model-dependent C snipp
 | Generated Name | Rule |
 | --- | --- |
 | Header guard | Uppercase output base name with non-alphanumeric characters replaced by `_`, prefixed by `GENERATED_`, suffixed by `_H`. |
-| Aggregate state | Output base name with first character uppercased, suffixed by `State`. |
-| Aggregate fields | State type names converted from CamelCase to snake_case. |
 | State functions | `<StateName>_default`, `<StateName>_check`, and `<StateName>_reset`. |
 | Additional constructors | `<StateName>_<constructorName>`. |
 | Descriptor adapters | `<StateName>_default_into`, `<StateName>_check_void`, and `<StateName>_reset_void`. |

@@ -158,8 +158,6 @@ The generated header contains:
 - One function declaration for each additional state constructor.
 - One non-aborting check function declaration per state.
 - One reset function declaration per state.
-- One aggregate state struct containing all states.
-- Aggregate default, check, and reset function declarations.
 - A generated state type enum.
 - Void-pointer adapter declarations for descriptor use.
 - A generated `KekStateDescriptor` table declaration.
@@ -172,7 +170,7 @@ The generated header contains:
 - Generated hook function declarations.
 - A generated hook descriptor table declaration.
 
-State names are preserved. Aggregate field names and generated state type macros are derived from state names by converting CamelCase to snake_case. For example, `StandardInput` becomes `standard_input` in the aggregate and `KEK_STATE_TYPE_STANDARD_INPUT` in the enum.
+State names are preserved. Generated state type macros are derived from state names by converting CamelCase to uppercase snake case. For example, `StandardInput` becomes `KEK_STATE_TYPE_STANDARD_INPUT` in the enum.
 
 Generated headers include runtime headers as `runtime/...`, so generated output can live in project-local directories when the compiler include path points at the repository root.
 
@@ -185,9 +183,6 @@ The generated source contains:
 - Per-state additional constructors.
 - Per-state non-aborting check functions.
 - Per-state reset functions.
-- Aggregate default constructor.
-- Aggregate check function.
-- Aggregate reset function.
 - Void-pointer descriptor adapters.
 - A generated descriptor table.
 - A generated default slot registration helper.

@@ -23,7 +23,7 @@ from kekgen import (
     standard_states_payload,
     write_generated_files,
 )
-from kekgen.naming import aggregate_state_name, c_identifier_from_type, generated_guard, state_type_macro
+from kekgen.naming import c_identifier_from_type, generated_guard, state_type_macro
 from kekgen.render import c_type, translate_constraint_value, translate_default
 
 __all__ = [
@@ -35,7 +35,6 @@ __all__ = [
     "Instance",
     "State",
     "STANDARD_STATES",
-    "aggregate_state_name",
     "c_identifier_from_type",
     "c_type",
     "emit_graph",

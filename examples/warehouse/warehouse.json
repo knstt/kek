@@ -1,5 +1,15 @@
 {
   "version": 1,
+  "enums": [
+    {
+      "name": "Direction",
+      "values": ["None", "North", "South", "West", "East"]
+    },
+    {
+      "name": "PackageStatus",
+      "values": ["Waiting", "Carried", "Delivered"]
+    }
+  ],
   "states": [
     {
       "name": "StandardInput",
@@ -53,6 +63,12 @@
           "default": false
         },
         {
+          "name": "recent_directions",
+          "type": "Direction",
+          "array": 4,
+          "default": ["None", "None", "None", "None"]
+        },
+        {
           "name": "sequence",
           "type": "i32",
           "default": 0,
@@ -96,6 +112,11 @@
           "name": "carrying",
           "type": "bool",
           "default": false
+        },
+        {
+          "name": "facing",
+          "type": "Direction",
+          "default": "East"
         }
       ],
       "constructors": []
@@ -138,12 +159,20 @@
           "max": 5
         },
         {
-          "name": "delivered",
-          "type": "bool",
-          "default": false
+          "name": "status",
+          "type": "PackageStatus",
+          "default": "Waiting"
         }
       ],
-      "constructors": []
+      "constructors": [
+        {
+          "name": "south_shelf",
+          "values": {
+            "package_x": 2,
+            "package_y": 5
+          }
+        }
+      ]
     },
     {
       "name": "DeliveryZone",
@@ -163,7 +192,15 @@
           "max": 5
         }
       ],
-      "constructors": []
+      "constructors": [
+        {
+          "name": "west_dock",
+          "values": {
+            "zone_x": 1,
+            "zone_y": 5
+          }
+        }
+      ]
     },
     {
       "name": "GameStatus",
@@ -200,8 +237,10 @@
     { "name": "player_command", "state": "PlayerCommand" },
     { "name": "worker", "state": "Worker" },
     { "name": "warehouse_map", "state": "WarehouseMap" },
-    { "name": "package", "state": "Package" },
-    { "name": "delivery_zone", "state": "DeliveryZone" },
+    { "name": "package_a", "state": "Package" },
+    { "name": "package_b", "state": "Package", "constructor": "south_shelf" },
+    { "name": "delivery_zone_a", "state": "DeliveryZone" },
+    { "name": "delivery_zone_b", "state": "DeliveryZone", "constructor": "west_dock" },
     { "name": "game_status", "state": "GameStatus" }
   ],
   "hooks": [

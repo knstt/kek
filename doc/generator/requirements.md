@@ -24,8 +24,8 @@ It is responsible for data shape generation, default constructors, and invariant
 | GEN-FR-006 | Generate C structs for each state. | Implemented | `emit_header()` |
 | GEN-FR-007 | Generate one default constructor per state. | Implemented | `emit_source()` |
 | GEN-FR-008 | Generate one non-aborting check function per state. | Implemented | `emit_source()` |
-| GEN-FR-009 | Generate an aggregate state struct for all parsed states. | Implemented | `aggregate_state_name()` |
-| GEN-FR-010 | Generate aggregate default and check functions. | Implemented | `emit_source()` |
+| GEN-FR-009 | Generate declared instance slot structs and helpers. | Implemented | `render_instance_declarations()` |
+| GEN-FR-010 | Generate runtime binding helpers for declared instances and hooks. | Implemented | `render_instance_definitions()` |
 | GEN-FR-011 | Map known schema primitive types to C types. | Implemented | `TYPE_MAP` |
 | GEN-FR-012 | Preserve unknown type names in generated C. | Implemented | `c_type()` |
 | GEN-FR-013 | Provide a command-line interface for input path, output directory, and output base name. | Implemented | `argparse` in `main()` |

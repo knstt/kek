@@ -15,28 +15,6 @@ size_t kek_string_len(const KekString* text) {
 
 $state_definitions
 
-${aggregate_name} ${aggregate_name}_default(void) {
-    $aggregate_name state = {0};
-$aggregate_field_defaults
-    return state;
-}
-
-int ${aggregate_name}_check(const ${aggregate_name}* state) {
-    if (state == 0) {
-        return 0;
-    }
-$aggregate_checks
-    return 1;
-}
-
-int ${aggregate_name}_reset(${aggregate_name}* state) {
-    if (state == 0) {
-        return 0;
-    }
-    *state = ${aggregate_name}_default();
-    return ${aggregate_name}_check(state);
-}
-
 const KekStateDescriptor KekGeneratedStateDescriptors[KEK_STATE_TYPE_COUNT] = {
 $descriptor_entries
 };

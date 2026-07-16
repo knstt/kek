@@ -18,9 +18,5 @@ def c_identifier_from_type(name: str) -> str:
     return output.lower()
 
 
-def aggregate_state_name(name: str) -> str:
-    return f"{name[:1].upper()}{name[1:]}State"
-
-
 def state_type_macro(name: str) -> str:
     return f"KEK_STATE_TYPE_{c_identifier_from_type(name).upper()}"
