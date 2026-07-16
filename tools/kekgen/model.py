@@ -24,6 +24,13 @@ class Constructor:
 
 
 @dataclass
+class Instance:
+    name: str
+    state_name: str
+    constructor_name: str | None = None
+
+
+@dataclass
 class Hook:
     name: str
     event_type: str = ""

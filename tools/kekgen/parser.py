@@ -1,10 +1,10 @@
 import json
 
-from .model import Constructor, Field, Hook, State
+from .model import Constructor, Field, Hook, Instance, State
 from .naming import require_identifier
 
 
-def parse_source(source: str) -> tuple[list[State], list[Hook]]:
+def parse_source(source: str) -> tuple[list[State], list[Hook], list[Instance]]:
     try:
         document = json.loads(source)
     except json.JSONDecodeError as error:
@@ -12,7 +12,7 @@ def parse_source(source: str) -> tuple[list[State], list[Hook]]:
     return parse_document(document)
 
 
-def parse_document(document: object) -> tuple[list[State], list[Hook]]:
+def parse_document(document: object) -> tuple[list[State], list[Hook], list[Instance]]:
     if not isinstance(document, dict):
         raise ValueError("schema root must be an object")
 
@@ -22,8 +22,10 @@ def parse_document(document: object) -> tuple[list[State], list[Hook]]:
 
     states = parse_states(state_items)
     hooks = parse_hooks(document.get("hooks", []))
+    instances = parse_instances(document.get("instances", []))
     validate_hooks(states, hooks)
-    return states, hooks
+    validate_instances(states, instances)
+    return states, hooks, instances
 
 
 def parse_states(state_items: list[object]) -> list[State]:
@@ -132,6 +134,37 @@ def parse_hooks(hook_items: object) -> list[Hook]:
     return hooks
 
 
+def parse_instances(instance_items: object) -> list[Instance]:
+    if not isinstance(instance_items, list):
+        raise ValueError("instances must be an array")
+
+    instances: list[Instance] = []
+    instance_names: set[str] = set()
+    for instance_index, instance_item in enumerate(instance_items):
+        if not isinstance(instance_item, dict):
+            raise ValueError(f"instances[{instance_index}] must be an object")
+        instance_name = require_identifier(
+            instance_item.get("name"),
+            f"instances[{instance_index}].name",
+        )
+        if instance_name in instance_names:
+            raise ValueError(f"duplicate instance {instance_name}")
+        state_name = require_identifier(
+            instance_item.get("state"),
+            f"instances[{instance_index}].state",
+        )
+        constructor_value = instance_item.get("constructor")
+        constructor_name = None
+        if constructor_value is not None:
+            constructor_name = require_identifier(
+                constructor_value,
+                f"instances[{instance_index}].constructor",
+            )
+        instance_names.add(instance_name)
+        instances.append(Instance(instance_name, state_name, constructor_name))
+    return instances
+
+
 def parse_json_name_list(value: object, label: str) -> list[str]:
     if not isinstance(value, list):
         raise ValueError(f"{label} must be an array")
@@ -148,3 +181,19 @@ def validate_hooks(states: list[State], hooks: list[Hook]) -> None:
         for name in hook.reads + hook.writes:
             if name not in state_names:
                 raise ValueError(f"{hook.name}: hook references unknown state {name}")
+
+
+def validate_instances(states: list[State], instances: list[Instance]) -> None:
+    state_by_name = {state.name: state for state in states}
+    for instance in instances:
+        state_item = state_by_name.get(instance.state_name)
+        if state_item is None:
+            raise ValueError(f"{instance.name}: instance references unknown state {instance.state_name}")
+        if instance.constructor_name is None:
+            continue
+        constructor_names = {constructor.name for constructor in state_item.constructors}
+        if instance.constructor_name not in constructor_names:
+            raise ValueError(
+                f"{instance.name}: instance references unknown constructor "
+                f"{instance.state_name}.{instance.constructor_name}"
+            )

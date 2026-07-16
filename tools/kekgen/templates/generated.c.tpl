@@ -48,6 +48,8 @@ const KekStateDescriptor* kek_generated_state_descriptor(size_t type_id) {
     return &KekGeneratedStateDescriptors[type_id];
 }
 
+$instance_definitions
+
 int kek_generated_state_store_add_defaults(KekStateStore* store,
                                            size_t slot_ids[KEK_STATE_TYPE_COUNT]) {
     if (store == 0 || slot_ids == 0) {

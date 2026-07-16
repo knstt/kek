@@ -37,6 +37,8 @@ Multiple slots may reference the same descriptor. This supports multiple instanc
 
 `kek_state_store_update()` copies the active slot value into its inactive draft, invokes the update callback, validates the draft with the descriptor check function, swaps on success, increments the slot version, and publishes `KEK_EVENT_STATE_CHANGED` with state type id, slot id, and version.
 
+`kek_state_store_remove()` deletes a slot, publishes `KEK_EVENT_STATE_DELETED`, and makes the slot id available for reuse. `kek_state_store_add()` reuses deleted slots before growing the store and publishes `KEK_EVENT_STATE_CREATED` for the new slot.
+
 ## Runtime State Interface
 
 `KekRuntimeState` is the generic state interface used by the event loop.
@@ -71,6 +73,8 @@ Event types:
 | `KEK_EVENT_STREAM_EOF` | Stream reached EOF. |
 | `KEK_EVENT_STREAM_ERROR` | Stream operation failed. |
 | `KEK_EVENT_STATE_CHANGED` | A state change was published. |
+| `KEK_EVENT_STATE_CREATED` | A generated state-store slot was created. |
+| `KEK_EVENT_STATE_DELETED` | A generated state-store slot was deleted. |
 
 State-change events may carry:
 
@@ -87,7 +91,7 @@ Capacity constants:
 | `KEK_EVENT_MAX_SUBSCRIBERS` | `32` | Max subscribers per event type. |
 | `KEK_EVENT_QUEUE_CAPACITY` | `256` | Max queued events. |
 | `KEK_EVENT_DATA_CAPACITY` | `1024` | Max bytes copied into event payload. |
-| `KEK_EVENT_TYPE_COUNT` | `4` | Number of event types. |
+| `KEK_EVENT_TYPE_COUNT` | `6` | Number of event types. |
 
 Publishing fails and drops the event when the queue is full.
 

@@ -99,10 +99,14 @@ Implemented in the generator:
 - Per-field defaults.
 - Per-field `min`/`max` constraints emitted as non-aborting `*_check()` functions.
 - Extra constructors as partial overrides of default constructors.
+- Schema-declared named instances stored as `KekStateStore` slots.
 - Generated `*_reset()` functions that restore defaults.
 - C header/source generation.
 - Snake-case generated state type macros.
 - Generated default slot registration helper for `KekStateStore`.
+- Generated dynamic create/delete/find helpers for per-state instances.
+- Generated runtime binding helpers for declared slots and hooks.
+- Generated string-field setters for single-string states such as standard input/output.
 
 Implemented in the runtime:
 
@@ -115,6 +119,7 @@ Implemented in the runtime:
 - Rollback-safe generated state storage.
 - Independent generated state slots.
 - Multiple instances per generated state type.
+- Generated state slot creation/deletion events and deleted slot reuse.
 - Generated hook descriptors.
 
 Not implemented yet:

@@ -47,18 +47,33 @@ def hook_to_dict(hook: generate_states.Hook) -> dict:
     }
 
 
+def instance_to_dict(instance: generate_states.Instance) -> dict:
+    result = {
+        "name": instance.name,
+        "state": instance.state_name,
+    }
+    if instance.constructor_name is not None:
+        result["constructor"] = instance.constructor_name
+    return result
+
+
 def model_from_source(source: str) -> dict:
-    states, hooks = generate_states.parse_source(source)
-    validate_source_model(states, hooks)
+    states, hooks, instances = generate_states.parse_source(source)
+    validate_source_model(states, hooks, instances)
     return {
         "version": 1,
         "states": [state_to_dict(state) for state in states],
+        "instances": [instance_to_dict(instance) for instance in instances],
         "hooks": [hook_to_dict(hook) for hook in hooks],
     }
 
 
-def validate_source_model(states: list[generate_states.State], hooks: list[generate_states.Hook]) -> None:
-    generate_states.emit_source(states, hooks, "validation")
+def validate_source_model(
+    states: list[generate_states.State],
+    hooks: list[generate_states.Hook],
+    instances: list[generate_states.Instance],
+) -> None:
+    generate_states.emit_source(states, hooks, instances, "validation")
 
 
 def render_source(model: dict) -> str:
@@ -118,6 +133,10 @@ class EditorHandler(BaseHTTPRequestHandler):
                 if path.is_file()
             )
             self.send_json(200, {"project": str(self.server.project_dir), "files": files})
+            return
+
+        if parsed.path == "/api/standard-states":
+            self.send_json(200, {"standardStates": generate_states.standard_states_payload()})
             return
 
         if parsed.path == "/api/schema":

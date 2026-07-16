@@ -61,6 +61,12 @@ The supported schema root is a JSON object:
       ]
     }
   ],
+  "instances": [
+    {
+      "name": "player",
+      "state": "Player"
+    }
+  ],
   "hooks": [
     {
       "name": "HandleInputChanged",
@@ -88,6 +94,10 @@ Parser rules:
 - Additional constructors are partial overrides layered on top of the default constructor.
 - Hook names and referenced state names must use identifiers.
 - Hook triggers currently support `{ "event": "changed" }`.
+- Optional root-level `instances` declare named initial `KekStateStore` slots.
+- Instance names must match `[A-Za-z_][A-Za-z0-9_]*`.
+- Instance `state` values must reference a declared state type.
+- Optional instance `constructor` values must reference an additional constructor on that state type.
 
 ## Type Mapping
 
@@ -124,6 +134,11 @@ The generated header contains:
 - Void-pointer adapter declarations for descriptor use.
 - A generated `KekStateDescriptor` table declaration.
 - A generated helper for adding one default `KekStateStore` slot per generated state type.
+- A generated named slot struct and helpers for adding/removing schema-declared instances in `KekStateStore`.
+- A generated runtime binding struct that owns `KekStateStore`, `KekHookRegistry`, and declared slot ids for a caller-owned `KekRuntime`.
+- Generated per-state create/delete/find helpers for dynamic instances.
+- Generated typed accessors for named instances and arbitrary slot ids.
+- Generated string-field setter helpers for single-string states, useful for standard input/output bridge code.
 - Generated hook function declarations.
 - A generated hook descriptor table declaration.
 
@@ -160,6 +175,14 @@ Reset functions return `0` when the state pointer is null. Otherwise, they assig
 Generated structs expose their fields directly. Callers that need rollback-safe validation should update through `KekStateStore` or `KekStateStorage`, which validate the complete draft before swapping it into place.
 
 `kek_generated_state_store_add_defaults()` adds one default-initialized slot for each generated state type and writes the created slot ids into a caller-provided `size_t slot_ids[KEK_STATE_TYPE_COUNT]` array.
+
+`<name>_state_slots_add_declared()` adds the schema-declared instances to `KekStateStore` and writes their slot ids into the generated `<Name>StateSlots` struct. The slot struct stores only ids; `KekStateStore` remains the source of truth for all instance data.
+
+Generated `<name>_<state>_create()` and `<name>_<state>_delete()` helpers create and delete dynamic instances through `KekStateStore`.
+
+`<name>_runtime_binding_init()` initializes a generated runtime binding for a caller-owned `KekRuntime`. It initializes the state store, adds declared instances, registers generated hook descriptors, and attaches the hook registry. `<name>_runtime_binding_destroy()` detaches hooks and destroys the generated state store.
+
+For generated states with exactly one `String` field, `<name>_<state>_set_<field>()` updates that field through `KekStateStore`, preserving validation and change-event publication.
 
 Generated hook descriptors reference user-provided C hook bodies by name. The generator does not compile hook bodies.
 

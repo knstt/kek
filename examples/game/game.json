@@ -185,6 +185,15 @@
       "constructors": []
     }
   ],
+  "instances": [
+    { "name": "standard_input", "state": "StandardInput" },
+    { "name": "standard_output", "state": "StandardOutput" },
+    { "name": "player", "state": "Player" },
+    { "name": "dungeon_map", "state": "DungeonMap" },
+    { "name": "treasure", "state": "Treasure" },
+    { "name": "goblin", "state": "Goblin" },
+    { "name": "game_progress", "state": "GameProgress" }
+  ],
   "hooks": [
     {
       "name": "RenderAfterProgressChanged",

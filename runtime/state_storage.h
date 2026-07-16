@@ -62,11 +62,17 @@ void kek_state_store_destroy(KekStateStore* store);
 size_t kek_state_store_add(KekStateStore* store,
                            const KekStateDescriptor* descriptor,
                            const void* initial_state);
+size_t kek_state_store_add_default(KekStateStore* store,
+                                   const KekStateDescriptor* descriptor);
+int kek_state_store_remove(KekStateStore* store, size_t slot_id);
 void* kek_state_store_current(KekStateStore* store, size_t slot_id);
 const void* kek_state_store_current_const(const KekStateStore* store, size_t slot_id);
 const KekStateDescriptor* kek_state_store_descriptor(const KekStateStore* store,
-                                                     size_t slot_id);
+                                                      size_t slot_id);
 uint64_t kek_state_store_version(const KekStateStore* store, size_t slot_id);
+size_t kek_state_store_find_first(const KekStateStore* store, size_t state_type_id);
+size_t kek_state_store_find_next(const KekStateStore* store, size_t state_type_id,
+                                 size_t after_slot_id);
 int kek_state_store_update(KekStateStore* store, size_t slot_id,
                            KekStateStorageUpdateFn update, void* context);
 

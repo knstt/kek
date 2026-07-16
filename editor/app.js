@@ -1,7 +1,8 @@
 const state = {
   project: "",
   file: "",
-  model: { states: [], hooks: [] },
+  model: { states: [], instances: [], hooks: [] },
+  standardStates: [],
   selected: null,
   source: "",
 };
@@ -13,6 +14,9 @@ const elements = {
   saveButton: document.getElementById("saveButton"),
   generateButton: document.getElementById("generateButton"),
   addStateButton: document.getElementById("addStateButton"),
+  standardStateSelect: document.getElementById("standardStateSelect"),
+  addStandardStateButton: document.getElementById("addStandardStateButton"),
+  addInstanceButton: document.getElementById("addInstanceButton"),
   addHookButton: document.getElementById("addHookButton"),
   autoLayoutButton: document.getElementById("autoLayoutButton"),
   deleteButton: document.getElementById("deleteButton"),
@@ -70,8 +74,18 @@ function selectedHook() {
   return state.model.hooks[state.selected.index] || null;
 }
 
+function selectedInstance() {
+  if (!state.selected || state.selected.type !== "instance") {
+    return null;
+  }
+  return state.model.instances[state.selected.index] || null;
+}
+
 function sanitizeModel() {
   state.model.version = state.model.version || 1;
+  state.model.states = state.model.states || [];
+  state.model.instances = state.model.instances || [];
+  state.model.hooks = state.model.hooks || [];
   for (const item of state.model.states) {
     item.name = item.name || "State";
     item.fields = item.fields || [];
@@ -91,6 +105,10 @@ function sanitizeModel() {
     hook.on.event = "changed";
     hook.reads = hook.reads || [];
     hook.writes = hook.writes || [];
+  }
+  for (const instance of state.model.instances) {
+    instance.name = instance.name || "instance";
+    instance.state = instance.state || state.model.states[0]?.name || "";
   }
 }
 
@@ -161,6 +179,7 @@ function graphElements() {
   const elements = [];
   const stateIds = new Map();
   const hookIds = new Map();
+  const instanceIds = new Map();
 
   state.model.states.forEach((item, index) => {
     const id = graphNodeId("state", item);
@@ -202,6 +221,33 @@ function graphElements() {
       position,
       classes: state.selected?.type === "hook" && state.selected.index === index ? "selected" : "",
     });
+  });
+
+  state.model.instances.forEach((instance, index) => {
+    const id = graphNodeId("instance", instance);
+    const position = graphPositions.get(id) || { x: 60 + (index % 3) * 280, y: 580 + Math.floor(index / 3) * 140 };
+    instanceIds.set(instance.name, id);
+    const meta = `instance of ${instance.state}`;
+    elements.push({
+      data: {
+        id,
+        type: "instance",
+        index,
+        label: instance.name,
+        displayLabel: `${instance.name}\n${meta}`,
+        meta,
+      },
+      position,
+      classes: state.selected?.type === "instance" && state.selected.index === index ? "selected" : "",
+    });
+  });
+
+  state.model.instances.forEach((instance, index) => {
+    const stateId = stateIds.get(instance.state);
+    const instanceId = instanceIds.get(instance.name);
+    if (stateId && instanceId) {
+      elements.push(edgeElement(`instance:${index}:${instance.state}`, stateId, instanceId, "instance", "instance"));
+    }
   });
 
   state.model.hooks.forEach((hook, hookIndex) => {
@@ -266,6 +312,13 @@ function graphStyles() {
       },
     },
     {
+      selector: "node[type = 'instance']",
+      style: {
+        "background-color": "#14342f",
+        "border-color": "#2dd4bf",
+      },
+    },
+    {
       selector: "edge",
       style: {
         "curve-style": "bezier",
@@ -306,6 +359,14 @@ function graphStyles() {
       style: {
         "line-color": "#c084fc",
         "target-arrow-color": "#c084fc",
+      },
+    },
+    {
+      selector: "edge.instance",
+      style: {
+        "line-color": "#2dd4bf",
+        "line-style": "dotted",
+        "target-arrow-color": "#2dd4bf",
       },
     },
     {
@@ -658,6 +719,34 @@ function renderHookInspector(hook) {
   }));
 }
 
+function constructorNamesForState(stateName) {
+  const item = state.model.states.find((candidate) => candidate.name === stateName);
+  return item ? item.constructors.map((constructor) => constructor.name) : [];
+}
+
+function renderInstanceInspector(instance) {
+  elements.inspectorTitle.textContent = `Instance: ${instance.name}`;
+  elements.inspectorBody.innerHTML = "";
+  elements.inspectorBody.appendChild(input("Name", instance.name, (value) => {
+    instance.name = value;
+    rerenderAll();
+  }));
+  elements.inspectorBody.appendChild(select("State", instance.state, stateNames(), (value) => {
+    instance.state = value;
+    delete instance.constructor;
+    rerenderAll();
+  }));
+  const constructorOptions = ["", ...constructorNamesForState(instance.state)];
+  elements.inspectorBody.appendChild(select("Constructor", instance.constructor || "", constructorOptions, (value) => {
+    if (value === "") {
+      delete instance.constructor;
+    } else {
+      instance.constructor = value;
+    }
+    rerenderAll();
+  }));
+}
+
 function renderInspector() {
   const itemState = selectedState();
   if (itemState) {
@@ -669,8 +758,13 @@ function renderInspector() {
     renderHookInspector(hook);
     return;
   }
+  const instance = selectedInstance();
+  if (instance) {
+    renderInstanceInspector(instance);
+    return;
+  }
   elements.inspectorTitle.textContent = "Nothing selected";
-  elements.inspectorBody.innerHTML = "<p class=\"status\">Select a state or hook node to edit it.</p>";
+  elements.inspectorBody.innerHTML = "<p class=\"status\">Select a state, instance, or hook node to edit it.</p>";
 }
 
 function selectItem(type, index) {
@@ -680,7 +774,18 @@ function selectItem(type, index) {
 }
 
 async function loadProject() {
-  const payload = await requestJson("/api/project");
+  const [payload, standardPayload] = await Promise.all([
+    requestJson("/api/project"),
+    requestJson("/api/standard-states"),
+  ]);
+  state.standardStates = standardPayload.standardStates || [];
+  elements.standardStateSelect.innerHTML = "";
+  for (const preset of state.standardStates) {
+    const option = document.createElement("option");
+    option.value = preset.id;
+    option.textContent = preset.name;
+    elements.standardStateSelect.appendChild(option);
+  }
   state.project = payload.project;
   elements.projectPath.textContent = payload.project;
   elements.schemaSelect.innerHTML = "";
@@ -739,6 +844,35 @@ elements.addStateButton.addEventListener("click", () => {
   selectItem("state", state.model.states.length - 1);
   rerenderAll();
 });
+elements.addStandardStateButton.addEventListener("click", () => {
+  if (state.standardStates.length === 0) {
+    setStatus("No standard states available", true);
+    return;
+  }
+  const preset = state.standardStates.find((item) => item.id === elements.standardStateSelect.value);
+  if (!preset) {
+    setStatus("Invalid standard state selection", true);
+    return;
+  }
+  if (!state.model.states.some((item) => item.name === preset.state.name)) {
+    state.model.states.push(JSON.parse(JSON.stringify(preset.state)));
+  }
+  if (preset.instance && !state.model.instances.some((item) => item.name === preset.instance.name)) {
+    state.model.instances.push(JSON.parse(JSON.stringify(preset.instance)));
+  }
+  state.selected = null;
+  rerenderAll();
+});
+elements.addInstanceButton.addEventListener("click", () => {
+  if (state.model.states.length === 0) {
+    setStatus("Add a state before adding an instance", true);
+    return;
+  }
+  const name = uniqueName("instance", state.model.instances.map((instance) => instance.name));
+  state.model.instances.push({ name, state: state.model.states[0].name });
+  selectItem("instance", state.model.instances.length - 1);
+  rerenderAll();
+});
 elements.addHookButton.addEventListener("click", () => {
   const name = uniqueName("Hook", state.model.hooks.map((hook) => hook.name));
   state.model.hooks.push({ name, on: { state: state.model.states[0]?.name || "", event: "changed" }, reads: [], writes: [] });
@@ -751,6 +885,7 @@ elements.deleteButton.addEventListener("click", () => {
   }
   if (state.selected.type === "state") {
     const removed = state.model.states.splice(state.selected.index, 1)[0];
+    state.model.instances = state.model.instances.filter((instance) => instance.state !== removed.name);
     for (const hook of state.model.hooks) {
       hook.on = hook.on || {};
       if (hook.on.state === removed.name) {
@@ -760,6 +895,8 @@ elements.deleteButton.addEventListener("click", () => {
       hook.reads = hook.reads.filter((name) => name !== removed.name);
       hook.writes = hook.writes.filter((name) => name !== removed.name);
     }
+  } else if (state.selected.type === "instance") {
+    state.model.instances.splice(state.selected.index, 1);
   } else {
     state.model.hooks.splice(state.selected.index, 1);
   }

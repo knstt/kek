@@ -15,16 +15,7 @@ typedef struct WarehouseApp {
     KekRuntime* runtime;
     KekStream* stdin_stream;
     KekStream* stdout_stream;
-    KekStateStore state_store;
-    KekHookRegistry hook_registry;
-    size_t standard_input_slot;
-    size_t standard_output_slot;
-    size_t player_command_slot;
-    size_t worker_slot;
-    size_t warehouse_map_slot;
-    size_t package_slot;
-    size_t delivery_zone_slot;
-    size_t game_status_slot;
+    WarehouseRuntimeBinding binding;
     char input_buffer[WAREHOUSE_TEXT_CAPACITY];
     char output_buffer[WAREHOUSE_TEXT_CAPACITY];
     size_t input_len;
@@ -33,10 +24,16 @@ typedef struct WarehouseApp {
     uint64_t ignored_worker_version;
 } WarehouseApp;
 
-typedef struct TextStateUpdate {
-    char* data;
-    size_t len;
-} TextStateUpdate;
+#define APP_STORE(app) (&(app)->binding.state_store)
+#define APP_SLOTS(app) (&(app)->binding.slots)
+#define standard_input_slot binding.slots.standard_input
+#define standard_output_slot binding.slots.standard_output
+#define player_command_slot binding.slots.player_command
+#define worker_slot binding.slots.worker
+#define warehouse_map_slot binding.slots.warehouse_map
+#define package_slot binding.slots.package
+#define delivery_zone_slot binding.slots.delivery_zone
+#define game_status_slot binding.slots.game_status
 
 typedef struct StateCopyUpdate {
     const void* value;
@@ -51,48 +48,31 @@ typedef struct CommandUpdate {
 } CommandUpdate;
 
 static const Worker* app_worker_const(const WarehouseApp* app) {
-    return (const Worker*)kek_state_store_current_const(&app->state_store, app->worker_slot);
+    return warehouse_worker_const(APP_STORE(app), APP_SLOTS(app));
 }
 
 static const PlayerCommand* app_player_command_const(const WarehouseApp* app) {
-    return (const PlayerCommand*)kek_state_store_current_const(&app->state_store,
-                                                               app->player_command_slot);
+    return warehouse_player_command_const(APP_STORE(app), APP_SLOTS(app));
 }
 
 static const WarehouseMap* app_warehouse_map_const(const WarehouseApp* app) {
-    return (const WarehouseMap*)kek_state_store_current_const(&app->state_store,
-                                                              app->warehouse_map_slot);
+    return warehouse_warehouse_map_const(APP_STORE(app), APP_SLOTS(app));
 }
 
 static const Package* app_package_const(const WarehouseApp* app) {
-    return (const Package*)kek_state_store_current_const(&app->state_store, app->package_slot);
+    return warehouse_package_const(APP_STORE(app), APP_SLOTS(app));
 }
 
 static const DeliveryZone* app_delivery_zone_const(const WarehouseApp* app) {
-    return (const DeliveryZone*)kek_state_store_current_const(&app->state_store,
-                                                             app->delivery_zone_slot);
+    return warehouse_delivery_zone_const(APP_STORE(app), APP_SLOTS(app));
 }
 
 static const GameStatus* app_game_status_const(const WarehouseApp* app) {
-    return (const GameStatus*)kek_state_store_current_const(&app->state_store,
-                                                           app->game_status_slot);
+    return warehouse_game_status_const(APP_STORE(app), APP_SLOTS(app));
 }
 
 static const StandardInput* app_standard_input_const(const WarehouseApp* app) {
-    return (const StandardInput*)kek_state_store_current_const(&app->state_store,
-                                                              app->standard_input_slot);
-}
-
-static void update_standard_input(void* draft, void* context) {
-    TextStateUpdate* text = (TextStateUpdate*)context;
-    StandardInput* state = (StandardInput*)draft;
-    state->input = (KekString){text->data, text->len};
-}
-
-static void update_standard_output(void* draft, void* context) {
-    TextStateUpdate* text = (TextStateUpdate*)context;
-    StandardOutput* state = (StandardOutput*)draft;
-    state->output = (KekString){text->data, text->len};
+    return warehouse_standard_input_const(APP_STORE(app), APP_SLOTS(app));
 }
 
 static void update_state_copy(void* draft, void* context) {
@@ -120,7 +100,7 @@ static void update_reset_state(void* draft, void* context) {
 static int app_commit_state_copy(WarehouseApp* app, size_t slot_id, const void* value,
                                  size_t size) {
     StateCopyUpdate update = {value, size};
-    return kek_state_store_update(&app->state_store, slot_id, update_state_copy, &update);
+    return kek_state_store_update(APP_STORE(app), slot_id, update_state_copy, &update);
 }
 
 static void status_set_message(GameStatus* status, const char* message) {
@@ -136,9 +116,8 @@ static void app_set_input_state(WarehouseApp* app, const char* data, size_t len)
         app->input_buffer[app->input_len] = '\0';
     }
 
-    TextStateUpdate update = {app->input_buffer, app->input_len};
-    kek_state_store_update(&app->state_store, app->standard_input_slot,
-                           update_standard_input, &update);
+    warehouse_standard_input_set_input(APP_STORE(app), app->standard_input_slot,
+                                       app->input_buffer, app->input_len);
 }
 
 static void app_track_output_state(WarehouseApp* app, const char* data, size_t len) {
@@ -156,9 +135,8 @@ static void app_track_output_state(WarehouseApp* app, const char* data, size_t l
         app->output_buffer[app->output_len] = '\0';
     }
 
-    TextStateUpdate update = {app->output_buffer, app->output_len};
-    kek_state_store_update(&app->state_store, app->standard_output_slot,
-                           update_standard_output, &update);
+    warehouse_standard_output_set_output(APP_STORE(app), app->standard_output_slot,
+                                         app->output_buffer, app->output_len);
 }
 
 static void app_write_raw(WarehouseApp* app, const char* data, size_t len) {
@@ -184,10 +162,8 @@ static void warehouse_reset(WarehouseApp* app) {
     size_t slots[] = {app->player_command_slot, app->worker_slot, app->warehouse_map_slot,
                       app->package_slot, app->delivery_zone_slot, app->game_status_slot};
     for (size_t i = 0; i < sizeof(slots) / sizeof(slots[0]); i++) {
-        const KekStateDescriptor* descriptor = kek_state_store_descriptor(&app->state_store,
-                                                                          slots[i]);
-        kek_state_store_update(&app->state_store, slots[i], update_reset_state,
-                               (void*)descriptor);
+        const KekStateDescriptor* descriptor = kek_state_store_descriptor(APP_STORE(app), slots[i]);
+        kek_state_store_update(APP_STORE(app), slots[i], update_reset_state, (void*)descriptor);
     }
 }
 
@@ -274,7 +250,7 @@ static void warehouse_render(WarehouseApp* app) {
 static void warehouse_publish_command(WarehouseApp* app, int dx, int dy, int reset_requested,
                                       int quit_requested) {
     CommandUpdate update = {dx, dy, reset_requested, quit_requested};
-    if (kek_state_store_update(&app->state_store, app->player_command_slot,
+    if (kek_state_store_update(APP_STORE(app), app->player_command_slot,
                                update_player_command, &update)) {
         kek_event_dispatch_pending(kek_runtime_events(app->runtime));
     }
@@ -390,8 +366,7 @@ void UpdatePackageAfterWorkerChanged(KekHookContext* context) {
     }
 
     if (worker_changed && app_commit_state_copy(app, app->worker_slot, &worker, sizeof(worker))) {
-        app->ignored_worker_version = kek_state_store_version(&app->state_store,
-                                                              app->worker_slot);
+        app->ignored_worker_version = kek_state_store_version(APP_STORE(app), app->worker_slot);
     }
     if (package_changed) {
         app_commit_state_copy(app, app->package_slot, &package, sizeof(package));
@@ -527,24 +502,6 @@ static void stream_error_handler(const KekEvent* event, void* context) {
     }
 }
 
-static int app_add_states(WarehouseApp* app) {
-    size_t slots[KEK_STATE_TYPE_COUNT];
-    if (!kek_generated_state_store_add_defaults(&app->state_store, slots)) {
-        return 0;
-    }
-
-    app->standard_input_slot = slots[KEK_STATE_TYPE_STANDARD_INPUT];
-    app->standard_output_slot = slots[KEK_STATE_TYPE_STANDARD_OUTPUT];
-    app->player_command_slot = slots[KEK_STATE_TYPE_PLAYER_COMMAND];
-    app->worker_slot = slots[KEK_STATE_TYPE_WORKER];
-    app->warehouse_map_slot = slots[KEK_STATE_TYPE_WAREHOUSE_MAP];
-    app->package_slot = slots[KEK_STATE_TYPE_PACKAGE];
-    app->delivery_zone_slot = slots[KEK_STATE_TYPE_DELIVERY_ZONE];
-    app->game_status_slot = slots[KEK_STATE_TYPE_GAME_STATUS];
-
-    return 1;
-}
-
 static int app_init(WarehouseApp* app, KekRuntime* runtime, KekStream* stdin_stream,
                     KekStream* stdout_stream) {
     memset(app, 0, sizeof(*app));
@@ -552,19 +509,9 @@ static int app_init(WarehouseApp* app, KekRuntime* runtime, KekStream* stdin_str
     app->stdin_stream = stdin_stream;
     app->stdout_stream = stdout_stream;
 
-    kek_state_store_init(&app->state_store, runtime);
-    if (!app_add_states(app)) {
-        kek_state_store_destroy(&app->state_store);
+    if (!warehouse_runtime_binding_init(&app->binding, runtime, app)) {
         return -1;
     }
-
-    kek_hook_registry_init(&app->hook_registry, runtime, &app->state_store, app);
-    if (!kek_hook_registry_add_many(&app->hook_registry, KekGeneratedHookDescriptors,
-                                    KEK_GENERATED_HOOK_COUNT)) {
-        kek_state_store_destroy(&app->state_store);
-        return -1;
-    }
-    kek_hook_registry_attach(&app->hook_registry);
     return 0;
 }
 
@@ -602,8 +549,7 @@ int main(void) {
 
     int result = kek_runtime_run(&runtime);
     kek_runtime_disable_raw_mode(&runtime, STDIN_FILENO);
-    kek_hook_registry_detach(&app.hook_registry);
-    kek_state_store_destroy(&app.state_store);
+    warehouse_runtime_binding_destroy(&app.binding);
     kek_runtime_destroy(&runtime);
     return result == 0 ? 0 : 1;
 }

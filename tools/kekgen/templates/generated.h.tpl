@@ -8,6 +8,7 @@
 
 #include "runtime/state_storage.h"
 #include "runtime/hook.h"
+#include "runtime/runtime.h"
 
 typedef struct KekString {
     const char* data;
@@ -22,6 +23,8 @@ $state_type_enum
 $state_declarations
 
 $aggregate_declarations
+
+$instance_declarations
 
 extern const KekStateDescriptor KekGeneratedStateDescriptors[KEK_STATE_TYPE_COUNT];
 const KekStateDescriptor* kek_generated_state_descriptor(size_t type_id);

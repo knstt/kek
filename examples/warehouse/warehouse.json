@@ -194,6 +194,16 @@
       "constructors": []
     }
   ],
+  "instances": [
+    { "name": "standard_input", "state": "StandardInput" },
+    { "name": "standard_output", "state": "StandardOutput" },
+    { "name": "player_command", "state": "PlayerCommand" },
+    { "name": "worker", "state": "Worker" },
+    { "name": "warehouse_map", "state": "WarehouseMap" },
+    { "name": "package", "state": "Package" },
+    { "name": "delivery_zone", "state": "DeliveryZone" },
+    { "name": "game_status", "state": "GameStatus" }
+  ],
   "hooks": [
     {
       "name": "ApplyCommandChanged",

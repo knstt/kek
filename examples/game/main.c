@@ -16,15 +16,7 @@ typedef struct GameApp {
     KekStream* stdin_stream;
     KekStream* stdout_stream;
     KekStream* log_stream;
-    KekStateStore state_store;
-    KekHookRegistry hook_registry;
-    size_t standard_input_slot;
-    size_t standard_output_slot;
-    size_t player_slot;
-    size_t dungeon_map_slot;
-    size_t treasure_slot;
-    size_t goblin_slot;
-    size_t game_progress_slot;
+    GameRuntimeBinding binding;
     char input_buffer[GAME_TEXT_CAPACITY];
     char output_buffer[GAME_TEXT_CAPACITY];
     size_t input_len;
@@ -32,15 +24,13 @@ typedef struct GameApp {
     size_t output_len;
 } GameApp;
 
+#define APP_STORE(app) (&(app)->binding.state_store)
+#define APP_SLOTS(app) (&(app)->binding.slots)
+
 static void game_publish_state(GameApp* app);
 static void game_render(GameApp* app);
 static void game_handle_key(GameApp* app, char key);
 static void game_handle_arrow(GameApp* app, char arrow);
-
-typedef struct TextStateUpdate {
-    char* data;
-    size_t len;
-} TextStateUpdate;
 
 typedef struct MoveUpdate {
     int dx;
@@ -48,45 +38,31 @@ typedef struct MoveUpdate {
 } MoveUpdate;
 
 static Player* app_player(GameApp* app) {
-    return (Player*)kek_state_store_current(&app->state_store, app->player_slot);
+    return game_player(APP_STORE(app), APP_SLOTS(app));
 }
 
 static const Player* app_player_const(const GameApp* app) {
-    return (const Player*)kek_state_store_current_const(&app->state_store, app->player_slot);
+    return game_player_const(APP_STORE(app), APP_SLOTS(app));
 }
 
 static const DungeonMap* app_dungeon_map_const(const GameApp* app) {
-    return (const DungeonMap*)kek_state_store_current_const(&app->state_store, app->dungeon_map_slot);
+    return game_dungeon_map_const(APP_STORE(app), APP_SLOTS(app));
 }
 
 static const Treasure* app_treasure_const(const GameApp* app) {
-    return (const Treasure*)kek_state_store_current_const(&app->state_store, app->treasure_slot);
+    return game_treasure_const(APP_STORE(app), APP_SLOTS(app));
 }
 
 static const Goblin* app_goblin_const(const GameApp* app) {
-    return (const Goblin*)kek_state_store_current_const(&app->state_store, app->goblin_slot);
+    return game_goblin_const(APP_STORE(app), APP_SLOTS(app));
 }
 
 static const GameProgress* app_game_progress_const(const GameApp* app) {
-    return (const GameProgress*)kek_state_store_current_const(&app->state_store,
-                                                              app->game_progress_slot);
+    return game_game_progress_const(APP_STORE(app), APP_SLOTS(app));
 }
 
 static const StandardInput* app_standard_input_const(const GameApp* app) {
-    return (const StandardInput*)kek_state_store_current_const(&app->state_store,
-                                                               app->standard_input_slot);
-}
-
-static void update_standard_input(void* draft, void* context) {
-    TextStateUpdate* text = (TextStateUpdate*)context;
-    StandardInput* state = (StandardInput*)draft;
-    state->input = (KekString){text->data, text->len};
-}
-
-static void update_standard_output(void* draft, void* context) {
-    TextStateUpdate* text = (TextStateUpdate*)context;
-    StandardOutput* state = (StandardOutput*)draft;
-    state->output = (KekString){text->data, text->len};
+    return game_standard_input_const(APP_STORE(app), APP_SLOTS(app));
 }
 
 static void game_set_message_on_state(GameProgress* progress, const char* message) {
@@ -102,9 +78,8 @@ static void app_set_input_state(GameApp* app, const char* data, size_t len) {
         app->input_buffer[app->input_len] = '\0';
     }
 
-    TextStateUpdate update = {app->input_buffer, app->input_len};
-    kek_state_store_update(&app->state_store, app->standard_input_slot,
-                           update_standard_input, &update);
+    game_standard_input_set_input(APP_STORE(app), app->binding.slots.standard_input,
+                                  app->input_buffer, app->input_len);
 }
 
 static void app_track_output_state(GameApp* app, const char* data, size_t len) {
@@ -121,9 +96,8 @@ static void app_track_output_state(GameApp* app, const char* data, size_t len) {
         app->output_buffer[app->output_len] = '\0';
     }
 
-    TextStateUpdate update = {app->output_buffer, app->output_len};
-    kek_state_store_update(&app->state_store, app->standard_output_slot,
-                           update_standard_output, &update);
+    game_standard_output_set_output(APP_STORE(app), app->binding.slots.standard_output,
+                                    app->output_buffer, app->output_len);
 }
 
 static void app_write_raw(GameApp* app, const char* data, size_t len) {
@@ -146,10 +120,9 @@ static void app_write(GameApp* app, const char* text) {
 }
 
 static void game_publish_state(GameApp* app) {
-    kek_runtime_publish_state_slot_changed(app->runtime, app_player(app),
-                                           KEK_STATE_TYPE_PLAYER, app->player_slot,
-                                           kek_state_store_version(&app->state_store,
-                                                                   app->player_slot));
+    kek_runtime_publish_state_slot_changed(
+        app->runtime, app_player(app), KEK_STATE_TYPE_PLAYER, app->binding.slots.player,
+        kek_state_store_version(APP_STORE(app), app->binding.slots.player));
 }
 
 static void update_game_message(void* draft, void* context) {
@@ -157,7 +130,7 @@ static void update_game_message(void* draft, void* context) {
 }
 
 static void game_set_message(GameApp* app, const char* message) {
-    kek_state_store_update(&app->state_store, app->game_progress_slot,
+    kek_state_store_update(APP_STORE(app), app->binding.slots.game_progress,
                            update_game_message, (void*)message);
 }
 
@@ -169,13 +142,12 @@ static void update_reset_state(void* draft, void* context) {
 }
 
 static void game_reset(GameApp* app) {
-    size_t slots[] = {app->player_slot, app->dungeon_map_slot, app->treasure_slot,
-                      app->goblin_slot, app->game_progress_slot};
+    size_t slots[] = {app->binding.slots.player, app->binding.slots.dungeon_map,
+                      app->binding.slots.treasure, app->binding.slots.goblin,
+                      app->binding.slots.game_progress};
     for (size_t i = 0; i < sizeof(slots) / sizeof(slots[0]); i++) {
-        const KekStateDescriptor* descriptor = kek_state_store_descriptor(&app->state_store,
-                                                                          slots[i]);
-        kek_state_store_update(&app->state_store, slots[i], update_reset_state,
-                               (void*)descriptor);
+        const KekStateDescriptor* descriptor = kek_state_store_descriptor(APP_STORE(app), slots[i]);
+        kek_state_store_update(APP_STORE(app), slots[i], update_reset_state, (void*)descriptor);
     }
 }
 
@@ -310,7 +282,7 @@ static void update_state_copy(void* draft, void* context) {
 static int app_commit_state_copy(GameApp* app, size_t slot_id, const void* value,
                                  size_t size) {
     StateCopyUpdate update = {value, size};
-    return kek_state_store_update(&app->state_store, slot_id, update_state_copy, &update);
+    return kek_state_store_update(APP_STORE(app), slot_id, update_state_copy, &update);
 }
 
 static int game_apply_move(GameApp* app, const MoveUpdate* move) {
@@ -322,7 +294,8 @@ static int game_apply_move(GameApp* app, const MoveUpdate* move) {
 
     if (progress.game_over) {
         game_set_message_on_state(&progress, "The game is finished. Press R to restart or Q to quit.");
-        return app_commit_state_copy(app, app->game_progress_slot, &progress, sizeof(progress));
+        return app_commit_state_copy(app, app->binding.slots.game_progress, &progress,
+                                     sizeof(progress));
     }
 
     int next_x = player.x + move->dx;
@@ -330,7 +303,8 @@ static int game_apply_move(GameApp* app, const MoveUpdate* move) {
     if (next_x < 1 || next_x > map->width - 2 || next_y < 1 ||
         next_y > map->height - 2) {
         game_set_message_on_state(&progress, "A stone wall blocks that path.");
-        return app_commit_state_copy(app, app->game_progress_slot, &progress, sizeof(progress));
+        return app_commit_state_copy(app, app->binding.slots.game_progress, &progress,
+                                     sizeof(progress));
     }
 
     player.x = next_x;
@@ -373,9 +347,10 @@ static int game_apply_move(GameApp* app, const MoveUpdate* move) {
         return 0;
     }
 
-    int ok = app_commit_state_copy(app, app->player_slot, &player, sizeof(player));
-    ok = app_commit_state_copy(app, app->goblin_slot, &goblin, sizeof(goblin)) && ok;
-    ok = app_commit_state_copy(app, app->game_progress_slot, &progress, sizeof(progress)) && ok;
+    int ok = app_commit_state_copy(app, app->binding.slots.player, &player, sizeof(player));
+    ok = app_commit_state_copy(app, app->binding.slots.goblin, &goblin, sizeof(goblin)) && ok;
+    ok = app_commit_state_copy(app, app->binding.slots.game_progress, &progress,
+                               sizeof(progress)) && ok;
     return ok;
 }
 
@@ -506,26 +481,9 @@ static int app_init(GameApp* app, KekRuntime* runtime, KekStream* stdin_stream,
     app->stdin_stream = stdin_stream;
     app->stdout_stream = stdout_stream;
     app->log_stream = log_stream;
-    kek_state_store_init(&app->state_store, runtime);
-    size_t slots[KEK_STATE_TYPE_COUNT];
-    if (!kek_generated_state_store_add_defaults(&app->state_store, slots)) {
-        kek_state_store_destroy(&app->state_store);
+    if (!game_runtime_binding_init(&app->binding, runtime, app)) {
         return -1;
     }
-    app->standard_input_slot = slots[KEK_STATE_TYPE_STANDARD_INPUT];
-    app->standard_output_slot = slots[KEK_STATE_TYPE_STANDARD_OUTPUT];
-    app->player_slot = slots[KEK_STATE_TYPE_PLAYER];
-    app->dungeon_map_slot = slots[KEK_STATE_TYPE_DUNGEON_MAP];
-    app->treasure_slot = slots[KEK_STATE_TYPE_TREASURE];
-    app->goblin_slot = slots[KEK_STATE_TYPE_GOBLIN];
-    app->game_progress_slot = slots[KEK_STATE_TYPE_GAME_PROGRESS];
-    kek_hook_registry_init(&app->hook_registry, runtime, &app->state_store, app);
-    if (!kek_hook_registry_add_many(&app->hook_registry, KekGeneratedHookDescriptors,
-                                    KEK_GENERATED_HOOK_COUNT)) {
-        kek_state_store_destroy(&app->state_store);
-        return -1;
-    }
-    kek_hook_registry_attach(&app->hook_registry);
     return 0;
 }
 
@@ -578,8 +536,7 @@ int main(void) {
 
     int result = kek_runtime_run(&runtime);
     kek_runtime_disable_raw_mode(&runtime, STDIN_FILENO);
-    kek_hook_registry_detach(&app.hook_registry);
-    kek_state_store_destroy(&app.state_store);
+    game_runtime_binding_destroy(&app.binding);
     kek_runtime_destroy(&runtime);
 
     printf("Keyboard log saved to keyboard_log.txt\n");

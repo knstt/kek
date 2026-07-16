@@ -5,12 +5,10 @@ This file consolidates the unresolved findings that were previously split across
 ## Generator And Schema
 
 - The schema can describe state shape and hook dependency metadata, but state-to-state behavior is still handwritten C.
-- The schema has no way to declare state instances in addition to state types.
 - The schema does not support arrays, enums, nested structs, optional fields, or references.
 - The schema cannot express board cells, walls, packages, delivery zones, or other collection-like data directly.
 - Cross-state invariants cannot be expressed, such as worker position inside map bounds or package delivery requiring the worker to carry it.
-- Generated typed state-store accessors such as `warehouse_worker()` may still be useful in addition to the generated default slot registration helper.
-- Stream-backed `StandardInput` and `StandardOutput` still require manual application wiring.
+- Stream-backed `StandardInput` and `StandardOutput` still require manual stream registration and manual stream-to-state bridge code.
 - The editor helps shape JSON schemas, but it cannot assist with handwritten C behavior, which remains most of the work in an example.
 
 ## Runtime And Events
@@ -31,7 +29,7 @@ This file consolidates the unresolved findings that were previously split across
 
 - Stream-to-state bridging is still duplicated between examples.
 - Text buffer ownership for generated `String` fields is still manual. Applications must provide stable buffers or string literals for borrowed `KekString` views.
-- Typed accessors, state-copy update helpers, reset helpers, and hook registry setup are still duplicated between examples.
+- State-copy update helpers and reset helpers are still duplicated between examples.
 - Game rules involving multiple states are handwritten and manually validated with generated `*_check()` functions.
 - Multi-state commit ordering is manual. The warehouse example commits `Worker`, then `Package`, then `GameStatus` so rendering happens after dependent updates.
 - The warehouse command flow still dispatches pending events immediately after publishing each `PlayerCommand` update as an application-level workaround for missing event snapshots.
@@ -45,7 +43,6 @@ This file consolidates the unresolved findings that were previously split across
 
 ## Open Design Questions
 
-- Should the schema declare instances in addition to state types?
 - Should arrays and enums be added before building richer examples?
 - Should the runtime support transactional batches across several generated state slots?
 - Should hook descriptors define transaction boundaries or final render triggers?

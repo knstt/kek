@@ -47,12 +47,13 @@ flowchart TB
 | Path | Responsibility |
 | --- | --- |
 | `tools/generate_states.py` | CLI wrapper and compatibility import surface. |
-| `tools/kekgen/model.py` | `Field`, `State`, `Constructor`, and `Hook` dataclasses. |
+| `tools/kekgen/model.py` | `Field`, `State`, `Constructor`, `Instance`, and `Hook` dataclasses. |
 | `tools/kekgen/parser.py` | JSON parsing and semantic validation. |
 | `tools/kekgen/naming.py` | Identifier validation and generated C naming rules. |
 | `tools/kekgen/render.py` | Rendering helpers that turn models into template variables. |
 | `tools/kekgen/generator.py` | High-level render/write helpers shared by CLI and editor. |
 | `tools/kekgen/templates/` | Header, source, and graph template files. |
+| `tools/kekgen/standard_states.py` | Editor-facing standard state presets. |
 
 ## Internal Model
 
@@ -63,6 +64,7 @@ The generator uses four dataclasses:
 | `Field` | Stores field name, schema type name, default value, and optional min/max constraints. |
 | `State` | Stores state name, fields, and additional constructors. |
 | `Constructor` | Stores a constructor name plus partial field override values. |
+| `Instance` | Stores a named initial `KekStateStore` slot declaration. |
 | `Hook` | Stores hook trigger plus read/write state dependencies. |
 
 This model is intentionally close to the schema structure. There is no full AST.
@@ -88,6 +90,8 @@ The header, source, and graph emitters render strings from the `State` and `Hook
 The header template owns boilerplate includes, the include guard shape, runtime includes, and declaration section placement. The renderer supplies state enum text, state declarations, aggregate declarations, and hook declarations.
 
 The source template owns file-level boilerplate, string helper implementations, aggregate helper placement, descriptor helper placement, and hook descriptor placement. The renderer supplies per-state functions, aggregate field/check blocks, descriptor entries, hook dependency arrays, and the hook descriptor table.
+
+Generated runtime binding helpers are emitted beside the instance helpers. They do not own `KekRuntime`; they only bind a caller-owned runtime to generated `KekStateStore` slots and generated hook descriptors.
 
 The graph template owns the Markdown and Mermaid shell. The renderer supplies state nodes, hook nodes, trigger edges, read edges, and write edges.
 
