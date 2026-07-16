@@ -1,0 +1,278 @@
+{
+  "version": 1,
+  "states": [
+    {
+      "name": "StandardInput",
+      "fields": [
+        {
+          "name": "input",
+          "type": "String",
+          "default": "",
+          "max": 1000
+        }
+      ],
+      "constructors": []
+    },
+    {
+      "name": "StandardOutput",
+      "fields": [
+        {
+          "name": "output",
+          "type": "String",
+          "default": "",
+          "max": 1000
+        }
+      ],
+      "constructors": []
+    },
+    {
+      "name": "PlayerCommand",
+      "fields": [
+        {
+          "name": "dx",
+          "type": "i32",
+          "default": 0,
+          "min": -1,
+          "max": 1
+        },
+        {
+          "name": "dy",
+          "type": "i32",
+          "default": 0,
+          "min": -1,
+          "max": 1
+        },
+        {
+          "name": "reset_requested",
+          "type": "bool",
+          "default": false
+        },
+        {
+          "name": "quit_requested",
+          "type": "bool",
+          "default": false
+        },
+        {
+          "name": "sequence",
+          "type": "i32",
+          "default": 0,
+          "min": 0
+        }
+      ],
+      "constructors": []
+    },
+    {
+      "name": "Worker",
+      "fields": [
+        {
+          "name": "x",
+          "type": "i32",
+          "default": 1,
+          "min": 1,
+          "max": 8
+        },
+        {
+          "name": "y",
+          "type": "i32",
+          "default": 1,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "name": "energy",
+          "type": "i32",
+          "default": 20,
+          "min": 0,
+          "max": 20
+        },
+        {
+          "name": "score",
+          "type": "i32",
+          "default": 0,
+          "min": 0,
+          "max": 999
+        },
+        {
+          "name": "carrying",
+          "type": "bool",
+          "default": false
+        }
+      ],
+      "constructors": []
+    },
+    {
+      "name": "WarehouseMap",
+      "fields": [
+        {
+          "name": "width",
+          "type": "i32",
+          "default": 10,
+          "min": 10,
+          "max": 10
+        },
+        {
+          "name": "height",
+          "type": "i32",
+          "default": 7,
+          "min": 7,
+          "max": 7
+        }
+      ],
+      "constructors": []
+    },
+    {
+      "name": "Package",
+      "fields": [
+        {
+          "name": "package_x",
+          "type": "i32",
+          "default": 7,
+          "min": 1,
+          "max": 8
+        },
+        {
+          "name": "package_y",
+          "type": "i32",
+          "default": 1,
+          "min": 1,
+          "max": 5
+        },
+        {
+          "name": "delivered",
+          "type": "bool",
+          "default": false
+        }
+      ],
+      "constructors": []
+    },
+    {
+      "name": "DeliveryZone",
+      "fields": [
+        {
+          "name": "zone_x",
+          "type": "i32",
+          "default": 8,
+          "min": 1,
+          "max": 8
+        },
+        {
+          "name": "zone_y",
+          "type": "i32",
+          "default": 5,
+          "min": 1,
+          "max": 5
+        }
+      ],
+      "constructors": []
+    },
+    {
+      "name": "GameStatus",
+      "fields": [
+        {
+          "name": "turn",
+          "type": "i32",
+          "default": 0,
+          "min": 0
+        },
+        {
+          "name": "message",
+          "type": "String",
+          "default": "Pick up the package and deliver it before your energy runs out.",
+          "max": 240
+        },
+        {
+          "name": "game_over",
+          "type": "bool",
+          "default": false
+        },
+        {
+          "name": "won",
+          "type": "bool",
+          "default": false
+        }
+      ],
+      "constructors": []
+    }
+  ],
+  "hooks": [
+    {
+      "name": "ApplyCommandChanged",
+      "on": {
+        "state": "PlayerCommand",
+        "event": "changed"
+      },
+      "reads": [
+        "PlayerCommand",
+        "Worker",
+        "WarehouseMap",
+        "GameStatus"
+      ],
+      "writes": [
+        "Worker",
+        "GameStatus"
+      ]
+    },
+    {
+      "name": "UpdatePackageAfterWorkerChanged",
+      "on": {
+        "state": "Worker",
+        "event": "changed"
+      },
+      "reads": [
+        "Worker",
+        "Package",
+        "DeliveryZone"
+      ],
+      "writes": [
+        "Package",
+        "Worker",
+        "GameStatus"
+      ]
+    },
+    {
+      "name": "UpdateStatusAfterPackageChanged",
+      "on": {
+        "state": "Package",
+        "event": "changed"
+      },
+      "reads": [
+        "Package",
+        "Worker",
+        "GameStatus"
+      ],
+      "writes": [
+        "GameStatus"
+      ]
+    },
+    {
+      "name": "RenderAfterStatusChanged",
+      "on": {
+        "state": "GameStatus",
+        "event": "changed"
+      },
+      "reads": [
+        "Worker",
+        "WarehouseMap",
+        "Package",
+        "DeliveryZone",
+        "GameStatus"
+      ],
+      "writes": [
+        "StandardOutput"
+      ]
+    },
+    {
+      "name": "HandleInputChanged",
+      "on": {
+        "state": "StandardInput",
+        "event": "changed"
+      },
+      "reads": [
+        "StandardInput"
+      ],
+      "writes": [
+        "PlayerCommand"
+      ]
+    }
+  ]
+}

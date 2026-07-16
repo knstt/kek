@@ -5,3 +5,4 @@ out/
 /main
 /keyboard_log.txt
 generated/
+__pycache__/
