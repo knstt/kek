@@ -26,5 +26,6 @@ int kek_runtime_register_stream(KekRuntime* runtime, int fd, KekStreamMode mode,
 KekStream* kek_runtime_get_stream(KekRuntime* runtime, size_t state_id);
 size_t kek_stream_write(KekStream* stream, const char* data);
 size_t kek_stream_write_raw(KekStream* stream, const char* data, size_t len);
+size_t kek_stream_flush(KekStream* stream);
 
 #endif

@@ -155,3 +155,28 @@ size_t kek_stream_write_raw(KekStream* stream, const char* data, size_t len) {
     }
     return to_copy;
 }
+
+size_t kek_stream_flush(KekStream* stream) {
+    if (!stream || stream->mode != KEK_STREAM_WRITE || stream->closed) {
+        return 0;
+    }
+
+    size_t total = 0;
+    while (stream->length > 0) {
+        ssize_t written = write(stream->fd, stream->buffer, stream->length);
+        if (written > 0) {
+            size_t count = (size_t)written;
+            memmove(stream->buffer, stream->buffer + count, stream->length - count);
+            stream->length -= count;
+            total += count;
+        } else if (written < 0 && errno == EINTR) {
+            continue;
+        } else if (written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            break;
+        } else {
+            stream->closed = 1;
+            break;
+        }
+    }
+    return total;
+}

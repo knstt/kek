@@ -57,7 +57,7 @@ flowchart TD
 | `editor/` | Plain HTML/CSS/JS project schema editor. |
 | `runtime/` | C runtime modules. |
 | `examples/` | Example schemas, applications, and per-example Makefiles. |
-| `generated/` | Generated C output. |
+| `examples/<name>/generated/` | Per-example generated C output. |
 | `Makefile` | Builds the runtime library used by examples. |
 | `doc/generator/` | Generator documentation. |
 | `doc/runtime/` | Runtime documentation. |
@@ -85,9 +85,9 @@ small local API server and reuses the existing generator parser for validation.
 
 ## Runtime Example
 
-`examples/game/main.c` builds a small terminal dungeon demo around the generated `GameState`.
+`examples/game/main.c` builds a small terminal dungeon demo around generated states.
 It registers stdin, stdout, and log streams with the runtime, stores generated
-state through `KekStateStorage`, validates updates before swapping them in, and
+state through `KekStateStore`, validates updates before swapping them in, and
 renders the current state after game actions.
 
 ## Current Boundaries
@@ -101,6 +101,8 @@ Implemented in the generator:
 - Extra constructors as partial overrides of default constructors.
 - Generated `*_reset()` functions that restore defaults.
 - C header/source generation.
+- Snake-case generated state type macros.
+- Generated default slot registration helper for `KekStateStore`.
 
 Implemented in the runtime:
 
@@ -109,6 +111,7 @@ Implemented in the runtime:
 - Fixed-size runtime state registry.
 - `select()`-based event loop.
 - Runtime stream states for file descriptors.
+- Explicit write-stream flush support.
 - Rollback-safe generated state storage.
 - Independent generated state slots.
 - Multiple instances per generated state type.
@@ -119,7 +122,6 @@ Not implemented yet:
 - Full language parsing.
 - Compiled function, transition, or hook bodies.
 - Full generated runtime wiring.
-- Rollback semantics.
 - Per-state queues.
 - Generated-state ownership management.
 - Hook body compilation.

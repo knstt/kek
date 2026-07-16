@@ -127,7 +127,12 @@ static void app_track_output_state(GameApp* app, const char* data, size_t len) {
 }
 
 static void app_write_raw(GameApp* app, const char* data, size_t len) {
+    kek_stream_flush(app->stdout_stream);
     size_t written = kek_stream_write_raw(app->stdout_stream, data, len);
+    if (written != len) {
+        kek_stream_flush(app->stdout_stream);
+        written += kek_stream_write_raw(app->stdout_stream, data + written, len - written);
+    }
     if (written != len) {
         fprintf(stderr, "stdout stream buffer full, dropped %zu bytes\n", len - written);
     }
@@ -476,6 +481,11 @@ static void stream_data_handler(const KekEvent* event, void* context) {
     app_set_input_state(app, event->data, event->data_len);
     size_t logged = kek_stream_write_raw(app->log_stream, event->data, event->data_len);
     if (logged != event->data_len) {
+        kek_stream_flush(app->log_stream);
+        logged += kek_stream_write_raw(app->log_stream, event->data + logged,
+                                       event->data_len - logged);
+    }
+    if (logged != event->data_len) {
         fprintf(stderr, "log stream buffer full, dropped %zu bytes\n", event->data_len - logged);
     }
 
@@ -497,37 +507,18 @@ static int app_init(GameApp* app, KekRuntime* runtime, KekStream* stdin_stream,
     app->stdout_stream = stdout_stream;
     app->log_stream = log_stream;
     kek_state_store_init(&app->state_store, runtime);
-    app->standard_input_slot = kek_state_store_add(&app->state_store,
-                                                   kek_generated_state_descriptor(KEK_STATE_TYPE_STANDARDINPUT),
-                                                   NULL);
-    app->standard_output_slot = kek_state_store_add(&app->state_store,
-                                                    kek_generated_state_descriptor(KEK_STATE_TYPE_STANDARDOUTPUT),
-                                                    NULL);
-    app->player_slot = kek_state_store_add(&app->state_store,
-                                           kek_generated_state_descriptor(KEK_STATE_TYPE_PLAYER),
-                                           NULL);
-    app->dungeon_map_slot = kek_state_store_add(&app->state_store,
-                                                kek_generated_state_descriptor(KEK_STATE_TYPE_DUNGEONMAP),
-                                                NULL);
-    app->treasure_slot = kek_state_store_add(&app->state_store,
-                                             kek_generated_state_descriptor(KEK_STATE_TYPE_TREASURE),
-                                             NULL);
-    app->goblin_slot = kek_state_store_add(&app->state_store,
-                                           kek_generated_state_descriptor(KEK_STATE_TYPE_GOBLIN),
-                                           NULL);
-    app->game_progress_slot = kek_state_store_add(&app->state_store,
-                                                  kek_generated_state_descriptor(KEK_STATE_TYPE_GAMEPROGRESS),
-                                                  NULL);
-    if (app->standard_input_slot == KEK_STATE_INVALID_ID ||
-        app->standard_output_slot == KEK_STATE_INVALID_ID ||
-        app->player_slot == KEK_STATE_INVALID_ID ||
-        app->dungeon_map_slot == KEK_STATE_INVALID_ID ||
-        app->treasure_slot == KEK_STATE_INVALID_ID ||
-        app->goblin_slot == KEK_STATE_INVALID_ID ||
-        app->game_progress_slot == KEK_STATE_INVALID_ID) {
+    size_t slots[KEK_STATE_TYPE_COUNT];
+    if (!kek_generated_state_store_add_defaults(&app->state_store, slots)) {
         kek_state_store_destroy(&app->state_store);
         return -1;
     }
+    app->standard_input_slot = slots[KEK_STATE_TYPE_STANDARD_INPUT];
+    app->standard_output_slot = slots[KEK_STATE_TYPE_STANDARD_OUTPUT];
+    app->player_slot = slots[KEK_STATE_TYPE_PLAYER];
+    app->dungeon_map_slot = slots[KEK_STATE_TYPE_DUNGEON_MAP];
+    app->treasure_slot = slots[KEK_STATE_TYPE_TREASURE];
+    app->goblin_slot = slots[KEK_STATE_TYPE_GOBLIN];
+    app->game_progress_slot = slots[KEK_STATE_TYPE_GAME_PROGRESS];
     kek_hook_registry_init(&app->hook_registry, runtime, &app->state_store, app);
     if (!kek_hook_registry_add_many(&app->hook_registry, KekGeneratedHookDescriptors,
                                     KEK_GENERATED_HOOK_COUNT)) {

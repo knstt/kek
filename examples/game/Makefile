@@ -3,11 +3,11 @@ CC ?= cc
 CFLAGS ?= -std=c11 -Wall -Wextra -Werror
 
 ROOT := ../..
-CPPFLAGS ?= -I$(ROOT) -I$(ROOT)/generated -I$(ROOT)/runtime
+CPPFLAGS ?= -I. -I$(ROOT) -I$(ROOT)/runtime
 
 SCHEMA := game.json
 EXAMPLE_MAIN := main.c
-GENERATED_DIR := $(ROOT)/generated
+GENERATED_DIR := generated
 GENERATED_NAME := game
 GENERATED_C := $(GENERATED_DIR)/$(GENERATED_NAME).c
 GENERATED_H := $(GENERATED_DIR)/$(GENERATED_NAME).h

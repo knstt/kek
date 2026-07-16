@@ -149,6 +149,8 @@ Drain is currently used to flush pending write-stream data and dispatch remainin
 
 The stream buffer capacity is `KEK_STREAM_BUFFER_CAPACITY`.
 
+`kek_stream_flush()` attempts to synchronously write any currently buffered bytes for a write stream. It is useful for applications that need bounded-buffer backpressure before queuing more output.
+
 ## Raw Terminal Mode
 
 The runtime can put a TTY file descriptor into raw-ish mode by disabling canonical input and echo.

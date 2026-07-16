@@ -123,10 +123,13 @@ The generated header contains:
 - A generated state type enum.
 - Void-pointer adapter declarations for descriptor use.
 - A generated `KekStateDescriptor` table declaration.
+- A generated helper for adding one default `KekStateStore` slot per generated state type.
 - Generated hook function declarations.
 - A generated hook descriptor table declaration.
 
-State names are preserved. Aggregate field names are derived from state names by converting CamelCase to snake_case.
+State names are preserved. Aggregate field names and generated state type macros are derived from state names by converting CamelCase to snake_case. For example, `StandardInput` becomes `standard_input` in the aggregate and `KEK_STATE_TYPE_STANDARD_INPUT` in the enum.
+
+Generated headers include runtime headers as `runtime/...`, so generated output can live in project-local directories when the compiler include path points at the repository root.
 
 ## Generated Source
 
@@ -142,6 +145,7 @@ The generated source contains:
 - Aggregate reset function.
 - Void-pointer descriptor adapters.
 - A generated descriptor table.
+- A generated default slot registration helper.
 - Generated hook read/write dependency arrays.
 - A generated hook descriptor table.
 
@@ -153,7 +157,9 @@ Check functions return `0` when the state pointer is null or any generated `min`
 
 Reset functions return `0` when the state pointer is null. Otherwise, they assign the corresponding default value into the existing object and return the result of the corresponding check function.
 
-Generated structs expose their fields directly. Callers that need rollback-safe validation should update through `KekStateStorage`, which validates the complete draft before swapping it into place.
+Generated structs expose their fields directly. Callers that need rollback-safe validation should update through `KekStateStore` or `KekStateStorage`, which validate the complete draft before swapping it into place.
+
+`kek_generated_state_store_add_defaults()` adds one default-initialized slot for each generated state type and writes the created slot ids into a caller-provided `size_t slot_ids[KEK_STATE_TYPE_COUNT]` array.
 
 Generated hook descriptors reference user-provided C hook bodies by name. The generator does not compile hook bodies.
 

@@ -181,7 +181,7 @@ def aggregate_state_name(name: str) -> str:
 
 
 def state_type_macro(name: str) -> str:
-    return f"KEK_STATE_TYPE_{name.upper()}"
+    return f"KEK_STATE_TYPE_{c_identifier_from_type(name).upper()}"
 
 
 def field_map(state: State) -> dict[str, Field]:
@@ -257,8 +257,8 @@ def emit_header(states: list[State], hooks: list[Hook], name: str) -> str:
         "#include <stddef.h>",
         "#include <stdint.h>",
         "",
-        "#include \"../runtime/state_storage.h\"",
-        "#include \"../runtime/hook.h\"",
+        "#include \"runtime/state_storage.h\"",
+        "#include \"runtime/hook.h\"",
         "",
         "typedef struct KekString {",
         "    const char* data;",
@@ -305,6 +305,8 @@ def emit_header(states: list[State], hooks: list[Hook], name: str) -> str:
     lines.append("")
     lines.append("extern const KekStateDescriptor KekGeneratedStateDescriptors[KEK_STATE_TYPE_COUNT];")
     lines.append("const KekStateDescriptor* kek_generated_state_descriptor(size_t type_id);")
+    lines.append("int kek_generated_state_store_add_defaults(KekStateStore* store,")
+    lines.append("                                           size_t slot_ids[KEK_STATE_TYPE_COUNT]);")
     lines.append("")
     lines.append(f"#define KEK_GENERATED_HOOK_COUNT {len(hooks)}")
     for hook in hooks:
@@ -439,6 +441,24 @@ def emit_source(states: list[State], hooks: list[Hook], name: str) -> str:
     lines.append("        return 0;")
     lines.append("    }")
     lines.append("    return &KekGeneratedStateDescriptors[type_id];")
+    lines.append("}")
+    lines.append("")
+
+    lines.append("int kek_generated_state_store_add_defaults(KekStateStore* store,")
+    lines.append("                                           size_t slot_ids[KEK_STATE_TYPE_COUNT]) {")
+    lines.append("    if (store == 0 || slot_ids == 0) {")
+    lines.append("        return 0;")
+    lines.append("    }")
+    lines.append("    for (size_t i = 0; i < KEK_STATE_TYPE_COUNT; i++) {")
+    lines.append("        slot_ids[i] = KEK_STATE_INVALID_ID;")
+    lines.append("    }")
+    lines.append("    for (size_t i = 0; i < KEK_STATE_TYPE_COUNT; i++) {")
+    lines.append("        slot_ids[i] = kek_state_store_add(store, &KekGeneratedStateDescriptors[i], 0);")
+    lines.append("        if (slot_ids[i] == KEK_STATE_INVALID_ID) {")
+    lines.append("            return 0;")
+    lines.append("        }")
+    lines.append("    }")
+    lines.append("    return 1;")
     lines.append("}")
     lines.append("")
 

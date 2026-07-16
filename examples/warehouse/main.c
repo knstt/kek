@@ -162,7 +162,12 @@ static void app_track_output_state(WarehouseApp* app, const char* data, size_t l
 }
 
 static void app_write_raw(WarehouseApp* app, const char* data, size_t len) {
+    kek_stream_flush(app->stdout_stream);
     size_t written = kek_stream_write_raw(app->stdout_stream, data, len);
+    if (written != len) {
+        kek_stream_flush(app->stdout_stream);
+        written += kek_stream_write_raw(app->stdout_stream, data + written, len - written);
+    }
     if (written != len) {
         fprintf(stderr, "stdout stream buffer full, dropped %zu bytes\n", len - written);
     }
@@ -523,39 +528,21 @@ static void stream_error_handler(const KekEvent* event, void* context) {
 }
 
 static int app_add_states(WarehouseApp* app) {
-    app->standard_input_slot = kek_state_store_add(&app->state_store,
-                                                   kek_generated_state_descriptor(KEK_STATE_TYPE_STANDARDINPUT),
-                                                   NULL);
-    app->standard_output_slot = kek_state_store_add(&app->state_store,
-                                                    kek_generated_state_descriptor(KEK_STATE_TYPE_STANDARDOUTPUT),
-                                                    NULL);
-    app->player_command_slot = kek_state_store_add(&app->state_store,
-                                                   kek_generated_state_descriptor(KEK_STATE_TYPE_PLAYERCOMMAND),
-                                                   NULL);
-    app->worker_slot = kek_state_store_add(&app->state_store,
-                                           kek_generated_state_descriptor(KEK_STATE_TYPE_WORKER),
-                                           NULL);
-    app->warehouse_map_slot = kek_state_store_add(&app->state_store,
-                                                  kek_generated_state_descriptor(KEK_STATE_TYPE_WAREHOUSEMAP),
-                                                  NULL);
-    app->package_slot = kek_state_store_add(&app->state_store,
-                                            kek_generated_state_descriptor(KEK_STATE_TYPE_PACKAGE),
-                                            NULL);
-    app->delivery_zone_slot = kek_state_store_add(&app->state_store,
-                                                  kek_generated_state_descriptor(KEK_STATE_TYPE_DELIVERYZONE),
-                                                  NULL);
-    app->game_status_slot = kek_state_store_add(&app->state_store,
-                                                kek_generated_state_descriptor(KEK_STATE_TYPE_GAMESTATUS),
-                                                NULL);
+    size_t slots[KEK_STATE_TYPE_COUNT];
+    if (!kek_generated_state_store_add_defaults(&app->state_store, slots)) {
+        return 0;
+    }
 
-    return app->standard_input_slot != KEK_STATE_INVALID_ID &&
-           app->standard_output_slot != KEK_STATE_INVALID_ID &&
-           app->player_command_slot != KEK_STATE_INVALID_ID &&
-           app->worker_slot != KEK_STATE_INVALID_ID &&
-           app->warehouse_map_slot != KEK_STATE_INVALID_ID &&
-           app->package_slot != KEK_STATE_INVALID_ID &&
-           app->delivery_zone_slot != KEK_STATE_INVALID_ID &&
-           app->game_status_slot != KEK_STATE_INVALID_ID;
+    app->standard_input_slot = slots[KEK_STATE_TYPE_STANDARD_INPUT];
+    app->standard_output_slot = slots[KEK_STATE_TYPE_STANDARD_OUTPUT];
+    app->player_command_slot = slots[KEK_STATE_TYPE_PLAYER_COMMAND];
+    app->worker_slot = slots[KEK_STATE_TYPE_WORKER];
+    app->warehouse_map_slot = slots[KEK_STATE_TYPE_WAREHOUSE_MAP];
+    app->package_slot = slots[KEK_STATE_TYPE_PACKAGE];
+    app->delivery_zone_slot = slots[KEK_STATE_TYPE_DELIVERY_ZONE];
+    app->game_status_slot = slots[KEK_STATE_TYPE_GAME_STATUS];
+
+    return 1;
 }
 
 static int app_init(WarehouseApp* app, KekRuntime* runtime, KekStream* stdin_stream,
