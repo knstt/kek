@@ -1,0 +1,190 @@
+{
+  "version": 1,
+  "enums": [
+    {
+      "name": "GameMode",
+      "values": ["Menu", "Playing", "Paused", "Upgrade", "GameOver", "Victory"]
+    },
+    {
+      "name": "EnemyKind",
+      "values": ["Grunt", "Runner", "Tank", "Boss"]
+    },
+    {
+      "name": "PickupKind",
+      "values": ["Health", "RapidFire", "Shield", "Score"]
+    },
+    {
+      "name": "HudMessageKind",
+      "values": ["Info", "Damage", "Heal", "Reward", "Warning"]
+    }
+  ],
+  "states": [
+    {
+      "name": "timer",
+      "type": "Timer",
+      "values": {
+        "interval_ms": 250,
+        "enabled": true
+      }
+    },
+    {
+      "name": "GameSession",
+      "fields": [
+        {"name": "mode", "type": "GameMode", "default": "Menu"},
+        {"name": "score", "type": "i32", "default": 0, "min": 0},
+        {"name": "combo", "type": "i32", "default": 0, "min": 0, "max": 99},
+        {"name": "combo_timer", "type": "f32", "default": 0, "min": 0, "max": 5},
+        {"name": "time_alive", "type": "f32", "default": 0, "min": 0},
+        {"name": "shake", "type": "f32", "default": 0, "min": 0, "max": 1},
+        {"name": "next_upgrade_score", "type": "i32", "default": 600, "min": 1, "max": 999999},
+        {"name": "debug", "type": "bool", "default": false}
+      ],
+      "constructors": [
+        {
+          "name": "playing",
+          "values": {"mode": "Playing"}
+        }
+      ]
+    },
+    {
+      "name": "InputIntent",
+      "fields": [
+        {"name": "move_x", "type": "f32", "default": 0, "min": -1, "max": 1},
+        {"name": "move_y", "type": "f32", "default": 0, "min": -1, "max": 1},
+        {"name": "aim_x", "type": "f32", "default": 1, "min": -1, "max": 1},
+        {"name": "aim_y", "type": "f32", "default": 0, "min": -1, "max": 1},
+        {"name": "shoot", "type": "bool", "default": false},
+        {"name": "dash", "type": "bool", "default": false},
+        {"name": "pause", "type": "bool", "default": false},
+        {"name": "confirm", "type": "bool", "default": false}
+      ]
+    },
+    {
+      "name": "Player",
+      "fields": [
+        {"name": "x", "type": "f32", "default": 0, "min": -2000, "max": 2000},
+        {"name": "y", "type": "f32", "default": 0, "min": -2000, "max": 2000},
+        {"name": "vx", "type": "f32", "default": 0, "min": -1500, "max": 1500},
+        {"name": "vy", "type": "f32", "default": 0, "min": -1500, "max": 1500},
+        {"name": "health", "type": "i32", "default": 100, "min": 0, "max": 150},
+        {"name": "max_health", "type": "i32", "default": 100, "min": 1, "max": 150},
+        {"name": "shield", "type": "i32", "default": 0, "min": 0, "max": 100},
+        {"name": "xp", "type": "i32", "default": 0, "min": 0},
+        {"name": "level", "type": "i32", "default": 1, "min": 1, "max": 10},
+        {"name": "fire_cooldown", "type": "f32", "default": 0, "min": 0, "max": 2},
+        {"name": "dash_cooldown", "type": "f32", "default": 0, "min": 0, "max": 4},
+        {"name": "rapid_timer", "type": "f32", "default": 0, "min": 0, "max": 12},
+        {"name": "invulnerable_timer", "type": "f32", "default": 0, "min": 0, "max": 3}
+      ],
+      "constructors": [
+        {
+          "name": "bruiser",
+          "values": {"health": 140, "max_health": 140, "shield": 20}
+        }
+      ]
+    },
+    {
+      "name": "WaveDirector",
+      "fields": [
+        {"name": "wave", "type": "i32", "default": 0, "min": 0, "max": 6},
+        {"name": "spawn_budget", "type": "i32", "default": 0, "min": 0, "max": 60},
+        {"name": "spawn_timer", "type": "f32", "default": 0, "min": 0, "max": 10},
+        {"name": "active_enemies", "type": "i32", "default": 0, "min": 0, "max": 128},
+        {"name": "boss_spawned", "type": "bool", "default": false}
+      ]
+    },
+    {
+      "name": "CameraRig",
+      "fields": [
+        {"name": "x", "type": "f32", "default": 0, "min": -2000, "max": 2000},
+        {"name": "y", "type": "f32", "default": 0, "min": -2000, "max": 2000},
+        {"name": "zoom", "type": "f32", "default": 1, "min": 0.5, "max": 2}
+      ]
+    },
+    {
+      "name": "Enemy",
+      "fields": [
+        {"name": "kind", "type": "EnemyKind", "default": "Grunt"},
+        {"name": "x", "type": "f32", "default": 0, "min": -2400, "max": 2400},
+        {"name": "y", "type": "f32", "default": 0, "min": -2400, "max": 2400},
+        {"name": "vx", "type": "f32", "default": 0, "min": -900, "max": 900},
+        {"name": "vy", "type": "f32", "default": 0, "min": -900, "max": 900},
+        {"name": "health", "type": "i32", "default": 25, "min": 0, "max": 600},
+        {"name": "damage", "type": "i32", "default": 8, "min": 1, "max": 40},
+        {"name": "radius", "type": "f32", "default": 16, "min": 8, "max": 60},
+        {"name": "flash", "type": "f32", "default": 0, "min": 0, "max": 1}
+      ],
+      "constructors": [
+        {"name": "runner", "values": {"kind": "Runner", "health": 18, "damage": 6, "radius": 13}},
+        {"name": "tank", "values": {"kind": "Tank", "health": 70, "damage": 15, "radius": 24}},
+        {"name": "boss", "values": {"kind": "Boss", "health": 500, "damage": 24, "radius": 42}}
+      ]
+    },
+    {
+      "name": "Projectile",
+      "fields": [
+        {"name": "x", "type": "f32", "default": 0, "min": -2600, "max": 2600},
+        {"name": "y", "type": "f32", "default": 0, "min": -2600, "max": 2600},
+        {"name": "vx", "type": "f32", "default": 0, "min": -1600, "max": 1600},
+        {"name": "vy", "type": "f32", "default": 0, "min": -1600, "max": 1600},
+        {"name": "life", "type": "f32", "default": 1.2, "min": 0, "max": 5},
+        {"name": "damage", "type": "i32", "default": 15, "min": 1, "max": 120},
+        {"name": "pierce", "type": "i32", "default": 1, "min": 0, "max": 5}
+      ]
+    },
+    {
+      "name": "Pickup",
+      "fields": [
+        {"name": "kind", "type": "PickupKind", "default": "Health"},
+        {"name": "x", "type": "f32", "default": 0, "min": -2200, "max": 2200},
+        {"name": "y", "type": "f32", "default": 0, "min": -2200, "max": 2200},
+        {"name": "value", "type": "i32", "default": 15, "min": 1, "max": 500},
+        {"name": "life", "type": "f32", "default": 18, "min": 0, "max": 30},
+        {"name": "pulse", "type": "f32", "default": 0, "min": 0, "max": 1000000}
+      ]
+    },
+    {
+      "name": "HudMessage",
+      "fields": [
+        {"name": "kind", "type": "HudMessageKind", "default": "Info"},
+        {"name": "x", "type": "f32", "default": 0, "min": -2400, "max": 2400},
+        {"name": "y", "type": "f32", "default": 0, "min": -2400, "max": 2400},
+        {"name": "value", "type": "i32", "default": 0, "min": -9999, "max": 999999},
+        {"name": "life", "type": "f32", "default": 1, "min": 0, "max": 3}
+      ]
+    }
+  ],
+  "instances": [
+    {"name": "session", "state": "GameSession"},
+    {"name": "input", "state": "InputIntent"},
+    {"name": "player", "state": "Player"},
+    {"name": "wave", "state": "WaveDirector"},
+    {"name": "camera", "state": "CameraRig"}
+  ],
+  "hooks": [
+    {
+      "name": "OnFrameTimer",
+      "on": {"instance": "timer", "event": "changed", "fields": ["tick"]},
+      "reads": ["Timer", "GameSession", "WaveDirector"],
+      "writes": ["WaveDirector"]
+    },
+    {
+      "name": "OnPlayerHealthChanged",
+      "on": {"instance": "player", "event": "changed", "fields": ["health"]},
+      "reads": ["Player", "GameSession"],
+      "writes": ["GameSession"]
+    },
+    {
+      "name": "OnWaveChanged",
+      "on": {"instance": "wave", "event": "changed", "fields": ["wave"]},
+      "reads": ["WaveDirector", "GameSession"],
+      "writes": ["GameSession"]
+    },
+    {
+      "name": "OnScoreChanged",
+      "on": {"instance": "session", "event": "changed", "fields": ["score", "combo"]},
+      "reads": ["GameSession"],
+      "writes": ["GameSession"]
+    }
+  ]
+}
