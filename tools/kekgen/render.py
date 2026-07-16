@@ -2,7 +2,7 @@ import json
 from importlib import resources
 from string import Template
 
-from .model import Field, Hook, Instance, State
+from .model import Enum, Field, Hook, Instance, State
 from .naming import aggregate_state_name, c_identifier_from_type, generated_guard, state_type_macro
 
 
@@ -18,14 +18,22 @@ TYPE_MAP = {
 }
 
 
-def emit_header(states: list[State], hooks: list[Hook], instances: list[Instance] | str | None = None, name: str | None = None) -> str:
+def emit_header(
+    states: list[State],
+    hooks: list[Hook],
+    instances: list[Instance] | str | None = None,
+    name: str | None = None,
+    enums: list[Enum] | None = None,
+) -> str:
     if name is None:
         name = str(instances)
         instances = []
     instances = instances if isinstance(instances, list) else []
+    enums = enums or []
     return render_template(
         "generated.h.tpl",
         guard=generated_guard(name),
+        enum_declarations=render_enum_declarations(enums),
         state_type_enum=render_state_type_enum(states),
         state_declarations=render_state_declarations(states),
         aggregate_declarations=render_aggregate_declarations(states, name),
@@ -35,16 +43,23 @@ def emit_header(states: list[State], hooks: list[Hook], instances: list[Instance
     )
 
 
-def emit_source(states: list[State], hooks: list[Hook], instances: list[Instance] | str | None = None, name: str | None = None) -> str:
+def emit_source(
+    states: list[State],
+    hooks: list[Hook],
+    instances: list[Instance] | str | None = None,
+    name: str | None = None,
+    enums: list[Enum] | None = None,
+) -> str:
     if name is None:
         name = str(instances)
         instances = []
     instances = instances if isinstance(instances, list) else []
+    enums = enums or []
     aggregate_name = aggregate_state_name(name)
     return render_template(
         "generated.c.tpl",
         header_name=f"{name}.h",
-        state_definitions=render_state_definitions(states),
+        state_definitions=render_state_definitions(states, enums),
         aggregate_name=aggregate_name,
         aggregate_field_defaults=render_aggregate_field_defaults(states),
         aggregate_checks=render_aggregate_checks(states),
@@ -76,6 +91,14 @@ def c_type(type_name: str) -> str:
     return TYPE_MAP.get(type_name, type_name)
 
 
+def enum_value_name(enum: Enum, value: str) -> str:
+    return f"{enum.name}_{value}"
+
+
+def enum_map(enums: list[Enum]) -> dict[str, Enum]:
+    return {item.name: item for item in enums}
+
+
 def field_map(state: State) -> dict[str, Field]:
     return {item.name: item for item in state.fields}
 
@@ -84,7 +107,13 @@ def c_string_literal(value: str) -> str:
     return json.dumps(value)
 
 
-def translate_default(field_item: Field, value: object) -> str:
+def translate_default(field_item: Field, value: object, enums: dict[str, Enum] | None = None) -> str:
+    enums = enums or {}
+    enum = enums.get(field_item.type_name)
+    if enum is not None:
+        if not isinstance(value, str) or value not in enum.values:
+            raise ValueError(f"{field_item.name}: enum value must be one of {enum.values}")
+        return enum_value_name(enum, value)
     if field_item.type_name == "String":
         if not isinstance(value, str):
             raise ValueError(f"{field_item.name}: String value must be a string")
@@ -104,12 +133,23 @@ def translate_default(field_item: Field, value: object) -> str:
     raise ValueError(f"{field_item.name}: unsupported default value")
 
 
-def translate_constraint_value(field_item: Field, value: object) -> str:
+def translate_constraint_value(field_item: Field, value: object, enums: dict[str, Enum] | None = None) -> str:
     if field_item.type_name == "String":
         if not isinstance(value, int) or isinstance(value, bool):
             raise ValueError(f"{field_item.name}: String min/max must be integer lengths")
         return str(value)
-    return translate_default(field_item, value)
+    return translate_default(field_item, value, enums)
+
+
+def render_enum_declarations(enums: list[Enum]) -> str:
+    lines: list[str] = []
+    for enum in enums:
+        lines.append(f"typedef enum {enum.name} {{")
+        for index, value in enumerate(enum.values):
+            lines.append(f"    {enum_value_name(enum, value)} = {index},")
+        lines.append(f"}} {enum.name};")
+        lines.append("")
+    return "\n".join(lines).rstrip()
 
 
 def render_state_type_enum(states: list[State]) -> str:
@@ -126,7 +166,10 @@ def render_state_declarations(states: list[State]) -> str:
     for state in states:
         lines.append(f"typedef struct {state.name} {{")
         for item in state.fields:
-            lines.append(f"    {c_type(item.type_name)} {item.name};")
+            if item.array_length is None:
+                lines.append(f"    {c_type(item.type_name)} {item.name};")
+            else:
+                lines.append(f"    {c_type(item.type_name)} {item.name}[{item.array_length}];")
         lines.append(f"}} {state.name};")
         lines.append("")
         lines.append(f"{state.name} {state.name}_default(void);")
@@ -211,7 +254,7 @@ def render_instance_declarations(states: list[State], instances: list[Instance],
         lines.append(f"#define {prefix.upper()}_{instance.name.upper()}_STATE_TYPE {state_type_macro(instance.state_name)}")
         lines.append("")
     for state in states:
-        string_fields = [field for field in state.fields if field.type_name == "String"]
+        string_fields = [field for field in state.fields if field.type_name == "String" and field.array_length is None]
         if len(string_fields) == 1:
             snake = c_identifier_from_type(state.name)
             field_name = string_fields[0].name
@@ -225,26 +268,27 @@ def render_hook_declarations(hooks: list[Hook]) -> str:
     return "\n".join(f"void {hook.name}(KekHookContext* context);" for hook in hooks)
 
 
-def render_state_definitions(states: list[State]) -> str:
-    blocks = [render_single_state_definitions(state) for state in states]
+def render_state_definitions(states: list[State], enums: list[Enum] | None = None) -> str:
+    enum_by_name = enum_map(enums or [])
+    blocks = [render_single_state_definitions(state, enum_by_name) for state in states]
     return "\n\n".join(blocks)
 
 
-def render_single_state_definitions(state: State) -> str:
+def render_single_state_definitions(state: State, enums: dict[str, Enum]) -> str:
     fields = field_map(state)
     lines = [
         f"{state.name} {state.name}_default(void) {{",
         f"    {state.name} state = {{0}};",
     ]
     for field_item in state.fields:
-        lines.append(f"    state.{field_item.name} = {translate_default(field_item, field_item.default)};")
+        lines.extend(render_field_default_assignment("state", field_item, field_item.default, enums))
     lines.extend(["    return state;", "}", ""])
 
     for constructor in state.constructors:
         lines.append(f"{state.name} {state.name}_{constructor.name}(void) {{")
         lines.append(f"    {state.name} state = {state.name}_default();")
         for field_name, value in constructor.values.items():
-            lines.append(f"    state.{field_name} = {translate_default(fields[field_name], value)};")
+            lines.extend(render_field_default_assignment("state", fields[field_name], value, enums))
         lines.extend(["    return state;", "}", ""])
 
     lines.extend(
@@ -262,7 +306,7 @@ def render_single_state_definitions(state: State) -> str:
             "    }",
         ]
     )
-    lines.extend(render_field_checks(state))
+    lines.extend(render_field_checks(state, enums))
     lines.extend(
         [
             "    return 1;",
@@ -288,19 +332,42 @@ def render_single_state_definitions(state: State) -> str:
     return "\n".join(lines)
 
 
-def render_field_checks(state: State) -> list[str]:
+def render_field_default_assignment(target: str, field_item: Field, value: object, enums: dict[str, Enum]) -> list[str]:
+    if field_item.array_length is None:
+        return [f"    {target}.{field_item.name} = {translate_default(field_item, value, enums)};"]
+    if not isinstance(value, list):
+        raise ValueError(f"{field_item.name}: array default must be an array")
+    if len(value) != field_item.array_length:
+        raise ValueError(f"{field_item.name}: array default must contain {field_item.array_length} values")
+    lines: list[str] = []
+    scalar_field = Field(field_item.name, field_item.type_name, None, field_item.minimum, field_item.maximum)
+    for index, item in enumerate(value):
+        lines.append(f"    {target}.{field_item.name}[{index}] = {translate_default(scalar_field, item, enums)};")
+    return lines
+
+
+def render_field_checks(state: State, enums: dict[str, Enum] | None = None) -> list[str]:
     lines: list[str] = []
     for item in state.fields:
-        if item.minimum is not None:
-            lhs = f"kek_string_len(&state->{item.name})" if item.type_name == "String" else f"state->{item.name}"
-            lines.append(f"    if ({lhs} < {translate_constraint_value(item, item.minimum)}) {{")
-            lines.append("        return 0;")
-            lines.append("    }")
-        if item.maximum is not None:
-            lhs = f"kek_string_len(&state->{item.name})" if item.type_name == "String" else f"state->{item.name}"
-            lines.append(f"    if ({lhs} > {translate_constraint_value(item, item.maximum)}) {{")
-            lines.append("        return 0;")
-            lines.append("    }")
+        if item.array_length is None:
+            lines.extend(render_single_value_checks(item, f"state->{item.name}", enums))
+            continue
+        for index in range(item.array_length):
+            lines.extend(render_single_value_checks(item, f"state->{item.name}[{index}]", enums))
+    return lines
+
+
+def render_single_value_checks(field_item: Field, lhs: str, enums: dict[str, Enum] | None = None) -> list[str]:
+    lines: list[str] = []
+    check_lhs = f"kek_string_len(&{lhs})" if field_item.type_name == "String" else lhs
+    if field_item.minimum is not None:
+        lines.append(f"    if ({check_lhs} < {translate_constraint_value(field_item, field_item.minimum, enums)}) {{")
+        lines.append("        return 0;")
+        lines.append("    }")
+    if field_item.maximum is not None:
+        lines.append(f"    if ({check_lhs} > {translate_constraint_value(field_item, field_item.maximum, enums)}) {{")
+        lines.append("        return 0;")
+        lines.append("    }")
     return lines
 
 
@@ -493,7 +560,7 @@ def render_instance_definitions(states: list[State], instances: list[Instance], 
             ]
         )
     for state in states:
-        string_fields = [field for field in state.fields if field.type_name == "String"]
+        string_fields = [field for field in state.fields if field.type_name == "String" and field.array_length is None]
         if len(string_fields) != 1:
             continue
         snake = c_identifier_from_type(state.name)

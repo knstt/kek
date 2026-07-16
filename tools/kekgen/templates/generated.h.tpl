@@ -18,6 +18,8 @@ typedef struct KekString {
 KekString kek_string_from_cstr(const char* text);
 size_t kek_string_len(const KekString* text);
 
+$enum_declarations
+
 $state_type_enum
 
 $state_declarations

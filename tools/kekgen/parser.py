@@ -1,10 +1,10 @@
 import json
 
-from .model import Constructor, Field, Hook, Instance, State
+from .model import Constructor, Enum, Field, Hook, Instance, State
 from .naming import require_identifier
 
 
-def parse_source(source: str) -> tuple[list[State], list[Hook], list[Instance]]:
+def parse_source(source: str) -> tuple[list[Enum], list[State], list[Hook], list[Instance]]:
     try:
         document = json.loads(source)
     except json.JSONDecodeError as error:
@@ -12,7 +12,7 @@ def parse_source(source: str) -> tuple[list[State], list[Hook], list[Instance]]:
     return parse_document(document)
 
 
-def parse_document(document: object) -> tuple[list[State], list[Hook], list[Instance]]:
+def parse_document(document: object) -> tuple[list[Enum], list[State], list[Hook], list[Instance]]:
     if not isinstance(document, dict):
         raise ValueError("schema root must be an object")
 
@@ -20,12 +20,42 @@ def parse_document(document: object) -> tuple[list[State], list[Hook], list[Inst
     if not isinstance(state_items, list) or not state_items:
         raise ValueError("schema must contain one or more states")
 
+    enums = parse_enums(document.get("enums", []))
     states = parse_states(state_items)
     hooks = parse_hooks(document.get("hooks", []))
     instances = parse_instances(document.get("instances", []))
+    validate_field_values(enums, states)
     validate_hooks(states, hooks)
     validate_instances(states, instances)
-    return states, hooks, instances
+    return enums, states, hooks, instances
+
+
+def parse_enums(enum_items: object) -> list[Enum]:
+    if not isinstance(enum_items, list):
+        raise ValueError("enums must be an array")
+
+    enums: list[Enum] = []
+    enum_names: set[str] = set()
+    for enum_index, enum_item in enumerate(enum_items):
+        if not isinstance(enum_item, dict):
+            raise ValueError(f"enums[{enum_index}] must be an object")
+        enum_name = require_identifier(enum_item.get("name"), f"enums[{enum_index}].name")
+        if enum_name in enum_names:
+            raise ValueError(f"duplicate enum {enum_name}")
+        values_item = enum_item.get("values")
+        if not isinstance(values_item, list) or not values_item:
+            raise ValueError(f"{enum_name}: enum must contain one or more values")
+        values: list[str] = []
+        value_names: set[str] = set()
+        for value_index, value_item in enumerate(values_item):
+            value_name = require_identifier(value_item, f"{enum_name}.values[{value_index}]")
+            if value_name in value_names:
+                raise ValueError(f"{enum_name}: duplicate enum value {value_name}")
+            value_names.add(value_name)
+            values.append(value_name)
+        enum_names.add(enum_name)
+        enums.append(Enum(enum_name, values))
+    return enums
 
 
 def parse_states(state_items: list[object]) -> list[State]:
@@ -59,6 +89,7 @@ def parse_fields(state_name: str, field_items: object) -> tuple[list[Field], set
             raise ValueError(f"{state_name}: duplicate field {field_name}")
         if "default" not in field_item:
             raise ValueError(f"{state_name}.{field_name}: field must declare default")
+        array_length = parse_array_length(field_item.get("array"), f"{state_name}.{field_name}.array")
         field_names.add(field_name)
         fields.append(
             Field(
@@ -67,9 +98,18 @@ def parse_fields(state_name: str, field_items: object) -> tuple[list[Field], set
                 field_item.get("default"),
                 field_item.get("min"),
                 field_item.get("max"),
+                array_length,
             )
         )
     return fields, field_names
+
+
+def parse_array_length(value: object, label: str) -> int | None:
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ValueError(f"{label} must be a positive integer")
+    return value
 
 
 def parse_constructors(
@@ -181,6 +221,40 @@ def validate_hooks(states: list[State], hooks: list[Hook]) -> None:
         for name in hook.reads + hook.writes:
             if name not in state_names:
                 raise ValueError(f"{hook.name}: hook references unknown state {name}")
+
+
+def validate_field_values(enums: list[Enum], states: list[State]) -> None:
+    enum_values = {enum.name: set(enum.values) for enum in enums}
+    for state in states:
+        fields = field_map(state)
+        for field_item in state.fields:
+            validate_field_default(enum_values, state.name, field_item, field_item.default)
+        for constructor in state.constructors:
+            for field_name, value in constructor.values.items():
+                validate_field_default(enum_values, f"{state.name}.{constructor.name}", fields[field_name], value)
+
+
+def field_map(state: State) -> dict[str, Field]:
+    return {field_item.name: field_item for field_item in state.fields}
+
+
+def validate_field_default(enum_values: dict[str, set[str]], owner: str, field_item: Field, value: object) -> None:
+    if field_item.array_length is None:
+        validate_scalar_default(enum_values, owner, field_item, value)
+        return
+    if not isinstance(value, list):
+        raise ValueError(f"{owner}.{field_item.name}: array default must be an array")
+    if len(value) != field_item.array_length:
+        raise ValueError(f"{owner}.{field_item.name}: array default must contain {field_item.array_length} values")
+    scalar_field = Field(field_item.name, field_item.type_name, None, field_item.minimum, field_item.maximum)
+    for index, item in enumerate(value):
+        validate_scalar_default(enum_values, f"{owner}.{field_item.name}[{index}]", scalar_field, item)
+
+
+def validate_scalar_default(enum_values: dict[str, set[str]], owner: str, field_item: Field, value: object) -> None:
+    values = enum_values.get(field_item.type_name)
+    if values is not None and value not in values:
+        raise ValueError(f"{owner}.{field_item.name}: enum default must be one of {sorted(values)}")
 
 
 def validate_instances(states: list[State], instances: list[Instance]) -> None:

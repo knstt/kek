@@ -2,12 +2,19 @@ from dataclasses import dataclass, field
 
 
 @dataclass
+class Enum:
+    name: str
+    values: list[str] = field(default_factory=list)
+
+
+@dataclass
 class Field:
     name: str
     type_name: str
     default: object
     minimum: object | None = None
     maximum: object | None = None
+    array_length: int | None = None
 
 
 @dataclass

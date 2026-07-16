@@ -5,6 +5,7 @@ import sys
 
 from kekgen import (
     Constructor,
+    Enum,
     Field,
     GeneratedFiles,
     Hook,
@@ -18,6 +19,7 @@ from kekgen import (
     parse_source,
     render_all,
     render_all_model,
+    render_all_schema,
     standard_states_payload,
     write_generated_files,
 )
@@ -26,6 +28,7 @@ from kekgen.render import c_type, translate_constraint_value, translate_default
 
 __all__ = [
     "Constructor",
+    "Enum",
     "Field",
     "GeneratedFiles",
     "Hook",
@@ -43,6 +46,7 @@ __all__ = [
     "parse_source",
     "render_all",
     "render_all_model",
+    "render_all_schema",
     "state_type_macro",
     "standard_states_payload",
     "translate_constraint_value",

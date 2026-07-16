@@ -1,7 +1,7 @@
 const state = {
   project: "",
   file: "",
-  model: { states: [], instances: [], hooks: [] },
+  model: { enums: [], states: [], instances: [], hooks: [] },
   standardStates: [],
   selected: null,
   source: "",
@@ -60,6 +60,11 @@ function stateNames() {
   return state.model.states.map((item) => item.name);
 }
 
+
+function enumNames() {
+  return state.model.enums.map((item) => item.name);
+}
+
 function selectedState() {
   if (!state.selected || state.selected.type !== "state") {
     return null;
@@ -83,6 +88,7 @@ function selectedInstance() {
 
 function sanitizeModel() {
   state.model.version = state.model.version || 1;
+  state.model.enums = state.model.enums || [];
   state.model.states = state.model.states || [];
   state.model.instances = state.model.instances || [];
   state.model.hooks = state.model.hooks || [];
@@ -119,14 +125,45 @@ function renderLocalSource() {
 function defaultForType(type) {
   if (type === "String") return "";
   if (type === "bool") return false;
+  const enumItem = state.model.enums.find((item) => item.name === type);
+  if (enumItem && enumItem.values && enumItem.values.length > 0) return enumItem.values[0];
   return 0;
 }
 
 function parseEditorValue(type, value) {
   if (type === "String") return value;
   if (type === "bool") return value === "true";
+  if (enumNames().includes(type)) return value;
   if (value === "") return 0;
   return Number(value);
+}
+
+
+function parseDefaultValue(field, value) {
+  if (!field.array) {
+    return parseEditorValue(field.type, value);
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : field.default;
+  } catch (_error) {
+    return field.default;
+  }
+}
+
+
+function valueForDefaultInput(value) {
+  if (Array.isArray(value)) return JSON.stringify(value);
+  return valueForInput(value);
+}
+
+
+function fieldTypeOptions(currentType) {
+  const options = ["String", "bool", "i32", "i64", "u32", "u64", "f32", "f64", ...enumNames()];
+  if (currentType && !options.includes(currentType)) {
+    options.push(currentType);
+  }
+  return options;
 }
 
 function valueForInput(value) {
@@ -589,14 +626,14 @@ function renderStateInspector(item) {
       }
       rerenderAll();
     }));
-    grid.appendChild(input("Type", field.type, (value) => {
+    grid.appendChild(select("Type", field.type, fieldTypeOptions(field.type), (value) => {
       field.type = value;
       field.default = defaultForType(value);
       rerenderAll();
     }));
     card.appendChild(grid);
-    card.appendChild(input("Default", valueForInput(field.default), (value) => {
-      field.default = parseEditorValue(field.type, value);
+    card.appendChild(input("Default", valueForDefaultInput(field.default), (value) => {
+      field.default = parseDefaultValue(field, value);
       rerenderAll();
     }));
     const constraints = document.createElement("div");
@@ -618,6 +655,23 @@ function renderStateInspector(item) {
       rerenderAll();
     }));
     card.appendChild(constraints);
+    card.appendChild(input("Array Length", valueForInput(field.array), (value) => {
+      if (value === "") {
+        delete field.array;
+        if (Array.isArray(field.default)) {
+          field.default = defaultForType(field.type);
+        }
+      } else {
+        const length = Number(value);
+        if (Number.isInteger(length) && length > 0) {
+          field.array = length;
+          if (!Array.isArray(field.default) || field.default.length !== length) {
+            field.default = Array.from({ length }, () => defaultForType(field.type));
+          }
+        }
+      }
+      rerenderAll();
+    }));
     card.appendChild(actionButton("Remove Field", () => {
       item.fields.splice(index, 1);
       for (const constructor of item.constructors) {
@@ -650,7 +704,7 @@ function renderStateInspector(item) {
         if (value === "") {
           delete constructor.values[field.name];
         } else {
-          constructor.values[field.name] = parseEditorValue(field.type, value);
+          constructor.values[field.name] = parseDefaultValue(field, value);
         }
         rerenderAll();
       }));

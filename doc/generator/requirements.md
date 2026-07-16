@@ -37,6 +37,8 @@ It is responsible for data shape generation, default constructors, and invariant
 | GEN-FR-019 | Generate hook descriptor metadata. | Implemented | `KekGeneratedHookDescriptors` |
 | GEN-FR-020 | Generate a Markdown Mermaid graph of states and hook dependencies. | Implemented | `<name>.graph.md` |
 | GEN-FR-021 | Generate additional per-state constructors as partial overrides of the default constructor. | Implemented | `Constructor` |
+| GEN-FR-022 | Parse enum declarations and generate matching C enum typedefs. | Implemented | `Enum`, `emit_header()` |
+| GEN-FR-023 | Support fixed-size field arrays with full-array defaults and per-element checks. | Implemented | `Field.array_length`, `emit_source()` |
 
 ## Non-Functional Requirements
 
@@ -53,7 +55,6 @@ It is responsible for data shape generation, default constructors, and invariant
 - Full language parsing.
 - Function body compilation.
 - Transition body compilation.
-- Hook body compilation.
 - Hook body compilation.
 - Rollback semantics.
 - String ownership and allocation policy.

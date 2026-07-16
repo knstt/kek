@@ -96,6 +96,8 @@ Implemented in the generator:
 
 - `state` declarations.
 - Typed fields.
+- Schema enums emitted as C enum typedefs.
+- Fixed-size field arrays with full-array defaults.
 - Per-field defaults.
 - Per-field `min`/`max` constraints emitted as non-aborting `*_check()` functions.
 - Extra constructors as partial overrides of default constructors.

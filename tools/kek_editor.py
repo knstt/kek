@@ -26,12 +26,20 @@ def state_to_dict(state: generate_states.State) -> dict:
                     "default": item.default,
                     "min": item.minimum,
                     "max": item.maximum,
+                    "array": item.array_length,
                 }.items()
                 if value is not None
             }
             for item in state.fields
         ],
         "constructors": [{"name": item.name, "values": item.values} for item in state.constructors],
+    }
+
+
+def enum_to_dict(enum: generate_states.Enum) -> dict:
+    return {
+        "name": enum.name,
+        "values": enum.values,
     }
 
 
@@ -58,10 +66,11 @@ def instance_to_dict(instance: generate_states.Instance) -> dict:
 
 
 def model_from_source(source: str) -> dict:
-    states, hooks, instances = generate_states.parse_source(source)
-    validate_source_model(states, hooks, instances)
+    enums, states, hooks, instances = generate_states.parse_source(source)
+    validate_source_model(enums, states, hooks, instances)
     return {
         "version": 1,
+        "enums": [enum_to_dict(enum) for enum in enums],
         "states": [state_to_dict(state) for state in states],
         "instances": [instance_to_dict(instance) for instance in instances],
         "hooks": [hook_to_dict(hook) for hook in hooks],
@@ -69,11 +78,12 @@ def model_from_source(source: str) -> dict:
 
 
 def validate_source_model(
+    enums: list[generate_states.Enum],
     states: list[generate_states.State],
     hooks: list[generate_states.Hook],
     instances: list[generate_states.Instance],
 ) -> None:
-    generate_states.emit_source(states, hooks, instances, "validation")
+    generate_states.emit_source(states, hooks, instances, "validation", enums=enums)
 
 
 def render_source(model: dict) -> str:

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from .model import Hook, Instance, State
+from .model import Enum, Hook, Instance, State
 from .parser import parse_source
 from .render import emit_graph, emit_header, emit_source
 
@@ -29,9 +29,23 @@ def render_all_model(states: list[State], hooks: list[Hook], instances: list[Ins
     )
 
 
+def render_all_schema(
+    enums: list[Enum],
+    states: list[State],
+    hooks: list[Hook],
+    instances: list[Instance],
+    name: str,
+) -> GeneratedFiles:
+    return GeneratedFiles(
+        emit_header(states, hooks, instances, name, enums),
+        emit_source(states, hooks, instances, name, enums),
+        emit_graph(states, hooks, instances, name),
+    )
+
+
 def write_generated_files(source: str, out_dir: str | Path, name: str) -> tuple[Path, Path, Path]:
-    states, hooks, instances = parse_source(source)
-    generated = render_all_model(states, hooks, instances, name)
+    enums, states, hooks, instances = parse_source(source)
+    generated = render_all_schema(enums, states, hooks, instances, name)
 
     output_dir = Path(out_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

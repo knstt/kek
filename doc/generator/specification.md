@@ -39,16 +39,34 @@ The supported schema root is a JSON object:
 ```json
 {
   "version": 1,
+  "enums": [
+    {
+      "name": "Direction",
+      "values": ["None", "North", "South", "West", "East"]
+    }
+  ],
   "states": [
     {
       "name": "Player",
       "fields": [
+        {
+          "name": "last_direction",
+          "type": "Direction",
+          "default": "None"
+        },
         {
           "name": "health",
           "type": "i32",
           "default": 100,
           "min": 0,
           "max": 100
+        },
+        {
+          "name": "recent_damage",
+          "type": "i32",
+          "array": 3,
+          "default": [0, 0, 0],
+          "min": 0
         }
       ],
       "constructors": [
@@ -83,13 +101,20 @@ The supported schema root is a JSON object:
 
 Parser rules:
 
+- Optional root-level `enums` declare named enum types.
+- Enum names and values must match `[A-Za-z_][A-Za-z0-9_]*`.
+- Enum declarations must contain one or more values.
+- Enum field defaults and constructor overrides are strings that must match a declared enum value.
 - State names must match `[A-Za-z_][A-Za-z0-9_]*`.
 - Each state must contain one or more fields.
 - Field names must match `[A-Za-z_][A-Za-z0-9_]*`.
 - Field type names must match `[A-Za-z_][A-Za-z0-9_]*`.
 - Each field must declare a `default` value.
+- Optional field `array` declares a fixed-size C array and must be a positive integer.
+- Array field defaults and constructor overrides must be JSON arrays with exactly `array` values.
 - Optional field `min` and `max` values generate verification checks.
 - For `String` fields, `min` and `max` constrain string length.
+- For array fields, `min` and `max` checks apply to every array element.
 - Constructor names must match `[A-Za-z_][A-Za-z0-9_]*` and must not be `default`.
 - Additional constructors are partial overrides layered on top of the default constructor.
 - Hook names and referenced state names must use identifiers.
@@ -114,6 +139,10 @@ Parser rules:
 
 Unknown type names are emitted unchanged.
 
+Declared enum type names map to generated C enum types of the same name. Enum values are emitted as `<EnumName>_<ValueName>`. For example, schema value `"North"` in enum `Direction` becomes `Direction_North` in generated C.
+
+Fixed-size arrays append the declared length to the generated C field. For example, `{ "name": "cells", "type": "i32", "array": 4, "default": [0, 0, 0, 0] }` emits `int32_t cells[4];`.
+
 ## Generated Header
 
 The generated header contains:
@@ -123,6 +152,7 @@ The generated header contains:
 - `KekString` declaration.
 - `kek_string_from_cstr()` declaration.
 - `kek_string_len()` declaration.
+- One C enum typedef per schema enum.
 - One C struct per schema state.
 - One default function declaration per state.
 - One function declaration for each additional state constructor.
@@ -164,9 +194,9 @@ The generated source contains:
 - Generated hook read/write dependency arrays.
 - A generated hook descriptor table.
 
-Default constructors zero-initialize the state first and then assign every field default.
+Default constructors zero-initialize the state first and then assign every field default. Array fields are assigned element-by-element from the declared default array.
 
-Additional constructors call the default constructor first and then assign their partial override values.
+Additional constructors call the default constructor first and then assign their partial override values. Array overrides replace the whole generated array element-by-element.
 
 Check functions return `0` when the state pointer is null or any generated `min`/`max` constraint fails. They return `1` when all constraints pass.
 

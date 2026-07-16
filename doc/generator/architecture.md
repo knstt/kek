@@ -57,11 +57,12 @@ flowchart TB
 
 ## Internal Model
 
-The generator uses four dataclasses:
+The generator uses six dataclasses:
 
 | Type | Responsibility |
 | --- | --- |
-| `Field` | Stores field name, schema type name, default value, and optional min/max constraints. |
+| `Enum` | Stores enum type name and ordered enum values. |
+| `Field` | Stores field name, schema type name, default value, optional min/max constraints, and optional fixed array length. |
 | `State` | Stores state name, fields, and additional constructors. |
 | `Constructor` | Stores a constructor name plus partial field override values. |
 | `Instance` | Stores a named initial `KekStateStore` slot declaration. |
@@ -76,8 +77,12 @@ Parsing uses Python's JSON parser and then validates the resulting document into
 The parser validates:
 
 - Identifier syntax for states, fields, constructors, and hooks.
+- Identifier syntax for enum names and enum values.
+- That enum declarations are non-empty and unique.
 - That each state has one or more fields.
 - That each field has a default value.
+- That array field lengths are positive and array defaults match the declared length.
+- That enum defaults and constructor overrides reference declared enum values.
 - That constructor values reference known fields.
 - That hooks reference known states.
 
@@ -87,7 +92,7 @@ This keeps source parsing small and leaves room for a JSON Schema file later.
 
 The header, source, and graph emitters render strings from the `State` and `Hook` models using template files for the outer generated-file structure.
 
-The header template owns boilerplate includes, the include guard shape, runtime includes, and declaration section placement. The renderer supplies state enum text, state declarations, aggregate declarations, and hook declarations.
+The header template owns boilerplate includes, the include guard shape, runtime includes, and declaration section placement. The renderer supplies schema enum declarations, generated state enum text, state declarations, aggregate declarations, and hook declarations.
 
 The source template owns file-level boilerplate, string helper implementations, aggregate helper placement, descriptor helper placement, and hook descriptor placement. The renderer supplies per-state functions, aggregate field/check blocks, descriptor entries, hook dependency arrays, and the hook descriptor table.
 
@@ -136,5 +141,7 @@ Generated structs and state helpers remain plain C data ABI. Generated descripto
 - The parser currently validates JSON directly in Python; a JSON Schema file can be added later.
 - Generated state data is plain C.
 - Generated min/max constraints are exposed through non-aborting check functions.
+- Generated arrays are fixed-size C arrays owned inline by their containing struct.
+- Generated schema enums are plain C enum typedefs.
 - Generated strings are borrowed views.
 - Generated code is expected to be replaceable as the language matures.

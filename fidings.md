@@ -5,8 +5,8 @@ This file consolidates the unresolved findings that were previously split across
 ## Generator And Schema
 
 - The schema can describe state shape and hook dependency metadata, but state-to-state behavior is still handwritten C.
-- The schema does not support arrays, enums, nested structs, optional fields, or references.
-- The schema cannot express board cells, walls, packages, delivery zones, or other collection-like data directly.
+- The schema does not support nested structs, optional fields, or references.
+- The schema supports fixed-size arrays and enums, but not dynamic collections or reusable nested cell/package structs.
 - Cross-state invariants cannot be expressed, such as worker position inside map bounds or package delivery requiring the worker to carry it.
 - Stream-backed `StandardInput` and `StandardOutput` still require manual stream registration and manual stream-to-state bridge code.
 - The editor helps shape JSON schemas, but it cannot assist with handwritten C behavior, which remains most of the work in an example.
@@ -43,7 +43,7 @@ This file consolidates the unresolved findings that were previously split across
 
 ## Open Design Questions
 
-- Should arrays and enums be added before building richer examples?
+- Should nested structs, optional fields, and references be added before building richer examples?
 - Should the runtime support transactional batches across several generated state slots?
 - Should hook descriptors define transaction boundaries or final render triggers?
 - Should `reads` and `writes` be enforced, or remain documentation and future scheduling metadata?
