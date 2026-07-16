@@ -22,14 +22,6 @@ all: runtime
 
 runtime: $(RUNTIME_LIB)
 
-examples: runtime
-	$(MAKE) -C examples/game
-	$(MAKE) -C examples/warehouse
-
-examples-clean:
-	$(MAKE) -C examples/game clean
-	$(MAKE) -C examples/warehouse clean
-
 $(RUNTIME_LIB): $(RUNTIME_OBJS) | $(LIB_DIR)
 	$(AR) rcs $@ $^
 
