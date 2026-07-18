@@ -69,6 +69,9 @@ flowchart TD
 | `make all` | Build `lib/libkek_runtime.a`. |
 | `make smoke` | Build and run the runtime smoke example. |
 | `make dynamic-hook-smoke` | Build and run a runtime smoke test for debug dynamic hook loading. |
+| `make runtime-stress-generate` | Generate the large schema-first runtime stress example. |
+| `make runtime-stress` | Build and run the large generated runtime stress example. |
+| `make runtime-stress-trace` | Run the stress example with runtime tracing enabled and print hotspot summaries. |
 | `make game` | Build the raylib game with statically linked hook implementations. |
 | `make game-debug-hooks` | Build the raylib game with hook implementations loaded from a dynamic library. |
 | `make clean` | Remove runtime library build artifacts. |
@@ -82,6 +85,10 @@ Run it with `make smoke`.
 `examples/runtime_hook_dynamic/main.c` exercises debug dynamic hook loading. It verifies that a hook can be resolved from a shared library, that a failed reload leaves the previous implementation active, and that a later successful load swaps the implementation.
 
 Run it with `make dynamic-hook-smoke`.
+
+`examples/runtime_stress/runtime_stress.schema.json` is a larger schema-first integration workload for measuring runtime hotspots. It runs generated states and hooks against many dynamic slots, batch updates, stream events, timers, field filters, snapshots, rollback paths, write authorization, generated string setters, and generated slot helpers.
+
+Run it with `make runtime-stress`. Run `make runtime-stress-trace` to write `build/runtime_stress_runtime.csv` and `build/runtime_stress_hooks.csv` and print the highest-total-time runtime and hook metrics.
 
 ## Runtime Todo List
 

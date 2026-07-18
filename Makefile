@@ -11,6 +11,36 @@ RUNTIME_DYNAMIC_LIB := $(LIB_DIR)/libkek_runtime_dynamic.a
 SMOKE_BIN := $(BUILD_DIR)/runtime_smoke
 DYNAMIC_HOOK_SMOKE_DIR := examples/runtime_hook_dynamic
 DYNAMIC_HOOK_SMOKE_BIN := $(BUILD_DIR)/runtime_hook_dynamic_smoke
+RUNTIME_STRESS_DIR := examples/runtime_stress
+RUNTIME_STRESS_GENERATED_DIR := $(RUNTIME_STRESS_DIR)/generated
+RUNTIME_STRESS_HOOK_DIR := $(RUNTIME_STRESS_DIR)/hooks
+RUNTIME_STRESS_SCHEMA := $(RUNTIME_STRESS_DIR)/runtime_stress.schema.json
+RUNTIME_STRESS_STATE_SRCS := $(RUNTIME_STRESS_GENERATED_DIR)/runtime_stress_state.c $(RUNTIME_STRESS_GENERATED_DIR)/runtime_stress_state.h
+RUNTIME_STRESS_GRAPH := $(RUNTIME_STRESS_GENERATED_DIR)/runtime_stress_state.graph.md
+RUNTIME_STRESS_HOOK_HEADER := $(RUNTIME_STRESS_HOOK_DIR)/runtime_stress_state_hooks.h
+RUNTIME_STRESS_HOOK_SRCS := \
+	$(RUNTIME_STRESS_HOOK_DIR)/runtime_stress_support.c \
+	$(RUNTIME_STRESS_HOOK_DIR)/on_clock_tick.c \
+	$(RUNTIME_STRESS_HOOK_DIR)/on_clock_phase.c \
+	$(RUNTIME_STRESS_HOOK_DIR)/on_agent_moved.c \
+	$(RUNTIME_STRESS_HOOK_DIR)/on_agent_energy.c \
+	$(RUNTIME_STRESS_HOOK_DIR)/on_agent_active.c \
+	$(RUNTIME_STRESS_HOOK_DIR)/on_agent_created.c \
+	$(RUNTIME_STRESS_HOOK_DIR)/on_agent_deleted.c \
+	$(RUNTIME_STRESS_HOOK_DIR)/on_packet_seq.c \
+	$(RUNTIME_STRESS_HOOK_DIR)/on_packet_payload.c \
+	$(RUNTIME_STRESS_HOOK_DIR)/on_packet_created.c \
+	$(RUNTIME_STRESS_HOOK_DIR)/on_packet_deleted.c \
+	$(RUNTIME_STRESS_HOOK_DIR)/on_control_mode.c \
+	$(RUNTIME_STRESS_HOOK_DIR)/on_control_label.c \
+	$(RUNTIME_STRESS_HOOK_DIR)/on_telemetry_changed.c \
+	$(RUNTIME_STRESS_HOOK_DIR)/on_audit_changed.c \
+	$(RUNTIME_STRESS_HOOK_DIR)/on_standard_input.c \
+	$(RUNTIME_STRESS_HOOK_DIR)/on_fast_timer.c \
+	$(RUNTIME_STRESS_HOOK_DIR)/on_slow_timer.c
+RUNTIME_STRESS_BIN := $(BUILD_DIR)/runtime_stress
+RUNTIME_STRESS_RUNTIME_TRACE := $(BUILD_DIR)/runtime_stress_runtime.csv
+RUNTIME_STRESS_HOOKS_TRACE := $(BUILD_DIR)/runtime_stress_hooks.csv
 GAME_DIR := examples/game
 GAME_GENERATED_DIR := $(GAME_DIR)/generated
 GAME_HOOK_DIR := $(GAME_DIR)/hooks
@@ -54,6 +84,7 @@ RAYLIB_DIR := $(GAME_DIR)/raylib-$(RAYLIB_VERSION)_$(RAYLIB_PLATFORM)
 RAYLIB_ARCHIVE := $(GAME_DIR)/raylib-$(RAYLIB_VERSION)_$(RAYLIB_PLATFORM).tar.gz
 RAYLIB_LIB := $(RAYLIB_DIR)/lib/libraylib.a
 GAME_CPPFLAGS := $(CPPFLAGS) -I$(GAME_GENERATED_DIR) -I$(RAYLIB_DIR)/include
+RUNTIME_STRESS_CPPFLAGS := $(CPPFLAGS) -I$(RUNTIME_STRESS_GENERATED_DIR) -I$(RUNTIME_STRESS_HOOK_DIR)
 RUNTIME_SRCS := \
 	runtime/app.c \
 	runtime/event.c \
@@ -73,7 +104,7 @@ DYNAMIC_HOOK_SMOKE_V1_LIB := $(BUILD_DIR)/runtime_hook_v1.$(SHARED_EXT)
 DYNAMIC_HOOK_SMOKE_V2_LIB := $(BUILD_DIR)/runtime_hook_v2.$(SHARED_EXT)
 DYNAMIC_HOOK_SMOKE_MISSING_LIB := $(BUILD_DIR)/runtime_hook_missing.$(SHARED_EXT)
 
-.PHONY: all runtime smoke dynamic-hook-smoke game game-debug-hooks run-game run-game-debug-hooks game-generate examples examples-clean clean
+.PHONY: all runtime smoke dynamic-hook-smoke runtime-stress-generate runtime-stress runtime-stress-trace game game-debug-hooks run-game run-game-debug-hooks game-generate examples examples-clean clean
 
 all: runtime
 
@@ -84,6 +115,18 @@ smoke: $(SMOKE_BIN)
 
 dynamic-hook-smoke: $(DYNAMIC_HOOK_SMOKE_BIN) $(DYNAMIC_HOOK_SMOKE_V1_LIB) $(DYNAMIC_HOOK_SMOKE_MISSING_LIB) $(DYNAMIC_HOOK_SMOKE_V2_LIB)
 	$(DYNAMIC_HOOK_SMOKE_BIN) $(abspath $(DYNAMIC_HOOK_SMOKE_V1_LIB)) $(abspath $(DYNAMIC_HOOK_SMOKE_MISSING_LIB)) $(abspath $(DYNAMIC_HOOK_SMOKE_V2_LIB))
+
+runtime-stress-generate: $(RUNTIME_STRESS_STATE_SRCS) $(RUNTIME_STRESS_GRAPH) $(RUNTIME_STRESS_HOOK_HEADER)
+
+runtime-stress: $(RUNTIME_STRESS_BIN)
+	$(RUNTIME_STRESS_BIN)
+
+runtime-stress-trace: $(RUNTIME_STRESS_BIN)
+	KEK_TRACE_RUNTIME_CSV=$(RUNTIME_STRESS_RUNTIME_TRACE) KEK_TRACE_HOOKS_CSV=$(RUNTIME_STRESS_HOOKS_TRACE) $(RUNTIME_STRESS_BIN)
+	@printf '\nTop runtime metrics by total_ns:\n'
+	@sort -t, -k3 -nr $(RUNTIME_STRESS_RUNTIME_TRACE) | head -8
+	@printf '\nTop hook metrics by total_run_ns:\n'
+	@sort -t, -k12 -nr $(RUNTIME_STRESS_HOOKS_TRACE) | head -8
 
 game-generate: $(GAME_STATE_SRCS)
 
@@ -123,6 +166,12 @@ $(DYNAMIC_HOOK_SMOKE_V2_LIB): $(DYNAMIC_HOOK_SMOKE_DIR)/hook_v2.c $(DYNAMIC_HOOK
 
 $(DYNAMIC_HOOK_SMOKE_MISSING_LIB): $(DYNAMIC_HOOK_SMOKE_DIR)/hook_missing.c $(DYNAMIC_HOOK_SMOKE_DIR)/dynamic_hook_smoke.h | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) -DKEK_HOOK_DYNAMIC $(CFLAGS) -fPIC $(SHARED_LDFLAGS) $< -o $@
+
+$(RUNTIME_STRESS_STATE_SRCS) $(RUNTIME_STRESS_GRAPH) $(RUNTIME_STRESS_HOOK_HEADER): $(RUNTIME_STRESS_SCHEMA) tools/generate_states.py
+	python3 tools/generate_states.py $(RUNTIME_STRESS_SCHEMA) --out-dir $(RUNTIME_STRESS_GENERATED_DIR) --name runtime_stress_state --hooks-dir $(RUNTIME_STRESS_HOOK_DIR)
+
+$(RUNTIME_STRESS_BIN): $(RUNTIME_STRESS_DIR)/main.c $(RUNTIME_STRESS_STATE_SRCS) $(RUNTIME_STRESS_HOOK_HEADER) $(RUNTIME_STRESS_HOOK_SRCS) $(RUNTIME_LIB) | $(BUILD_DIR)
+	$(CC) $(RUNTIME_STRESS_CPPFLAGS) $(CFLAGS) $(RUNTIME_STRESS_DIR)/main.c $(RUNTIME_STRESS_HOOK_SRCS) $(RUNTIME_STRESS_GENERATED_DIR)/runtime_stress_state.c $(RUNTIME_LIB) -o $@
 
 $(GAME_STATE_SRCS): $(GAME_STATE_SCHEMA) tools/generate_states.py
 	python3 tools/generate_states.py $(GAME_STATE_SCHEMA) --out-dir $(GAME_GENERATED_DIR) --name game_state --hooks-dir $(GAME_HOOK_DIR)
