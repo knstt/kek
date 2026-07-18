@@ -45,7 +45,8 @@ flowchart TB
 | `runtime/stream.h` | Stream state API and stream data structure. |
 | `runtime/stream.c` | Stream state implementation over file descriptors. |
 | `runtime/state_storage.h` | Rollback-safe generated state storage API. |
-| `runtime/state_storage.c` | Double-buffered generated state storage and instance-aware state store implementation. |
+| `runtime/state_storage.c` | Double-buffered single-object generated state storage. |
+| `runtime/state_store.c` | Instance-aware generated state store, slot updates, and state-store transactions. |
 
 ## Dependency Direction
 
@@ -70,7 +71,7 @@ The runtime does not depend on generated schema files. Generated code or applica
 
 Events are published into a global ring buffer. Dispatch removes events from the ring buffer in FIFO order and invokes active subscribers for the event type. State-change events can identify the generated state type, concrete slot instance, and version. When the changed state fits in the fixed snapshot capacity, the event also carries copied state bytes for hooks that need the event-version value.
 
-Generated hooks attach to the same dispatcher through `KekHookRegistry`. The registry keeps one event subscription per event type and invokes only descriptors whose trigger matches the event. Hook triggers may be state-wide across all slots of a generated state type, instance-specific to one resolved slot id, or filtered to specific changed field bits.
+Generated hooks attach to the same dispatcher through `KekHookRegistry`. The registry keeps one idempotent event subscription per event type and invokes only descriptors whose trigger matches the event. Hook triggers may be state-wide across all slots of a generated state type, instance-specific to one resolved slot id, or filtered to specific changed field bits.
 
 ```mermaid
 flowchart LR
@@ -114,7 +115,7 @@ Several slots may share one descriptor, enabling multiple instances of one state
 
 ## Hook Architecture
 
-Hook descriptors declare their trigger plus read/write state type dependencies. The runtime hook registry filters events and invokes hook bodies supplied by application code. While a hook body runs, the state store checks writes against the active hook descriptor and rejects direct writes to the triggering slot.
+Hook descriptors declare their trigger plus read/write state type dependencies. The runtime hook registry filters events and invokes hook bodies supplied by application code. While a hook body runs, the state store checks writes against the active hook descriptor. Hooks may write the triggering slot when the triggering state type is declared writable.
 
 Hook bodies normally read current state through `KekStateStore`. When they need the exact triggering version, they can read the copied snapshot from the triggering event through `kek_hook_event_state()`.
 

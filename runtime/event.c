@@ -6,6 +6,12 @@ void kek_event_dispatcher_init(KekEventDispatcher* dispatcher) {
     memset(dispatcher, 0, sizeof(*dispatcher));
 }
 
+static int subscriber_matches(const KekEventSubscriber* subscriber,
+                              KekEventHandler handler, void* context) {
+    return subscriber && subscriber->active && subscriber->handler == handler &&
+           subscriber->context == context;
+}
+
 int kek_event_subscribe(KekEventDispatcher* dispatcher, KekEventType type,
                         KekEventHandler handler, void* context) {
     if (!dispatcher || type < 0 || type >= KEK_EVENT_TYPE_COUNT || !handler) {
@@ -15,6 +21,9 @@ int kek_event_subscribe(KekEventDispatcher* dispatcher, KekEventType type,
     KekEventSubscriberList* list = &dispatcher->subscriber_lists[type];
     for (size_t i = 0; i < list->count; i++) {
         KekEventSubscriber* subscriber = &list->subscribers[i];
+        if (subscriber_matches(subscriber, handler, context)) {
+            return 1;
+        }
         if (!subscriber->active) {
             subscriber->handler = handler;
             subscriber->context = context;
@@ -42,13 +51,21 @@ int kek_event_unsubscribe(KekEventDispatcher* dispatcher, KekEventType type,
     }
 
     KekEventSubscriberList* list = &dispatcher->subscriber_lists[type];
+    size_t write_index = 0;
     for (size_t i = 0; i < list->count; i++) {
         KekEventSubscriber* subscriber = &list->subscribers[i];
-        if (subscriber->handler == handler && subscriber->context == context) {
-            subscriber->active = 0;
+        if (subscriber_matches(subscriber, handler, context)) {
             removed = 1;
+            continue;
+        }
+        if (subscriber->active) {
+            list->subscribers[write_index++] = *subscriber;
         }
     }
+    for (size_t i = write_index; i < list->count; i++) {
+        memset(&list->subscribers[i], 0, sizeof(list->subscribers[i]));
+    }
+    list->count = write_index;
     return removed;
 }
 

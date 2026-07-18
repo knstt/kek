@@ -214,6 +214,34 @@ static int run_behavior_checks(void) {
         return 1;
     }
 
+    size_t duplicate_subscription_events = 0;
+    if (!kek_event_subscribe(kek_runtime_events(&runtime), KEK_EVENT_STATE_CHANGED,
+                             generic_event_counter,
+                             &duplicate_subscription_events) ||
+        !kek_event_subscribe(kek_runtime_events(&runtime), KEK_EVENT_STATE_CHANGED,
+                             generic_event_counter,
+                             &duplicate_subscription_events)) {
+        return 1;
+    }
+    KekEvent duplicate_event;
+    memset(&duplicate_event, 0, sizeof(duplicate_event));
+    duplicate_event.type = KEK_EVENT_STATE_CHANGED;
+    if (!kek_event_publish(kek_runtime_events(&runtime), &duplicate_event) ||
+        !kek_event_dispatch_pending(kek_runtime_events(&runtime)) ||
+        duplicate_subscription_events != 1) {
+        return 1;
+    }
+    if (!kek_event_unsubscribe(kek_runtime_events(&runtime), KEK_EVENT_STATE_CHANGED,
+                               generic_event_counter,
+                               &duplicate_subscription_events)) {
+        return 1;
+    }
+    if (!kek_event_publish(kek_runtime_events(&runtime), &duplicate_event) ||
+        !kek_event_dispatch_pending(kek_runtime_events(&runtime)) ||
+        duplicate_subscription_events != 1) {
+        return 1;
+    }
+
     size_t counter_writes[] = {SMOKE_STATE_COUNTER};
     KekHookDescriptor descriptors[] = {
         {"self counter", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,

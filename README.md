@@ -90,6 +90,8 @@ Completed in the current runtime cleanup:
 - Removed file-scope global hook execution state and moved active hook context into `KekStateStore`.
 - Added queue-capacity checks before generated state mutations that must publish events.
 - Added hook error propagation, hook self-updates for declared writable state types, changed-field event masks, and hook field filters.
+- Added idempotent duplicate event subscription handling and subscriber-list compaction on unsubscribe.
+- Split single-object state storage from the instance-aware state-store implementation.
 - Hardened stream readiness `EINTR` handling.
 - Hardened standard text bridge null/capacity checks.
 - Switched timers to monotonic time where available.
@@ -99,14 +101,11 @@ Completed in the current runtime cleanup:
 Remaining possible improvements:
 
 - Add focused unit tests for event queue capacity, subscription mutation during dispatch, stream idle behavior, drain behavior, hook write authorization, state rollback, timer behavior, and standard IO edge cases.
-- Split `runtime/state_storage.c` into smaller implementation files for simple storage, slot store, transactional updates, event publishing, and hook authorization.
 - Replace library-internal `perror()`/stdio error reporting with explicit error codes or an optional runtime error callback.
 - Consider opaque public structs for ABI flexibility once the prototype API stabilizes.
 - Add configurable runtime capacities if fixed compile-time bounds become limiting.
 - Add a readiness backend abstraction if `poll()` or platform-specific APIs become necessary.
 - Decide whether `KekRuntimeStateReadyFn` should return status so ready-handler failures can propagate.
-- Add duplicate-subscription policy and document whether duplicate handlers are allowed.
-- Consider retaining tombstoned subscriber slots more compactly or periodically compacting subscriber lists.
 - Add runtime state unregister support if dynamic state lifetimes become a real use case.
 - Add stronger raw-mode fd validation for applications that manage multiple terminal fds.
 

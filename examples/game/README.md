@@ -9,11 +9,11 @@ make game
 make run-game
 ```
 
-`make game` regenerates `generated/game_state.c`, extracts `raylib-6.0_linux_amd64.tar.gz`, builds the Kek runtime library, and links `build/game` against the vendored static raylib library.
+`make game` regenerates `generated/game_state.c`, builds the Kek runtime library, extracts the vendored raylib archive for the host OS, and links `build/game` against the vendored static raylib library.
 
-On Linux, the static raylib link also needs system graphics development libraries such as `libX11` and `libGL`. Minimal containers may compile the game objects successfully but fail the final link until those packages are installed.
+On Linux, the Makefile uses `raylib-5.5_linux_amd64.tar.gz` and links with X11/OpenGL system libraries such as `libX11`, `libGL`, `libxcb`, `libXau`, and `libXdmcp`. Minimal containers may compile the game objects successfully but fail the final link until those packages are installed.
 
-The folder also contains the upstream `raylib-6.0.tar.gz` source archive and the ARM64 binary archive, but the Makefile target uses the AMD64 archive for this host.
+On macOS, the Makefile uses `raylib-5.5_macos.tar.gz` and links with the native CoreVideo, IOKit, Cocoa, GLUT, and OpenGL frameworks.
 
 ## Controls
 
@@ -38,7 +38,7 @@ The folder also contains the upstream `raylib-6.0.tar.gz` source archive and the
 - Named `Enemy` instances for the showcase grunt, runner, tank, and boss.
 - Dynamic `Enemy`, `Projectile`, `Pickup`, and `HudMessage` slots for wave spawns and temporary entities.
 
-Hooks generated from the schema are implemented in `main.c`:
+Hooks generated from the schema are implemented in `game_hooks.inc.c`, which is included by `main.c`:
 
 - `OnFrameClock` advances waves when the arena is clear.
 - `MoveGruntEnemy`, `MoveRunnerEnemy`, `MoveTankEnemy`, and `MoveBossEnemy` move the four named enemy instances with different movement parameters.

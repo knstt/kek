@@ -38,7 +38,7 @@ It is responsible for event processing and runtime-managed states. It is not res
 | RT-FR-020 | Commit multi-slot generated state updates transactionally. | Implemented | `kek_state_store_update_many()` |
 | RT-FR-021 | Expose event-version state snapshots to hooks when bounded capacity permits. | Implemented | `KekEvent.state_snapshot`, `kek_hook_event_state()` |
 | RT-FR-022 | Enforce hook-declared generated state writes during hook execution. | Implemented | `state_store_write_allowed()` |
-| RT-FR-023 | Prevent direct hook writes to the triggering state type. | Implemented | `kek_hook_current_trigger_state_type()` |
+| RT-FR-023 | Allow hook writes to the triggering slot when the triggering state type is declared writable. | Implemented | `state_store_write_allowed()` |
 | RT-FR-024 | Provide reusable standard text state bridge helpers. | Implemented | `KekStandardTextBridge` |
 
 ## Non-Functional Requirements

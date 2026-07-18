@@ -42,6 +42,7 @@ typedef struct KekStateSlot {
 
 typedef struct KekStateStoreHookExecution {
     const struct KekHookDescriptor* descriptor;
+    /* Informational only; write authorization is based on descriptor->writes. */
     size_t trigger_state_slot;
 } KekStateStoreHookExecution;
 

@@ -33,7 +33,7 @@ If validation fails, the active state is unchanged and the draft is reset from t
 
 `KekStateStore` is the instance-aware storage API for generated states. It owns independent `KekStateSlot` entries instead of one aggregate object. Each slot stores two buffers, one active index, a generated `KekStateDescriptor`, and a monotonically increasing version.
 
-Multiple slots may reference the same descriptor. This supports multiple instances of one generated state type, such as several `Goblin` objects.
+Multiple slots may reference the same descriptor. This supports multiple instances of one generated state type, such as several `Enemy` objects.
 
 `kek_state_store_update()` copies the active slot value into its inactive draft, invokes the update callback, validates the draft with the descriptor check function, swaps on success, increments the slot version, and publishes `KEK_EVENT_STATE_CHANGED` with state type id, slot id, version, and an unknown changed-field mask. `kek_state_store_update_fields()` behaves the same way but publishes the caller-provided field bitmask.
 
@@ -67,6 +67,8 @@ Supported state kinds:
 ## Event Dispatcher
 
 The dispatcher provides a bounded FIFO event queue and per-event-type subscriber lists.
+
+Subscribing the same active `(event type, handler, context)` pair more than once is idempotent. It returns success without adding a duplicate subscriber, so one event dispatch invokes that handler/context pair at most once per event type. Unsubscribe removes the active pair and compacts the subscriber list.
 
 Event types:
 
