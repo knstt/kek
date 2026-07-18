@@ -1,4 +1,13 @@
-from .generator import GeneratedFiles, render_all, render_all_model, render_all_schema, write_generated_files
+from .generator import (
+    GeneratedFiles,
+    render_all,
+    render_all_model,
+    render_all_schema,
+    render_hook_api_header,
+    render_hook_stub,
+    write_generated_files,
+    write_hook_files,
+)
 from .model import Constructor, Enum, Field, Hook, Instance, State
 from .parser import parse_document, parse_source
 from .render import emit_graph, emit_header, emit_source
@@ -21,6 +30,9 @@ __all__ = [
     "render_all",
     "render_all_model",
     "render_all_schema",
+    "render_hook_api_header",
+    "render_hook_stub",
     "standard_states_payload",
     "write_generated_files",
+    "write_hook_files",
 ]

@@ -1,10 +1,3 @@
-static void set_mode_update(void* draft, void* context) {
-    GameSession* session = (GameSession*)draft;
-    const ModeUpdate* update = (const ModeUpdate*)context;
-    session->mode = update->mode;
-    session->next_upgrade_score = update->next_upgrade_score;
-}
-
 static void session_frame_update(void* draft, void* context) {
     GameSession* session = (GameSession*)draft;
     const SessionFrameUpdate* update = (const SessionFrameUpdate*)context;
@@ -168,12 +161,6 @@ static void wave_runtime_update(void* draft, void* context) {
     wave->spawn_timer = clampf(wave->spawn_timer - update->dt, 0.0f, 10.0f);
 }
 
-static void wave_full_update(void* draft, void* context) {
-    WaveDirector* wave = (WaveDirector*)draft;
-    const WaveFullUpdate* update = (const WaveFullUpdate*)context;
-    *wave = update->wave;
-}
-
 static void wave_spawn_update(void* draft, void* context) {
     WaveDirector* wave = (WaveDirector*)draft;
     const WaveSpawnUpdate* update = (const WaveSpawnUpdate*)context;
@@ -198,27 +185,6 @@ static void projectile_pierce_update(void* draft, void* context) {
     if (projectile->pierce > 0) {
         projectile->pierce--;
     }
-}
-
-static void enemy_update(void* draft, void* context) {
-    Enemy* enemy = (Enemy*)draft;
-    const EnemyUpdate* update = (const EnemyUpdate*)context;
-    if (!enemy->active) {
-        return;
-    }
-    float dir_x = update->player.x - enemy->x;
-    float dir_y = update->player.y - enemy->y;
-    normalize_or(&dir_x, &dir_y, 0.0f, 0.0f);
-
-    float move_x = dir_x - dir_y * update->strafe;
-    float move_y = dir_y + dir_x * update->strafe;
-    normalize_or(&move_x, &move_y, dir_x, dir_y);
-
-    enemy->vx = move_x * update->speed;
-    enemy->vy = move_y * update->speed;
-    enemy->x = clampf(enemy->x + enemy->vx * update->dt, -ARENA_HALF_WIDTH - 160.0f, ARENA_HALF_WIDTH + 160.0f);
-    enemy->y = clampf(enemy->y + enemy->vy * update->dt, -ARENA_HALF_HEIGHT - 160.0f, ARENA_HALF_HEIGHT + 160.0f);
-    enemy->flash = clampf(enemy->flash - update->dt * 4.5f, 0.0f, 1.0f);
 }
 
 static float enemy_speed_for_kind(EnemyKind kind) {

@@ -40,6 +40,7 @@ It is responsible for event processing and runtime-managed states. It is not res
 | RT-FR-022 | Enforce hook-declared generated state writes during hook execution. | Implemented | `state_store_write_allowed()` |
 | RT-FR-023 | Allow hook writes to the triggering slot when the triggering state type is declared writable. | Implemented | `state_store_write_allowed()` |
 | RT-FR-024 | Provide reusable standard text state bridge helpers. | Implemented | `KekStandardTextBridge` |
+| RT-FR-025 | Support debug loading and replacement of hook functions from dynamic libraries. | Implemented | `kek_hook_registry_load_library()`, `kek_hook_registry_reload_library()` |
 
 ## Non-Functional Requirements
 

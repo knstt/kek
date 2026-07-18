@@ -40,6 +40,8 @@ It is responsible for data shape generation, default constructors, and invariant
 | GEN-FR-022 | Parse enum declarations and generate matching C enum typedefs. | Implemented | `Enum`, `emit_header()` |
 | GEN-FR-023 | Support fixed-size field arrays with full-array defaults and per-element checks. | Implemented | `Field.array_length`, `emit_source()` |
 | GEN-FR-024 | Generate a transactional reset helper for declared slots. | Implemented | `<name>_state_slots_reset_declared()` |
+| GEN-FR-025 | Optionally generate one editable C hook stub per schema hook. | Implemented | `--hooks-dir`, `write_hook_files()` |
+| GEN-FR-026 | Support dynamic-hook debug builds without static hook symbol references. | Implemented | `KEK_HOOK_DYNAMIC` descriptor emission |
 
 ## Non-Functional Requirements
 

@@ -1157,6 +1157,9 @@ void game_state_runtime_binding_destroy(Game_stateRuntimeBinding* binding) {
         return;
     }
     kek_hook_registry_detach(&binding->hook_registry);
+#ifdef KEK_HOOK_DYNAMIC
+    kek_hook_registry_unload_library(&binding->hook_registry);
+#endif
     kek_state_store_destroy(&binding->state_store);
     memset(binding, 0, sizeof(*binding));
 }
@@ -4393,7 +4396,11 @@ static const KekHookDescriptor KekGeneratedHookDescriptorData[KEK_GENERATED_HOOK
         .read_count = 3,
         .writes = OnFrameClock_writes,
         .write_count = 1,
+#ifdef KEK_HOOK_DYNAMIC
+        .run = 0,
+#else
         .run = OnFrameClock,
+#endif
     },
     {
         .name = "MoveGruntEnemy",
@@ -4405,7 +4412,11 @@ static const KekHookDescriptor KekGeneratedHookDescriptorData[KEK_GENERATED_HOOK
         .read_count = 4,
         .writes = MoveGruntEnemy_writes,
         .write_count = 1,
+#ifdef KEK_HOOK_DYNAMIC
+        .run = 0,
+#else
         .run = MoveGruntEnemy,
+#endif
     },
     {
         .name = "MoveRunnerEnemy",
@@ -4417,7 +4428,11 @@ static const KekHookDescriptor KekGeneratedHookDescriptorData[KEK_GENERATED_HOOK
         .read_count = 4,
         .writes = MoveRunnerEnemy_writes,
         .write_count = 1,
+#ifdef KEK_HOOK_DYNAMIC
+        .run = 0,
+#else
         .run = MoveRunnerEnemy,
+#endif
     },
     {
         .name = "MoveTankEnemy",
@@ -4429,7 +4444,11 @@ static const KekHookDescriptor KekGeneratedHookDescriptorData[KEK_GENERATED_HOOK
         .read_count = 4,
         .writes = MoveTankEnemy_writes,
         .write_count = 1,
+#ifdef KEK_HOOK_DYNAMIC
+        .run = 0,
+#else
         .run = MoveTankEnemy,
+#endif
     },
     {
         .name = "MoveBossEnemy",
@@ -4441,7 +4460,11 @@ static const KekHookDescriptor KekGeneratedHookDescriptorData[KEK_GENERATED_HOOK
         .read_count = 4,
         .writes = MoveBossEnemy_writes,
         .write_count = 1,
+#ifdef KEK_HOOK_DYNAMIC
+        .run = 0,
+#else
         .run = MoveBossEnemy,
+#endif
     },
     {
         .name = "OnPlayerHealthChanged",
@@ -4453,7 +4476,11 @@ static const KekHookDescriptor KekGeneratedHookDescriptorData[KEK_GENERATED_HOOK
         .read_count = 2,
         .writes = OnPlayerHealthChanged_writes,
         .write_count = 1,
+#ifdef KEK_HOOK_DYNAMIC
+        .run = 0,
+#else
         .run = OnPlayerHealthChanged,
+#endif
     },
     {
         .name = "OnWaveChanged",
@@ -4465,7 +4492,11 @@ static const KekHookDescriptor KekGeneratedHookDescriptorData[KEK_GENERATED_HOOK
         .read_count = 2,
         .writes = OnWaveChanged_writes,
         .write_count = 1,
+#ifdef KEK_HOOK_DYNAMIC
+        .run = 0,
+#else
         .run = OnWaveChanged,
+#endif
     },
     {
         .name = "OnScoreChanged",
@@ -4477,7 +4508,11 @@ static const KekHookDescriptor KekGeneratedHookDescriptorData[KEK_GENERATED_HOOK
         .read_count = 1,
         .writes = OnScoreChanged_writes,
         .write_count = 1,
+#ifdef KEK_HOOK_DYNAMIC
+        .run = 0,
+#else
         .run = OnScoreChanged,
+#endif
     },
 };
 const KekHookDescriptor* KekGeneratedHookDescriptors = KekGeneratedHookDescriptorData;

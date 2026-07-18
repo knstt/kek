@@ -21,6 +21,7 @@ Arguments:
 | `input` | Yes | none | Input JSON schema file. |
 | `--out-dir` | No | `generated` | Destination directory for generated files. |
 | `--name` | No | input file basename | Base name for generated `.h` and `.c` files. |
+| `--hooks-dir` | No | none | Optional destination directory for a generated hook API header and one C stub per hook. |
 
 The generator creates the output directory when it does not exist.
 
@@ -31,6 +32,8 @@ Generated files:
 | `<name>.h` | C declarations for generated states and hook metadata. |
 | `<name>.c` | C definitions for generated states and hook metadata. |
 | `<name>.graph.md` | Markdown document containing a Mermaid graph of states and hook dependencies. |
+| `<hooks-dir>/<name>_hooks.h` | Optional generated hook API header. |
+| `<hooks-dir>/<hook-name>.c` | Optional generated hook implementation stub, created only when missing. |
 
 ## JSON Schema Subset
 
@@ -253,6 +256,10 @@ For scalar non-`String` fields, the generator emits raw-store setters named `<na
 For generated states with exactly one `String` field, `<name>_<state>_set_<field>()` updates that field through `KekStateStore`, preserving validation and change-event publication.
 
 Generated hook descriptors reference user-provided C hook bodies by name. The generator does not compile hook bodies.
+
+When `--hooks-dir` is provided, the generator writes `<name>_hooks.h` and creates one editable hook stub C file per schema hook. Existing hook C files are not overwritten. The generated hook header is replaced on each generation pass so declarations stay aligned with the schema.
+
+When generated code is compiled with `KEK_HOOK_DYNAMIC`, hook descriptor `.run` fields are emitted as null pointers instead of direct references to hook symbols. This lets the main executable compile without statically linking hook implementations; the runtime debug loader resolves each hook by descriptor name from a dynamic library.
 
 ## Generated Graph
 

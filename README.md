@@ -68,6 +68,9 @@ flowchart TD
 | `make runtime` | Build `lib/libkek_runtime.a`. |
 | `make all` | Build `lib/libkek_runtime.a`. |
 | `make smoke` | Build and run the runtime smoke example. |
+| `make dynamic-hook-smoke` | Build and run a runtime smoke test for debug dynamic hook loading. |
+| `make game` | Build the raylib game with statically linked hook implementations. |
+| `make game-debug-hooks` | Build the raylib game with hook implementations loaded from a dynamic library. |
 | `make clean` | Remove runtime library build artifacts. |
 
 ## Runtime Smoke Example
@@ -75,6 +78,10 @@ flowchart TD
 `examples/runtime_smoke/main.c` exercises the runtime as an integration smoke test. It covers runtime initialization and destruction, event subscription and dispatch, stream read/write states, standard text bridge helpers, generated-style state slots, transactional state events, timer state updates, hook dispatch, hook write authorization, state snapshots, drain behavior, and raw-mode no-op behavior for a non-TTY fd.
 
 Run it with `make smoke`.
+
+`examples/runtime_hook_dynamic/main.c` exercises debug dynamic hook loading. It verifies that a hook can be resolved from a shared library, that a failed reload leaves the previous implementation active, and that a later successful load swaps the implementation.
+
+Run it with `make dynamic-hook-smoke`.
 
 ## Runtime Todo List
 

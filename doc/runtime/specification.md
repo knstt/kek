@@ -135,6 +135,14 @@ During hook execution, `KekStateStore` write operations are rejected when the ta
 
 `kek_hook_event_state()` returns the copied event-version state snapshot when present. Hook bodies can use this when the triggering state value must match `event->state_version` instead of the current store value after later queued updates.
 
+When compiled with `KEK_HOOK_DYNAMIC`, a hook registry can load hook bodies from a dynamic library at an application-chosen safe point:
+
+- `kek_hook_registry_load_library(registry, path)` resolves every registered hook by descriptor name and swaps all `run` pointers only after every symbol resolves.
+- `kek_hook_registry_reload_library(registry)` reloads the last successful path.
+- `kek_hook_registry_unload_library(registry)` closes the loaded library.
+
+Failed loads are non-destructive: the previously active hook implementation remains installed. Applications must call load or reload before dispatching events when generated descriptors were compiled with dynamic hook mode, because generated dynamic descriptors intentionally start with null hook function pointers.
+
 ## Event Loop
 
 `kek_runtime_run()` repeats until quit is requested or no file descriptors are registered for waiting.

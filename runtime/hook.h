@@ -39,9 +39,15 @@ typedef struct KekHookRegistry {
     struct KekRuntime* runtime;
     struct KekStateStore* state_store;
     void* app_context;
-    const KekHookDescriptor* descriptors[KEK_HOOK_MAX_DESCRIPTORS];
+    KekHookDescriptor descriptors[KEK_HOOK_MAX_DESCRIPTORS];
     size_t descriptor_count;
     int attached;
+#ifdef KEK_HOOK_DYNAMIC
+    void* dynamic_library;
+    char* dynamic_library_path;
+    char* dynamic_loaded_path;
+    unsigned long dynamic_generation;
+#endif
 } KekHookRegistry;
 
 void kek_hook_registry_init(KekHookRegistry* registry, struct KekRuntime* runtime,
@@ -55,5 +61,11 @@ void kek_hook_registry_attach(KekHookRegistry* registry);
 void kek_hook_registry_detach(KekHookRegistry* registry);
 int kek_hook_registry_dispatch(KekHookRegistry* registry, const KekEvent* event);
 const void* kek_hook_event_state(const KekHookContext* context, size_t* size);
+
+#ifdef KEK_HOOK_DYNAMIC
+int kek_hook_registry_load_library(KekHookRegistry* registry, const char* path);
+int kek_hook_registry_reload_library(KekHookRegistry* registry);
+void kek_hook_registry_unload_library(KekHookRegistry* registry);
+#endif
 
 #endif

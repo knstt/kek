@@ -20,8 +20,11 @@ from kekgen import (
     render_all,
     render_all_model,
     render_all_schema,
+    render_hook_api_header,
+    render_hook_stub,
     standard_states_payload,
     write_generated_files,
+    write_hook_files,
 )
 from kekgen.naming import c_identifier_from_type, generated_guard, state_type_macro
 from kekgen.render import c_type, translate_constraint_value, translate_default
@@ -46,11 +49,14 @@ __all__ = [
     "render_all",
     "render_all_model",
     "render_all_schema",
+    "render_hook_api_header",
+    "render_hook_stub",
     "state_type_macro",
     "standard_states_payload",
     "translate_constraint_value",
     "translate_default",
     "write_generated_files",
+    "write_hook_files",
 ]
 
 
@@ -59,6 +65,7 @@ def main() -> int:
     parser.add_argument("input", help="input JSON schema file")
     parser.add_argument("--out-dir", default="generated", help="output directory")
     parser.add_argument("--name", default=None, help="base name for generated .h/.c files")
+    parser.add_argument("--hooks-dir", default=None, help="optional directory for generated per-hook C stubs")
     args = parser.parse_args()
 
     base_name = args.name or os.path.splitext(os.path.basename(args.input))[0]
@@ -66,12 +73,17 @@ def main() -> int:
         source = source_file.read()
 
     try:
-        header_path, source_path, graph_path = write_generated_files(source, args.out_dir, base_name)
+        header_path, source_path, graph_path = write_generated_files(
+            source, args.out_dir, base_name, args.hooks_dir
+        )
     except (SyntaxError, ValueError) as error:
         print(f"generate_states.py: {error}", file=sys.stderr)
         return 1
 
-    print(f"generated {header_path}, {source_path}, and {graph_path}")
+    if args.hooks_dir:
+        print(f"generated {header_path}, {source_path}, {graph_path}, and hook stubs in {args.hooks_dir}")
+    else:
+        print(f"generated {header_path}, {source_path}, and {graph_path}")
     return 0
 
 

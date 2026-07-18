@@ -636,6 +636,9 @@ def render_instance_definitions(states: list[State], hooks: list[Hook], instance
             "        return;",
             "    }",
             "    kek_hook_registry_detach(&binding->hook_registry);",
+            "#ifdef KEK_HOOK_DYNAMIC",
+            "    kek_hook_registry_unload_library(&binding->hook_registry);",
+            "#endif",
             "    kek_state_store_destroy(&binding->state_store);",
             "    memset(binding, 0, sizeof(*binding));",
             "}",
@@ -1012,7 +1015,11 @@ def render_hook_descriptor_table(hooks: list[Hook]) -> str:
         lines.append(f"        .read_count = {len(hook.reads)},")
         lines.append(f"        .writes = {writes_name},")
         lines.append(f"        .write_count = {len(hook.writes)},")
+        lines.append("#ifdef KEK_HOOK_DYNAMIC")
+        lines.append("        .run = 0,")
+        lines.append("#else")
         lines.append(f"        .run = {hook.name},")
+        lines.append("#endif")
         lines.append("    },")
     lines.append("};")
     lines.append("const KekHookDescriptor* KekGeneratedHookDescriptors = KekGeneratedHookDescriptorData;")

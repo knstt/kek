@@ -35,6 +35,9 @@ void kek_runtime_app_destroy(KekRuntimeApp* app) {
     }
 
     kek_hook_registry_detach(&app->hook_registry);
+#ifdef KEK_HOOK_DYNAMIC
+    kek_hook_registry_unload_library(&app->hook_registry);
+#endif
     kek_state_store_destroy(&app->state_store);
     kek_runtime_destroy(&app->runtime);
     memset(app, 0, sizeof(*app));

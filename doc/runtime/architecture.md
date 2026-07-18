@@ -119,6 +119,8 @@ Hook descriptors declare their trigger plus read/write state type dependencies. 
 
 Hook bodies normally read current state through `KekStateStore`. When they need the exact triggering version, they can read the copied snapshot from the triggering event through `kek_hook_event_state()`.
 
+In debug builds compiled with `KEK_HOOK_DYNAMIC`, the registry owns mutable descriptor copies and can replace their `run` pointers from a dynamic library. The loader resolves every registered hook by descriptor name before swapping any functions, so a failed reload keeps the previous implementation active. Reloading is manual and should be called by the host at a known safe point, such as before dispatch in a frame loop.
+
 ```mermaid
 flowchart LR
     Event[Runtime Event]
