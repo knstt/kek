@@ -7,6 +7,7 @@
 
 #include "event.h"
 #include "state.h"
+#include "trace.h"
 
 #define KEK_RUNTIME_MAX_STATES 64
 
@@ -18,6 +19,7 @@ typedef struct KekRuntime {
     int raw_mode_enabled;
     int raw_mode_fd;
     struct termios original_termios;
+    KekRuntimeTrace trace;
 } KekRuntime;
 
 void kek_runtime_init(KekRuntime* runtime);

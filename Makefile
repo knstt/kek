@@ -61,6 +61,7 @@ RUNTIME_SRCS := \
 	runtime/stream.c \
 	runtime/standard_io.c \
 	runtime/timer.c \
+	runtime/trace.c \
 	runtime/runtime.c \
 	runtime/state_storage.c \
 	runtime/state_store.c

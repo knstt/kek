@@ -41,6 +41,7 @@ It is responsible for event processing and runtime-managed states. It is not res
 | RT-FR-023 | Allow hook writes to the triggering slot when the triggering state type is declared writable. | Implemented | `state_store_write_allowed()` |
 | RT-FR-024 | Provide reusable standard text state bridge helpers. | Implemented | `KekStandardTextBridge` |
 | RT-FR-025 | Support debug loading and replacement of hook functions from dynamic libraries. | Implemented | `kek_hook_registry_load_library()`, `kek_hook_registry_reload_library()` |
+| RT-FR-026 | Write runtime and hook tracing metrics to separate CSV files when enabled. | Implemented | `KEK_TRACE_RUNTIME_CSV`, `KEK_TRACE_HOOKS_CSV`, `runtime/trace.c` |
 
 ## Non-Functional Requirements
 
@@ -52,6 +53,7 @@ It is responsible for event processing and runtime-managed states. It is not res
 | RT-NFR-004 | Keep subscriber capacity bounded. | Implemented | `KEK_EVENT_MAX_SUBSCRIBERS` |
 | RT-NFR-005 | Keep runtime state capacity bounded. | Implemented | `KEK_RUNTIME_MAX_STATES` |
 | RT-NFR-006 | Keep stream buffers bounded. | Implemented | `KEK_STREAM_BUFFER_CAPACITY` |
+| RT-NFR-007 | Keep tracing optional and internally aggregated. | Implemented | Tracing is disabled unless a trace CSV environment variable is set. |
 
 ## Out Of Scope
 

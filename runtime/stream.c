@@ -5,6 +5,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "trace.h"
+
 static int stream_prepare(KekRuntime* runtime, KekRuntimeState* state,
                           fd_set* read_fds, fd_set* write_fds, int* max_fd,
                           struct timeval* timeout) {
@@ -106,7 +108,7 @@ static void stream_destroy(KekRuntimeState* state) {
     if (stream->close_on_destroy && stream->fd >= 0) {
         close(stream->fd);
     }
-    free(stream);
+    kek_trace_free(stream->runtime, stream, sizeof(*stream));
     state->data = NULL;
 }
 
@@ -123,11 +125,13 @@ int kek_runtime_register_stream(KekRuntime* runtime, int fd, KekStreamMode mode,
         return -1;
     }
 
-    KekStream* stream = (KekStream*)calloc(1, sizeof(*stream));
+    KekStream* stream = (KekStream*)kek_trace_malloc(runtime, sizeof(*stream));
     if (!stream) {
         return -1;
     }
+    memset(stream, 0, sizeof(*stream));
 
+    stream->runtime = runtime;
     stream->fd = fd;
     stream->mode = mode;
     stream->close_on_destroy = close_on_destroy;
@@ -143,7 +147,7 @@ int kek_runtime_register_stream(KekRuntime* runtime, int fd, KekStreamMode mode,
 
     int id = kek_runtime_register_state(runtime, &state);
     if (id < 0) {
-        free(stream);
+        kek_trace_free(runtime, stream, sizeof(*stream));
     }
     return id;
 }

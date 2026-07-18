@@ -9,6 +9,7 @@
 #include "state_storage.h"
 
 typedef struct KekTimer {
+    KekRuntime* runtime;
     KekStateStore* store;
     size_t slot_id;
     uint64_t tick;

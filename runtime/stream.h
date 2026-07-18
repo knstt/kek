@@ -13,6 +13,7 @@ typedef enum KekStreamMode {
 } KekStreamMode;
 
 typedef struct KekStream {
+    KekRuntime* runtime;
     int fd;
     KekStreamMode mode;
     int close_on_destroy;

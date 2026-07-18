@@ -10,6 +10,9 @@
 #define KEK_EVENT_STATE_SNAPSHOT_CAPACITY 1024
 #define KEK_EVENT_CHANGED_FIELDS_NONE 0ull
 #define KEK_EVENT_CHANGED_FIELDS_UNKNOWN UINT64_MAX
+
+struct KekRuntime;
+
 typedef union KekEventStateSnapshot {
     max_align_t align;
     unsigned char data[KEK_EVENT_STATE_SNAPSHOT_CAPACITY];
@@ -39,6 +42,7 @@ typedef struct KekEvent {
     char data[KEK_EVENT_DATA_CAPACITY];
     size_t data_len;
     int error_code;
+    uint64_t trace_published_ns;
 } KekEvent;
 
 typedef int (*KekEventHandler)(const KekEvent* event, void* context);
@@ -55,6 +59,7 @@ typedef struct KekEventSubscriberList {
 } KekEventSubscriberList;
 
 typedef struct KekEventDispatcher {
+    struct KekRuntime* runtime;
     KekEventSubscriberList subscriber_lists[KEK_EVENT_TYPE_COUNT];
     KekEvent queue[KEK_EVENT_QUEUE_CAPACITY];
     size_t queue_start;

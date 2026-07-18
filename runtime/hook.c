@@ -10,6 +10,7 @@
 
 #include "runtime.h"
 #include "state_storage.h"
+#include "trace.h"
 
 static int hook_registry_event_handler(const KekEvent* event, void* context) {
     return kek_hook_registry_dispatch((KekHookRegistry*)context, event);
@@ -151,7 +152,20 @@ int kek_hook_registry_dispatch(KekHookRegistry* registry, const KekEvent* event)
             kek_state_store_transaction_rollback(&state_transaction);
             return 0;
         }
+        uint64_t hook_start = kek_trace_enabled(registry->runtime)
+                                  ? kek_trace_now_ns()
+                                  : 0;
+        uint64_t wait_ns = 0;
+        if (hook_start != 0 && event->trace_published_ns != 0 &&
+            hook_start >= event->trace_published_ns) {
+            wait_ns = hook_start - event->trace_published_ns;
+        }
         int ok = descriptor->run(&context);
+        if (kek_trace_enabled(registry->runtime)) {
+            uint64_t hook_end = kek_trace_now_ns();
+            kek_trace_record_hook(registry->runtime, descriptor, event, wait_ns,
+                                  hook_end - hook_start, ok);
+        }
         kek_state_store_end_hook(registry->state_store, &previous_hook);
         if (!ok) {
             kek_event_transaction_rollback(&event_transaction);

@@ -15,6 +15,7 @@ Related documents:
 - Runtime state count.
 - Quit flag.
 - Raw terminal mode bookkeeping.
+- Optional aggregate tracing state.
 
 The runtime capacity is `KEK_RUNTIME_MAX_STATES`.
 
@@ -25,6 +26,35 @@ The runtime capacity is `KEK_RUNTIME_MAX_STATES`.
 - A `KekHookRegistry` bound to that runtime and state store.
 
 `kek_runtime_app_init()` initializes all three pieces, `kek_runtime_app_bind_hooks()` registers and attaches hook descriptors, `kek_runtime_app_dispatch()` dispatches pending events, and `kek_runtime_app_destroy()` detaches hooks, destroys the state store, and destroys the runtime. The lower-level `KekRuntime`, `KekStateStore`, and `KekHookRegistry` APIs remain available for custom ownership models.
+
+## Runtime Tracing
+
+Tracing is disabled by default. Applications can enable it without code changes by setting one or both environment variables before `kek_runtime_init()`:
+
+| Environment Variable | Purpose |
+| --- | --- |
+| `KEK_TRACE_RUNTIME_CSV` | Path for runtime/internal aggregate metrics. |
+| `KEK_TRACE_HOOKS_CSV` | Path for application hook aggregate metrics. |
+
+When tracing is enabled, the runtime records aggregate count, total time, average time, min time, and max time in nanoseconds. `kek_runtime_destroy()` writes the enabled CSV files on a best-effort basis; CSV write failures do not change runtime destroy behavior.
+
+The runtime CSV uses:
+
+```text
+metric,count,total_ns,avg_ns,min_ns,max_ns,current_bytes,peak_bytes,total_allocated_bytes,total_freed_bytes
+```
+
+Runtime metrics include event publishing, event dispatch, subscriber dispatch, runtime state prepare/ready callbacks, `select()` wait time, state copy operations, validation callbacks, update callbacks, transaction snapshot copies, and runtime-owned allocation/free calls.
+
+Memory columns track runtime-owned allocations only, such as state buffers, transaction snapshots, stream states, and timer states. They do not report process RSS or allocations performed by application hook bodies.
+
+The hooks CSV uses:
+
+```text
+hook,event_type,state_type_id,state_slot_id,call_count,success_count,failure_count,total_wait_ns,avg_wait_ns,min_wait_ns,max_wait_ns,total_run_ns,avg_run_ns,min_run_ns,max_run_ns
+```
+
+Hook wait time is measured from event publication to immediately before the matching hook body is invoked. Hook run time is measured around the hook function call itself. Hook bodies and generated descriptors do not need tracing-specific changes.
 
 ## State Storage
 

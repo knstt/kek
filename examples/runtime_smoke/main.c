@@ -1,6 +1,9 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -424,10 +427,94 @@ static int run_smoke(void) {
     return ok ? 0 : 1;
 }
 
+static int trace_file_contains(const char* path, const char* text) {
+    FILE* file = fopen(path, "r");
+    if (!file) {
+        return 0;
+    }
+
+    char buffer[4096];
+    size_t count = fread(buffer, 1, sizeof(buffer) - 1, file);
+    fclose(file);
+    buffer[count] = '\0';
+    return strstr(buffer, text) != NULL;
+}
+
+static int run_tracing_checks(void) {
+    char runtime_csv[128];
+    char hooks_csv[128];
+    snprintf(runtime_csv, sizeof(runtime_csv), "/tmp/kek_trace_%ld_runtime.csv",
+             (long)getpid());
+    snprintf(hooks_csv, sizeof(hooks_csv), "/tmp/kek_trace_%ld_hooks.csv",
+             (long)getpid());
+    unlink(runtime_csv);
+    unlink(hooks_csv);
+
+    if (setenv("KEK_TRACE_RUNTIME_CSV", runtime_csv, 1) != 0 ||
+        setenv("KEK_TRACE_HOOKS_CSV", hooks_csv, 1) != 0) {
+        return 1;
+    }
+
+    KekRuntime runtime;
+    KekStateStore store;
+    KekHookRegistry hooks;
+    SmokeApp app;
+
+    kek_runtime_init(&runtime);
+    kek_state_store_init(&store, &runtime);
+    memset(&app, 0, sizeof(app));
+    app.runtime = &runtime;
+    app.store = &store;
+
+    app.counter_slot = kek_state_store_add_default(&store, &counter_descriptor);
+    if (app.counter_slot == KEK_STATE_INVALID_ID) {
+        return 1;
+    }
+    if (!kek_event_dispatch_pending(kek_runtime_events(&runtime))) {
+        return 1;
+    }
+
+    KekHookDescriptor descriptor = {
+        "trace counter hook", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
+        app.counter_slot, 1ull << 0, NULL, 0, NULL, 0, text_field_hook};
+    kek_hook_registry_init(&hooks, &runtime, &store, &app);
+    if (!kek_hook_registry_add(&hooks, &descriptor)) {
+        return 1;
+    }
+    kek_hook_registry_attach(&hooks);
+
+    int value = 1;
+    if (!kek_state_store_update_fields(&store, app.counter_slot,
+                                       set_counter_value, &value, 1ull << 0) ||
+        !kek_event_dispatch_pending(kek_runtime_events(&runtime)) ||
+        app.text_hook_runs != 1) {
+        return 1;
+    }
+
+    kek_hook_registry_detach(&hooks);
+    kek_state_store_destroy(&store);
+    kek_runtime_destroy(&runtime);
+    unsetenv("KEK_TRACE_RUNTIME_CSV");
+    unsetenv("KEK_TRACE_HOOKS_CSV");
+
+    int ok = trace_file_contains(runtime_csv, "metric,count,total_ns") &&
+             trace_file_contains(runtime_csv, "event_publish") &&
+             trace_file_contains(runtime_csv, "runtime_memory") &&
+             trace_file_contains(hooks_csv, "hook,event_type,state_type_id") &&
+             trace_file_contains(hooks_csv, "trace counter hook");
+
+    unlink(runtime_csv);
+    unlink(hooks_csv);
+    return ok ? 0 : 1;
+}
+
 int main(void) {
     int result = run_smoke();
     if (result == 0) {
         result = run_behavior_checks();
+    }
+    if (result == 0) {
+        result = run_tracing_checks();
     }
     if (result == 0) {
         puts("runtime smoke passed");

@@ -7,6 +7,8 @@
 #include <string.h>
 #include <time.h>
 
+#include "trace.h"
+
 typedef struct KekTimerStateUpdate {
     uint64_t tick;
     uint32_t interval_ms;
@@ -120,7 +122,8 @@ static int timer_ready(KekRuntime* runtime, KekRuntimeState* state,
 }
 
 static void timer_destroy(KekRuntimeState* state) {
-    free(state->data);
+    KekTimer* timer = (KekTimer*)state->data;
+    kek_trace_free(timer ? timer->runtime : NULL, timer, sizeof(*timer));
     state->data = NULL;
 }
 
@@ -130,10 +133,12 @@ int kek_runtime_register_timer(KekRuntime* runtime, KekStateStore* store,
         return -1;
     }
 
-    KekTimer* timer = (KekTimer*)calloc(1, sizeof(*timer));
+    KekTimer* timer = (KekTimer*)kek_trace_malloc(runtime, sizeof(*timer));
     if (!timer) {
         return -1;
     }
+    memset(timer, 0, sizeof(*timer));
+    timer->runtime = runtime;
     timer->store = store;
     timer->slot_id = slot_id;
     timer->interval_ms = interval_ms;
@@ -150,7 +155,7 @@ int kek_runtime_register_timer(KekRuntime* runtime, KekStateStore* store,
 
     int id = kek_runtime_register_state(runtime, &state);
     if (id < 0) {
-        free(timer);
+        kek_trace_free(runtime, timer, sizeof(*timer));
     } else {
         timer_publish(timer);
     }
