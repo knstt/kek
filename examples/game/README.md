@@ -1,6 +1,6 @@
 # Kek Raylib Game Example
 
-This example is a small top-down arena shooter built on the project schema generator plus the Kek runtime state store.
+This example is a small top-down arena shooter built on the project schema generator plus the generated Kek runtime wrapper.
 
 ## Build
 
@@ -46,4 +46,4 @@ Hooks generated from the schema are implemented in `game_hooks.inc.c`, which is 
 - `OnWaveChanged` moves the session to victory.
 - `OnScoreChanged` opens an upgrade state at score thresholds.
 
-The raylib code handles input, drawing, and writes `FrameClock` from `GetFrameTime()`. Authoritative game data lives in `KekStateStore` slots generated from the schema.
+The raylib code handles input, drawing, and writes `FrameClock` from `GetFrameTime()`. Authoritative game data lives in generated state slots. `main.c` owns one `Game_stateRuntime`, which initializes the runtime, generated store, declared slots, and hooks with one call. Gameplay code uses generated runtime-scoped create/delete/find/update helpers instead of manually passing `KekStateStore` pointers and declared slot ids around.

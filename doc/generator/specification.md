@@ -187,8 +187,11 @@ The generated header contains:
 - A generated helper for adding one default `KekStateStore` slot per generated state type.
 - A generated named slot struct and helpers for adding/removing/resetting schema-declared instances in `KekStateStore`.
 - A generated runtime binding struct that owns `KekStateStore`, `KekHookRegistry`, and declared slot ids for a caller-owned `KekRuntime`.
-- Generated per-state create/create-with-initial/delete/find helpers for dynamic instances.
+- A generated runtime wrapper that owns the low-level runtime app, generated declared slots, generated hook descriptors, and any generated string backing buffers.
+- Generated runtime-wrapper accessors for the underlying `KekRuntime`, `KekStateStore`, declared slots, event dispatch, and named declared-instance reads.
+- Generated per-state create/create-with-initial/delete/find helpers for dynamic instances, both for raw `KekStateStore` callers and generated runtime-wrapper callers.
 - Generated typed accessors for named instances and arbitrary slot ids.
+- A generated `<Name>UpdateItem` batch item alias plus generated update helpers, update-item builders, count helpers, declared-slot predicates, and scalar field setters so application code does not need to stitch together store pointers and slot ids for common operations.
 - Generated string-field setter helpers for single-string states, useful for standard input/output bridge code.
 - Generated hook function declarations.
 - A generated hook descriptor table declaration.
@@ -233,7 +236,19 @@ Each generated state field has a bitmask macro named `<STATE_TYPE_MACRO>_FIELD_<
 
 Generated `<name>_<state>_create()` and `<name>_<state>_create_with()` helpers create dynamic instances through `KekStateStore`. The `create_with` variant accepts an already initialized state value and publishes only the created event for that initialized value. Generated `<name>_<state>_delete()` helpers delete dynamic instances.
 
-`<name>_runtime_binding_init()` initializes a generated runtime binding for a caller-owned `KekRuntime`. It initializes the state store, adds declared instances, registers generated hook descriptors, and attaches the hook registry. `<name>_runtime_binding_destroy()` detaches hooks and destroys the generated state store.
+`<name>_runtime_init()` is the recommended application-facing lifecycle helper. It initializes a generated `<Name>Runtime` object that owns a `KekRuntimeApp`, adds declared instances, resolves declared-instance hook slot ids, registers generated hook descriptors, and attaches the hook registry. `<name>_runtime_destroy()` detaches hooks, destroys the generated store, destroys the runtime, and clears the wrapper object.
+
+`<name>_get_runtime()`, `<name>_get_store()`, `<name>_get_slots()`, and const variants expose the wrapper internals for integrations that still need low-level runtime, store, or slot APIs. `<name>_dispatch()` dispatches pending runtime events for host loops that drive their own frame lifecycle.
+
+For batch updates, the generator emits `<Name>UpdateItem` as the generated-project-facing alias for runtime store update items, plus `<name>_update_many()`.
+
+For each state, the generator emits runtime-scoped helpers named `<name>_create_<state>()`, `<name>_create_<state>_with()`, `<name>_delete_<state>()`, `<name>_<state>_at()`, `<name>_<state>_at_const()`, `<name>_first_<state>()`, `<name>_next_<state>()`, `<name>_count_<state>()`, `<name>_update_<state>_slot()`, and `<name>_<state>_slot_update_item()`. For states with a scalar `bool active` field, it also emits `<name>_count_active_<state>()`.
+
+For each declared instance, the generator emits `<name>_<instance>_current()`, `<name>_<instance>_current_const()`, `<name>_<instance>_slot_id()`, `<name>_update_<instance>()`, and `<name>_<instance>_update_item()` helpers. These are convenience wrappers around the generated typed slot accessors and the runtime wrapper's declared slot table. When a state has multiple named instances, the generator also emits `<name>_is_declared_<state>_slot()` predicates for filtering dynamic slots.
+
+For scalar non-`String` fields, the generator emits raw-store setters named `<name>_<state>_set_<field>()`, runtime-scoped arbitrary-slot setters named `<name>_set_<state>_slot_<field>()`, and declared-instance setters named `<name>_set_<instance>_<field>()`. Existing generated `String` setters keep their string-specific `(data, len)` API.
+
+`<name>_runtime_binding_init()` remains available for advanced callers that own a separate `KekRuntime`. It initializes the state store, adds declared instances, registers generated hook descriptors, and attaches the hook registry. `<name>_runtime_binding_destroy()` detaches hooks and destroys the generated state store.
 
 For generated states with exactly one `String` field, `<name>_<state>_set_<field>()` updates that field through `KekStateStore`, preserving validation and change-event publication.
 

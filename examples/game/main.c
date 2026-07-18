@@ -22,8 +22,7 @@
 #define HUD_VALUE_WARNING 3
 
 typedef struct GameApp {
-    KekRuntime runtime;
-    Game_stateRuntimeBinding binding;
+    Game_stateRuntime state;
     bool should_quit;
 } GameApp;
 
@@ -138,38 +137,6 @@ static void normalize_or(float* x, float* y, float fallback_x, float fallback_y)
     *y = fallback_y;
 }
 
-static KekStateStore* game_store(GameApp* app) {
-    return &app->binding.state_store;
-}
-
-static const GameSession* session_const(GameApp* app) {
-    return game_state_session_const(game_store(app), &app->binding.slots);
-}
-
-static const Player* player_const(GameApp* app) {
-    return game_state_player_const(game_store(app), &app->binding.slots);
-}
-
-static const WaveDirector* wave_const(GameApp* app) {
-    return game_state_wave_const(game_store(app), &app->binding.slots);
-}
-
-static bool is_declared_enemy_slot(const GameApp* app, size_t slot) {
-    return slot == app->binding.slots.grunt_enemy || slot == app->binding.slots.runner_enemy ||
-           slot == app->binding.slots.tank_enemy || slot == app->binding.slots.boss_enemy;
-}
-
-static int count_active_enemies(KekStateStore* store) {
-    int count = 0;
-    for (size_t slot = game_state_enemy_first(store); slot != KEK_STATE_INVALID_ID; slot = game_state_enemy_next(store, slot)) {
-        const Enemy* enemy = game_state_enemy_slot_const(store, slot);
-        if (enemy && enemy->active) {
-            count++;
-        }
-    }
-    return count;
-}
-
 #include "game_logic.inc.c"
 #include "game_hooks.inc.c"
 #include "game_render.inc.c"
@@ -177,10 +144,8 @@ static int count_active_enemies(KekStateStore* store) {
 int main(void) {
     GameApp app;
     memset(&app, 0, sizeof(app));
-    kek_runtime_init(&app.runtime);
-    if (!game_state_runtime_binding_init(&app.binding, &app.runtime, &app)) {
-        fprintf(stderr, "failed to initialize generated game state binding\n");
-        kek_runtime_destroy(&app.runtime);
+    if (!game_state_runtime_init(&app.state, &app)) {
+        fprintf(stderr, "failed to initialize generated game state runtime\n");
         return 1;
     }
 
@@ -194,7 +159,6 @@ int main(void) {
     }
 
     CloseWindow();
-    game_state_runtime_binding_destroy(&app.binding);
-    kek_runtime_destroy(&app.runtime);
+    game_state_runtime_destroy(&app.state);
     return 0;
 }

@@ -18,6 +18,14 @@ Related documents:
 
 The runtime capacity is `KEK_RUNTIME_MAX_STATES`.
 
+`KekRuntimeApp` is the recommended convenience container for applications that use generated state stores and generated hooks together. It owns:
+
+- A `KekRuntime`.
+- A `KekStateStore` bound to that runtime.
+- A `KekHookRegistry` bound to that runtime and state store.
+
+`kek_runtime_app_init()` initializes all three pieces, `kek_runtime_app_bind_hooks()` registers and attaches hook descriptors, `kek_runtime_app_dispatch()` dispatches pending events, and `kek_runtime_app_destroy()` detaches hooks, destroys the state store, and destroys the runtime. The lower-level `KekRuntime`, `KekStateStore`, and `KekHookRegistry` APIs remain available for custom ownership models.
+
 ## State Storage
 
 `KekStateStorage` is a separate runtime utility for owning generated state objects.

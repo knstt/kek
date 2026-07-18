@@ -9,6 +9,7 @@
 #include "runtime/state_storage.h"
 #include "runtime/hook.h"
 #include "runtime/runtime.h"
+#include "runtime/app.h"
 
 typedef struct KekString {
     const char* data;

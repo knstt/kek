@@ -31,6 +31,7 @@ RAYLIB_ARCHIVE := $(GAME_DIR)/raylib-$(RAYLIB_VERSION)_$(RAYLIB_PLATFORM).tar.gz
 RAYLIB_LIB := $(RAYLIB_DIR)/lib/libraylib.a
 GAME_CPPFLAGS := $(CPPFLAGS) -I$(RAYLIB_DIR)/include
 RUNTIME_SRCS := \
+	runtime/app.c \
 	runtime/event.c \
 	runtime/hook.c \
 	runtime/stream.c \

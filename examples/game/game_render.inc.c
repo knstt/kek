@@ -44,9 +44,8 @@ static Color hud_color(HudMessageKind kind) {
 }
 
 static void draw_world(GameApp* app) {
-    KekStateStore* store = game_store(app);
-    const Player* player = player_const(app);
-    const InputIntent* input = game_state_input_const(store, &app->binding.slots);
+    const Player* player = game_state_player_current_const(&app->state);
+    const InputIntent* input = game_state_input_current_const(&app->state);
     if (!player) {
         return;
     }
@@ -61,8 +60,8 @@ static void draw_world(GameApp* app) {
         DrawLine((int)-ARENA_HALF_WIDTH, y, (int)ARENA_HALF_WIDTH, y, (Color){26, 31, 50, 255});
     }
 
-    for (size_t slot = game_state_pickup_first(store); slot != KEK_STATE_INVALID_ID; slot = game_state_pickup_next(store, slot)) {
-        const Pickup* pickup = game_state_pickup_slot_const(store, slot);
+    for (size_t slot = game_state_first_pickup(&app->state); slot != KEK_STATE_INVALID_ID; slot = game_state_next_pickup(&app->state, slot)) {
+        const Pickup* pickup = game_state_pickup_at_const(&app->state, slot);
         if (!pickup) {
             continue;
         }
@@ -71,16 +70,16 @@ static void draw_world(GameApp* app) {
         DrawCircleLines((int)pickup->x, (int)pickup->y, radius + 4.0f, Fade(WHITE, 0.35f));
     }
 
-    for (size_t slot = game_state_projectile_first(store); slot != KEK_STATE_INVALID_ID; slot = game_state_projectile_next(store, slot)) {
-        const Projectile* projectile = game_state_projectile_slot_const(store, slot);
+    for (size_t slot = game_state_first_projectile(&app->state); slot != KEK_STATE_INVALID_ID; slot = game_state_next_projectile(&app->state, slot)) {
+        const Projectile* projectile = game_state_projectile_at_const(&app->state, slot);
         if (projectile) {
             DrawCircleV((Vector2){projectile->x, projectile->y}, PROJECTILE_RADIUS, SKYBLUE);
             DrawCircleV((Vector2){projectile->x, projectile->y}, PROJECTILE_RADIUS * 0.45f, WHITE);
         }
     }
 
-    for (size_t slot = game_state_enemy_first(store); slot != KEK_STATE_INVALID_ID; slot = game_state_enemy_next(store, slot)) {
-        const Enemy* enemy = game_state_enemy_slot_const(store, slot);
+    for (size_t slot = game_state_first_enemy(&app->state); slot != KEK_STATE_INVALID_ID; slot = game_state_next_enemy(&app->state, slot)) {
+        const Enemy* enemy = game_state_enemy_at_const(&app->state, slot);
         if (!enemy || !enemy->active) {
             continue;
         }
@@ -107,10 +106,9 @@ static void draw_world(GameApp* app) {
 }
 
 static void draw_overlay(GameApp* app, Camera2D view) {
-    KekStateStore* store = game_store(app);
-    const GameSession* session = session_const(app);
-    const Player* player = player_const(app);
-    const WaveDirector* wave = wave_const(app);
+    const GameSession* session = game_state_session_current_const(&app->state);
+    const Player* player = game_state_player_current_const(&app->state);
+    const WaveDirector* wave = game_state_wave_current_const(&app->state);
     if (!session || !player || !wave) {
         return;
     }
@@ -123,8 +121,8 @@ static void draw_overlay(GameApp* app, Camera2D view) {
     DrawText(TextFormat("WAVE %d  LEFT %d  COMBO x%d", wave->wave, wave->spawn_budget + wave->active_enemies, session->combo),
              34, 105, 18, SKYBLUE);
 
-    for (size_t slot = game_state_hud_message_first(store); slot != KEK_STATE_INVALID_ID; slot = game_state_hud_message_next(store, slot)) {
-        const HudMessage* message = game_state_hud_message_slot_const(store, slot);
+    for (size_t slot = game_state_first_hud_message(&app->state); slot != KEK_STATE_INVALID_ID; slot = game_state_next_hud_message(&app->state, slot)) {
+        const HudMessage* message = game_state_hud_message_at_const(&app->state, slot);
         if (!message) {
             continue;
         }
@@ -140,11 +138,11 @@ static void draw_overlay(GameApp* app, Camera2D view) {
     if (session->debug) {
         DrawRectangle(SCREEN_WIDTH - 318, 18, 300, 120, Fade(BLACK, 0.75f));
         DrawText(TextFormat("FPS %d", GetFPS()), SCREEN_WIDTH - 300, 30, 18, GREEN);
-        DrawText(TextFormat("Enemies %d Projectiles %d", count_active_enemies(store),
-                            count_slots(store, game_state_projectile_first, game_state_projectile_next)),
+        DrawText(TextFormat("Enemies %d Projectiles %d", game_state_count_active_enemy(&app->state),
+                            game_state_count_projectile(&app->state)),
                  SCREEN_WIDTH - 300, 54, 18, RAYWHITE);
-        DrawText(TextFormat("Pickups %d HUD %d", count_slots(store, game_state_pickup_first, game_state_pickup_next),
-                            count_slots(store, game_state_hud_message_first, game_state_hud_message_next)),
+        DrawText(TextFormat("Pickups %d HUD %d", game_state_count_pickup(&app->state),
+                            game_state_count_hud_message(&app->state)),
                  SCREEN_WIDTH - 300, 78, 18, RAYWHITE);
         DrawText(TextFormat("Time %.1f", session->time_alive), SCREEN_WIDTH - 300, 102, 18, RAYWHITE);
     }
@@ -160,8 +158,8 @@ static void draw_center_panel(const char* title, const char* body, const char* h
 }
 
 static Camera2D camera_for(GameApp* app) {
-    const CameraRig* camera = game_state_camera_const(game_store(app), &app->binding.slots);
-    const GameSession* session = session_const(app);
+    const CameraRig* camera = game_state_camera_current_const(&app->state);
+    const GameSession* session = game_state_session_current_const(&app->state);
     Camera2D view = {0};
     view.target = camera ? (Vector2){camera->x, camera->y} : (Vector2){0.0f, 0.0f};
     view.offset = (Vector2){SCREEN_WIDTH * 0.5f, SCREEN_HEIGHT * 0.5f};
@@ -176,7 +174,7 @@ static Camera2D camera_for(GameApp* app) {
 }
 
 static void draw_game(GameApp* app) {
-    const GameSession* session = session_const(app);
+    const GameSession* session = game_state_session_current_const(&app->state);
     BeginDrawing();
     ClearBackground((Color){11, 15, 30, 255});
 
