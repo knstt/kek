@@ -195,6 +195,25 @@ static int failing_counter_hook(KekHookContext* context) {
     return 0;
 }
 
+static int failing_create_text_hook(KekHookContext* context) {
+    SmokeApp* app = (SmokeApp*)context->app_context;
+    app->failing_hook_runs++;
+    return kek_state_store_add_default(context->state_store, &text_descriptor) !=
+           KEK_STATE_INVALID_ID
+               ? 0
+               : 1;
+}
+
+static size_t count_state_type(KekStateStore* store, size_t state_type_id) {
+    size_t count = 0;
+    size_t slot_id = KEK_STATE_INVALID_ID;
+    while ((slot_id = kek_state_store_find_next(store, state_type_id, slot_id)) !=
+           KEK_STATE_INVALID_ID) {
+        count++;
+    }
+    return count;
+}
+
 static int run_behavior_checks(void) {
     KekRuntime runtime;
     KekStateStore store;
@@ -246,6 +265,7 @@ static int run_behavior_checks(void) {
     }
 
     size_t counter_writes[] = {SMOKE_STATE_COUNTER};
+    size_t text_writes[] = {SMOKE_STATE_TEXT};
     KekHookDescriptor descriptors[] = {
         {"self counter", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
          app.counter_slot, 1ull << 0, NULL, 0, counter_writes, 1,
@@ -254,6 +274,9 @@ static int run_behavior_checks(void) {
          app.input_slot, 1ull << 1, NULL, 0, NULL, 0, text_field_hook},
         {"failing counter", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
          app.counter_slot, 1ull << 0, NULL, 0, NULL, 0, failing_counter_hook},
+        {"failing create text", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
+         app.counter_slot, 1ull << 0, NULL, 0, text_writes, 1,
+         failing_create_text_hook},
     };
     kek_hook_registry_init(&hooks, &runtime, &store, &app);
     if (!kek_hook_registry_add(&hooks, &descriptors[0]) ||
@@ -315,6 +338,22 @@ static int run_behavior_checks(void) {
     counter = (const SmokeCounterState*)kek_state_store_current_const(
         &store, app.counter_slot);
     if (!counter || counter->value != 3 ||
+        kek_event_has_pending(kek_runtime_events(&runtime))) {
+        return 1;
+    }
+
+    kek_hook_registry_detach(&hooks);
+    kek_hook_registry_init(&hooks, &runtime, &store, &app);
+    if (!kek_hook_registry_add(&hooks, &descriptors[3])) {
+        return 1;
+    }
+    kek_hook_registry_attach(&hooks);
+    size_t text_count_before = count_state_type(&store, SMOKE_STATE_TEXT);
+    value = 4;
+    if (!kek_state_store_update_fields(&store, app.counter_slot,
+                                       set_counter_value, &value, 1ull << 0) ||
+        kek_event_dispatch_pending(kek_runtime_events(&runtime)) ||
+        count_state_type(&store, SMOKE_STATE_TEXT) != text_count_before ||
         kek_event_has_pending(kek_runtime_events(&runtime))) {
         return 1;
     }

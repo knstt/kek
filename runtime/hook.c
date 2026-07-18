@@ -136,8 +136,8 @@ int kek_hook_registry_dispatch(KekHookRegistry* registry, const KekEvent* event)
         context.app_context = registry->app_context;
         KekStateStoreTransaction state_transaction;
         KekEventTransaction event_transaction;
-        if (!kek_state_store_transaction_begin(registry->state_store,
-                                               &state_transaction) ||
+        if (!kek_state_store_transaction_begin_for_hook(
+                registry->state_store, &state_transaction, descriptor) ||
             !kek_event_transaction_begin(kek_runtime_events(registry->runtime),
                                          &event_transaction)) {
             kek_state_store_transaction_rollback(&state_transaction);

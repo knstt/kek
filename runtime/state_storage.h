@@ -59,6 +59,7 @@ typedef struct KekStateStoreTransactionSlot {
     size_t active_index;
     uint64_t version;
     int in_use;
+    int snapshotted;
 } KekStateStoreTransactionSlot;
 
 typedef struct KekStateStoreTransaction {
@@ -118,6 +119,9 @@ void kek_state_store_end_hook(KekStateStore* store,
                               const KekStateStoreHookExecution* previous);
 int kek_state_store_transaction_begin(KekStateStore* store,
                                       KekStateStoreTransaction* transaction);
+int kek_state_store_transaction_begin_for_hook(
+    KekStateStore* store, KekStateStoreTransaction* transaction,
+    const struct KekHookDescriptor* descriptor);
 void kek_state_store_transaction_commit(KekStateStoreTransaction* transaction);
 void kek_state_store_transaction_rollback(KekStateStoreTransaction* transaction);
 

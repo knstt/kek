@@ -481,8 +481,22 @@ static void state_store_transaction_clear(KekStateStoreTransaction* transaction)
     memset(transaction, 0, sizeof(*transaction));
 }
 
-int kek_state_store_transaction_begin(KekStateStore* store,
-                                      KekStateStoreTransaction* transaction) {
+static int state_store_transaction_should_snapshot(
+    const KekHookDescriptor* descriptor, size_t state_type_id) {
+    if (!descriptor) {
+        return 1;
+    }
+    for (size_t i = 0; i < descriptor->write_count; i++) {
+        if (descriptor->writes[i] == state_type_id) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int kek_state_store_transaction_begin_for_hook(
+    KekStateStore* store, KekStateStoreTransaction* transaction,
+    const KekHookDescriptor* descriptor) {
     if (!store || !transaction) {
         return 0;
     }
@@ -500,6 +514,10 @@ int kek_state_store_transaction_begin(KekStateStore* store,
         if (!slot->in_use || !slot->descriptor) {
             continue;
         }
+        if (!state_store_transaction_should_snapshot(descriptor,
+                                                     slot->descriptor->type_id)) {
+            continue;
+        }
         snapshot->buffers[0] = (unsigned char*)kek_trace_malloc(
             store->runtime, slot->descriptor->size);
         snapshot->buffers[1] = (unsigned char*)kek_trace_malloc(
@@ -514,8 +532,14 @@ int kek_state_store_transaction_begin(KekStateStore* store,
         state_store_trace_copy(store, "state_store_transaction_copy",
                                snapshot->buffers[1], slot->buffers[1],
                                slot->descriptor->size);
+        snapshot->snapshotted = 1;
     }
     return 1;
+}
+
+int kek_state_store_transaction_begin(KekStateStore* store,
+                                      KekStateStoreTransaction* transaction) {
+    return kek_state_store_transaction_begin_for_hook(store, transaction, NULL);
 }
 
 void kek_state_store_transaction_commit(KekStateStoreTransaction* transaction) {
@@ -527,17 +551,27 @@ void kek_state_store_transaction_rollback(KekStateStoreTransaction* transaction)
         return;
     }
     KekStateStore* store = transaction->store;
-    for (size_t i = 0; i < store->slot_count; i++) {
+    for (size_t i = transaction->slot_count; i < store->slot_count; i++) {
         state_slot_clear(store, &store->slots[i]);
     }
     store->slot_count = transaction->slot_count;
-    for (size_t i = 0; i < KEK_STATE_STORE_MAX_SLOTS; i++) {
+    for (size_t i = 0; i < transaction->slot_count; i++) {
         KekStateStoreTransactionSlot* snapshot = &transaction->slots[i];
         KekStateSlot* slot = &store->slots[i];
-        memset(slot, 0, sizeof(*slot));
-        if (i >= transaction->slot_count || !snapshot->in_use) {
+        if (!snapshot->in_use) {
+            state_slot_clear(store, slot);
+            memset(slot, 0, sizeof(*slot));
             continue;
         }
+        if (!snapshot->snapshotted) {
+            slot->descriptor = snapshot->descriptor;
+            slot->active_index = snapshot->active_index;
+            slot->version = snapshot->version;
+            slot->in_use = snapshot->in_use;
+            continue;
+        }
+        state_slot_clear(store, slot);
+        memset(slot, 0, sizeof(*slot));
         slot->descriptor = snapshot->descriptor;
         slot->buffers[0] = snapshot->buffers[0];
         slot->buffers[1] = snapshot->buffers[1];
