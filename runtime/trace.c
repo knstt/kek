@@ -11,6 +11,31 @@
 #include "hook.h"
 #include "runtime.h"
 
+static const char* const trace_runtime_metric_names[] = {
+    [KEK_TRACE_METRIC_EVENT_PUBLISH] = "event_publish",
+    [KEK_TRACE_METRIC_EVENT_DISPATCH_PENDING] = "event_dispatch_pending",
+    [KEK_TRACE_METRIC_EVENT_SUBSCRIBER_DISPATCH] = "event_subscriber_dispatch",
+    [KEK_TRACE_METRIC_RUNTIME_STATE_PREPARE] = "runtime_state_prepare",
+    [KEK_TRACE_METRIC_RUNTIME_STATE_READY] = "runtime_state_ready",
+    [KEK_TRACE_METRIC_RUNTIME_SELECT_WAIT] = "runtime_select_wait",
+    [KEK_TRACE_METRIC_RUNTIME_MALLOC] = "runtime_malloc",
+    [KEK_TRACE_METRIC_RUNTIME_FREE] = "runtime_free",
+    [KEK_TRACE_METRIC_STATE_STORAGE_INIT_COPY] = "state_storage_init_copy",
+    [KEK_TRACE_METRIC_STATE_STORAGE_DRAFT_COPY] = "state_storage_draft_copy",
+    [KEK_TRACE_METRIC_STATE_STORAGE_UPDATE_CALLBACK] =
+        "state_storage_update_callback",
+    [KEK_TRACE_METRIC_STATE_STORAGE_VALIDATION] = "state_storage_validation",
+    [KEK_TRACE_METRIC_STATE_STORAGE_ROLLBACK_COPY] = "state_storage_rollback_copy",
+    [KEK_TRACE_METRIC_STATE_STORE_INIT_COPY] = "state_store_init_copy",
+    [KEK_TRACE_METRIC_STATE_STORE_DRAFT_COPY] = "state_store_draft_copy",
+    [KEK_TRACE_METRIC_STATE_STORE_UPDATE_CALLBACK] =
+        "state_store_update_callback",
+    [KEK_TRACE_METRIC_STATE_STORE_VALIDATION] = "state_store_validation",
+    [KEK_TRACE_METRIC_STATE_STORE_TRANSACTION_COPY] =
+        "state_store_transaction_copy",
+    [KEK_TRACE_METRIC_STATE_STORE_ROLLBACK_COPY] = "state_store_rollback_copy",
+};
+
 uint64_t kek_trace_now_ns(void) {
     struct timespec now;
     if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
@@ -39,6 +64,7 @@ void kek_trace_init(struct KekRuntime* runtime) {
     memset(&runtime->trace, 0, sizeof(runtime->trace));
     const char* runtime_path = getenv("KEK_TRACE_RUNTIME_CSV");
     const char* hooks_path = getenv("KEK_TRACE_HOOKS_CSV");
+    const char* subscriber_timing = getenv("KEK_TRACE_SUBSCRIBER_TIMING");
     trace_copy_path(runtime->trace.runtime_csv_path, runtime_path);
     trace_copy_path(runtime->trace.hooks_csv_path, hooks_path);
     runtime->trace.runtime_csv_enabled =
@@ -46,6 +72,15 @@ void kek_trace_init(struct KekRuntime* runtime) {
     runtime->trace.hooks_csv_enabled = runtime->trace.hooks_csv_path[0] != '\0';
     runtime->trace.enabled = runtime->trace.runtime_csv_enabled ||
                              runtime->trace.hooks_csv_enabled;
+    runtime->trace.subscriber_timing_enabled =
+        subscriber_timing && subscriber_timing[0] != '\0' &&
+        strcmp(subscriber_timing, "0") != 0;
+    if (runtime->trace.runtime_csv_enabled) {
+        for (size_t i = 0; i < KEK_TRACE_RUNTIME_METRIC_ID_COUNT; i++) {
+            runtime->trace.runtime_metrics[i].name = trace_runtime_metric_names[i];
+        }
+        runtime->trace.runtime_metric_count = KEK_TRACE_RUNTIME_METRIC_ID_COUNT;
+    }
 }
 
 int kek_trace_enabled(const struct KekRuntime* runtime) {
@@ -60,7 +95,8 @@ static KekTraceRuntimeMetric* trace_runtime_metric(struct KekRuntime* runtime,
 
     for (size_t i = 0; i < runtime->trace.runtime_metric_count; i++) {
         KekTraceRuntimeMetric* metric = &runtime->trace.runtime_metrics[i];
-        if (metric->name && strcmp(metric->name, name) == 0) {
+        if (metric->name == name ||
+            (metric->name && strcmp(metric->name, name) == 0)) {
             return metric;
         }
     }
@@ -93,6 +129,35 @@ void kek_trace_record_runtime(struct KekRuntime* runtime, const char* name,
     }
 }
 
+void kek_trace_record_runtime_metric(struct KekRuntime* runtime,
+                                     KekTraceRuntimeMetricId metric_id,
+                                     uint64_t duration_ns) {
+    if (!runtime || !runtime->trace.runtime_csv_enabled ||
+        metric_id < 0 || metric_id >= KEK_TRACE_RUNTIME_METRIC_ID_COUNT) {
+        return;
+    }
+
+    KekTraceRuntimeMetric* metric = &runtime->trace.runtime_metrics[metric_id];
+    metric->count++;
+    metric->total_ns += duration_ns;
+    if (metric->count == 1 || duration_ns < metric->min_ns) {
+        metric->min_ns = duration_ns;
+    }
+    if (duration_ns > metric->max_ns) {
+        metric->max_ns = duration_ns;
+    }
+}
+
+void kek_trace_count_runtime_metric(struct KekRuntime* runtime,
+                                    KekTraceRuntimeMetricId metric_id) {
+    if (!runtime || !runtime->trace.runtime_csv_enabled ||
+        metric_id < 0 || metric_id >= KEK_TRACE_RUNTIME_METRIC_ID_COUNT) {
+        return;
+    }
+
+    runtime->trace.runtime_metrics[metric_id].count++;
+}
+
 static KekTraceHookMetric* trace_hook_metric(
     struct KekRuntime* runtime, const struct KekHookDescriptor* descriptor) {
     if (!runtime || !descriptor || !runtime->trace.hooks_csv_enabled) {
@@ -105,7 +170,8 @@ static KekTraceHookMetric* trace_hook_metric(
         if (metric->event_type == (int)descriptor->event_type &&
             metric->state_type_id == descriptor->state_type_id &&
             metric->state_slot_id == descriptor->state_slot_id &&
-            metric->hook_name && strcmp(metric->hook_name, name) == 0) {
+            (metric->hook_name == name ||
+             (metric->hook_name && strcmp(metric->hook_name, name) == 0))) {
             return metric;
         }
     }
@@ -163,7 +229,8 @@ void* kek_trace_malloc(struct KekRuntime* runtime, size_t size) {
     void* ptr = malloc(size);
     if (kek_trace_enabled(runtime)) {
         uint64_t end = kek_trace_now_ns();
-        kek_trace_record_runtime(runtime, "runtime_malloc", end - start);
+        kek_trace_record_runtime_metric(runtime, KEK_TRACE_METRIC_RUNTIME_MALLOC,
+                                        end - start);
         if (ptr) {
             runtime->trace.allocation_count++;
             runtime->trace.current_bytes += size;
@@ -185,7 +252,8 @@ void kek_trace_free(struct KekRuntime* runtime, void* ptr, size_t size) {
     free(ptr);
     if (kek_trace_enabled(runtime)) {
         uint64_t end = kek_trace_now_ns();
-        kek_trace_record_runtime(runtime, "runtime_free", end - start);
+        kek_trace_record_runtime_metric(runtime, KEK_TRACE_METRIC_RUNTIME_FREE,
+                                        end - start);
         runtime->trace.free_count++;
         runtime->trace.total_freed_bytes += size;
         if (runtime->trace.current_bytes >= size) {

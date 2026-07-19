@@ -10,18 +10,21 @@ static uint64_t state_store_trace_start(KekStateStore* store) {
     return kek_trace_enabled(store ? store->runtime : NULL) ? kek_trace_now_ns() : 0;
 }
 
-static void state_store_trace_end(KekStateStore* store, const char* name,
+static void state_store_trace_end(KekStateStore* store,
+                                  KekTraceRuntimeMetricId metric_id,
                                   uint64_t start) {
     if (kek_trace_enabled(store ? store->runtime : NULL)) {
-        kek_trace_record_runtime(store->runtime, name, kek_trace_now_ns() - start);
+        kek_trace_record_runtime_metric(store->runtime, metric_id,
+                                        kek_trace_now_ns() - start);
     }
 }
 
-static void state_store_trace_copy(KekStateStore* store, const char* name,
+static void state_store_trace_copy(KekStateStore* store,
+                                   KekTraceRuntimeMetricId metric_id,
                                    void* target, const void* source, size_t size) {
     uint64_t start = state_store_trace_start(store);
     memcpy(target, source, size);
-    state_store_trace_end(store, name, start);
+    state_store_trace_end(store, metric_id, start);
 }
 
 static void state_store_trace_update(KekStateStore* store,
@@ -29,7 +32,8 @@ static void state_store_trace_update(KekStateStore* store,
                                      void* draft, void* context) {
     uint64_t start = state_store_trace_start(store);
     update(draft, context);
-    state_store_trace_end(store, "state_store_update_callback", start);
+    state_store_trace_end(store, KEK_TRACE_METRIC_STATE_STORE_UPDATE_CALLBACK,
+                          start);
 }
 
 static int state_store_trace_check(KekStateStore* store,
@@ -37,7 +41,7 @@ static int state_store_trace_check(KekStateStore* store,
                                    const void* state) {
     uint64_t start = state_store_trace_start(store);
     int ok = check(state);
-    state_store_trace_end(store, "state_store_validation", start);
+    state_store_trace_end(store, KEK_TRACE_METRIC_STATE_STORE_VALIDATION, start);
     return ok;
 }
 
@@ -259,16 +263,18 @@ size_t kek_state_store_add(KekStateStore* store,
     }
 
     if (initial_state) {
-        state_store_trace_copy(store, "state_store_init_copy", slot->buffers[0],
-                               initial_state, descriptor->size);
+        state_store_trace_copy(store, KEK_TRACE_METRIC_STATE_STORE_INIT_COPY,
+                               slot->buffers[0], initial_state,
+                               descriptor->size);
     } else if (descriptor->set_default) {
         descriptor->set_default(slot->buffers[0]);
     } else {
         memset(slot->buffers[0], 0, descriptor->size);
     }
 
-    state_store_trace_copy(store, "state_store_init_copy", slot->buffers[1],
-                           slot->buffers[0], descriptor->size);
+    state_store_trace_copy(store, KEK_TRACE_METRIC_STATE_STORE_INIT_COPY,
+                           slot->buffers[1], slot->buffers[0],
+                           descriptor->size);
     if (!state_store_trace_check(store, descriptor->check, slot->buffers[0])) {
         state_slot_clear(store, slot);
         return KEK_STATE_INVALID_ID;
@@ -454,7 +460,8 @@ int kek_state_store_update_fields(KekStateStore* store, size_t slot_id,
                 if (!rollback_copy) {
                     return 0;
                 }
-                state_store_trace_copy(store, "state_store_transaction_copy",
+                state_store_trace_copy(store,
+                                       KEK_TRACE_METRIC_STATE_STORE_TRANSACTION_COPY,
                                        rollback_copy, draft,
                                        slot->descriptor->size);
                 entry->buffers[0] = rollback_copy;
@@ -464,8 +471,9 @@ int kek_state_store_update_fields(KekStateStore* store, size_t slot_id,
                 draft_index = slot->active_index == 0 ? 1u : 0u;
                 draft = slot->buffers[draft_index];
                 rollback_source = slot->buffers[slot->active_index];
-                state_store_trace_copy(store, "state_store_draft_copy", draft,
-                                       rollback_source,
+                state_store_trace_copy(store,
+                                       KEK_TRACE_METRIC_STATE_STORE_DRAFT_COPY,
+                                       draft, rollback_source,
                                        slot->descriptor->size);
             }
             entry->dirty = 1;
@@ -479,7 +487,8 @@ int kek_state_store_update_fields(KekStateStore* store, size_t slot_id,
             if (!rollback_copy) {
                 return 0;
             }
-            state_store_trace_copy(store, "state_store_transaction_copy",
+            state_store_trace_copy(store,
+                                   KEK_TRACE_METRIC_STATE_STORE_TRANSACTION_COPY,
                                    rollback_copy, draft,
                                    slot->descriptor->size);
         }
@@ -487,13 +496,16 @@ int kek_state_store_update_fields(KekStateStore* store, size_t slot_id,
         state_store_trace_update(store, update, draft, context);
         if (!state_store_trace_check(store, slot->descriptor->check, draft)) {
             if (rollback_copy) {
-                state_store_trace_copy(store, "state_store_rollback_copy", draft,
-                                       rollback_copy, slot->descriptor->size);
+                state_store_trace_copy(store,
+                                       KEK_TRACE_METRIC_STATE_STORE_ROLLBACK_COPY,
+                                       draft, rollback_copy,
+                                       slot->descriptor->size);
                 kek_trace_free(store->runtime, rollback_copy,
                                slot->descriptor->size);
             } else if (rollback_source) {
-                state_store_trace_copy(store, "state_store_rollback_copy", draft,
-                                       rollback_source,
+                state_store_trace_copy(store,
+                                       KEK_TRACE_METRIC_STATE_STORE_ROLLBACK_COPY,
+                                       draft, rollback_source,
                                        slot->descriptor->size);
             }
             if (entry->owns_buffers && entry->buffers[0] == rollback_copy) {
@@ -523,16 +535,20 @@ int kek_state_store_update_fields(KekStateStore* store, size_t slot_id,
 
         entry->pending_version = previous_version;
         if (rollback_copy) {
-            state_store_trace_copy(store, "state_store_rollback_copy", draft,
-                                   rollback_copy, slot->descriptor->size);
+            state_store_trace_copy(store,
+                                   KEK_TRACE_METRIC_STATE_STORE_ROLLBACK_COPY,
+                                   draft, rollback_copy,
+                                   slot->descriptor->size);
             if (entry->owns_buffers && entry->buffers[0] == rollback_copy) {
                 entry->buffers[0] = NULL;
                 entry->owns_buffers = 0;
             }
             kek_trace_free(store->runtime, rollback_copy, slot->descriptor->size);
         } else if (rollback_source) {
-            state_store_trace_copy(store, "state_store_rollback_copy", draft,
-                                   rollback_source, slot->descriptor->size);
+            state_store_trace_copy(store,
+                                   KEK_TRACE_METRIC_STATE_STORE_ROLLBACK_COPY,
+                                   draft, rollback_source,
+                                   slot->descriptor->size);
             entry->dirty = 0;
             entry->draft_index = KEK_STATE_INVALID_ID;
         }
@@ -542,13 +558,13 @@ int kek_state_store_update_fields(KekStateStore* store, size_t slot_id,
     size_t inactive_index = slot->active_index == 0 ? 1u : 0u;
     void* current = slot->buffers[slot->active_index];
     void* draft = slot->buffers[inactive_index];
-    state_store_trace_copy(store, "state_store_draft_copy", draft, current,
-                           slot->descriptor->size);
+    state_store_trace_copy(store, KEK_TRACE_METRIC_STATE_STORE_DRAFT_COPY, draft,
+                           current, slot->descriptor->size);
 
     state_store_trace_update(store, update, draft, context);
     if (!state_store_trace_check(store, slot->descriptor->check, draft)) {
-        state_store_trace_copy(store, "state_store_rollback_copy", draft, current,
-                               slot->descriptor->size);
+        state_store_trace_copy(store, KEK_TRACE_METRIC_STATE_STORE_ROLLBACK_COPY,
+                               draft, current, slot->descriptor->size);
         return 0;
     }
 
@@ -563,8 +579,8 @@ int kek_state_store_update_fields(KekStateStore* store, size_t slot_id,
 
     slot->active_index = inactive_index == 0 ? 1u : 0u;
     slot->version--;
-    state_store_trace_copy(store, "state_store_rollback_copy", draft, current,
-                           slot->descriptor->size);
+    state_store_trace_copy(store, KEK_TRACE_METRIC_STATE_STORE_ROLLBACK_COPY,
+                           draft, current, slot->descriptor->size);
     return 0;
 }
 
@@ -637,7 +653,7 @@ int kek_state_store_update_many(KekStateStore* store,
         slots[i] = slot;
         active_indices[i] = slot->active_index;
         inactive_indices[i] = slot->active_index == 0 ? 1u : 0u;
-        state_store_trace_copy(store, "state_store_draft_copy",
+        state_store_trace_copy(store, KEK_TRACE_METRIC_STATE_STORE_DRAFT_COPY,
                                slot->buffers[inactive_indices[i]],
                                slot->buffers[slot->active_index],
                                slot->descriptor->size);
@@ -652,7 +668,7 @@ int kek_state_store_update_many(KekStateStore* store,
             for (size_t j = 0; j <= i; j++) {
                 KekStateSlot* rollback_slot = slots[j];
                 state_store_trace_copy(
-                    store, "state_store_rollback_copy",
+                    store, KEK_TRACE_METRIC_STATE_STORE_ROLLBACK_COPY,
                     rollback_slot->buffers[inactive_indices[j]],
                     rollback_slot->buffers[rollback_slot->active_index],
                     rollback_slot->descriptor->size);
@@ -673,7 +689,8 @@ int kek_state_store_update_many(KekStateStore* store,
             for (size_t j = 0; j < update_count; j++) {
                 slots[j]->active_index = active_indices[j];
                 slots[j]->version--;
-                state_store_trace_copy(store, "state_store_rollback_copy",
+                state_store_trace_copy(store,
+                                       KEK_TRACE_METRIC_STATE_STORE_ROLLBACK_COPY,
                                        slots[j]->buffers[inactive_indices[j]],
                                        slots[j]->buffers[active_indices[j]],
                                        slots[j]->descriptor->size);
@@ -687,7 +704,7 @@ int kek_state_store_update_many(KekStateStore* store,
     for (size_t i = 0; i < update_count; i++) {
         slots[i]->active_index = active_indices[i];
         slots[i]->version--;
-        state_store_trace_copy(store, "state_store_rollback_copy",
+        state_store_trace_copy(store, KEK_TRACE_METRIC_STATE_STORE_ROLLBACK_COPY,
                                slots[i]->buffers[inactive_indices[i]],
                                slots[i]->buffers[active_indices[i]],
                                slots[i]->descriptor->size);
@@ -872,7 +889,7 @@ void kek_state_store_transaction_rollback(KekStateStoreTransaction* transaction)
             snapshot->owns_buffers = 0;
         } else if (snapshot->owns_buffers && snapshot->dirty &&
                    snapshot->buffers[0]) {
-            state_store_trace_copy(store, "state_store_rollback_copy",
+            state_store_trace_copy(store, KEK_TRACE_METRIC_STATE_STORE_ROLLBACK_COPY,
                                    slot->buffers[snapshot->draft_index],
                                    snapshot->buffers[0],
                                    snapshot->descriptor->size);

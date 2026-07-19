@@ -20,6 +20,29 @@ typedef struct KekTraceRuntimeMetric {
     uint64_t max_ns;
 } KekTraceRuntimeMetric;
 
+typedef enum KekTraceRuntimeMetricId {
+    KEK_TRACE_METRIC_EVENT_PUBLISH = 0,
+    KEK_TRACE_METRIC_EVENT_DISPATCH_PENDING,
+    KEK_TRACE_METRIC_EVENT_SUBSCRIBER_DISPATCH,
+    KEK_TRACE_METRIC_RUNTIME_STATE_PREPARE,
+    KEK_TRACE_METRIC_RUNTIME_STATE_READY,
+    KEK_TRACE_METRIC_RUNTIME_SELECT_WAIT,
+    KEK_TRACE_METRIC_RUNTIME_MALLOC,
+    KEK_TRACE_METRIC_RUNTIME_FREE,
+    KEK_TRACE_METRIC_STATE_STORAGE_INIT_COPY,
+    KEK_TRACE_METRIC_STATE_STORAGE_DRAFT_COPY,
+    KEK_TRACE_METRIC_STATE_STORAGE_UPDATE_CALLBACK,
+    KEK_TRACE_METRIC_STATE_STORAGE_VALIDATION,
+    KEK_TRACE_METRIC_STATE_STORAGE_ROLLBACK_COPY,
+    KEK_TRACE_METRIC_STATE_STORE_INIT_COPY,
+    KEK_TRACE_METRIC_STATE_STORE_DRAFT_COPY,
+    KEK_TRACE_METRIC_STATE_STORE_UPDATE_CALLBACK,
+    KEK_TRACE_METRIC_STATE_STORE_VALIDATION,
+    KEK_TRACE_METRIC_STATE_STORE_TRANSACTION_COPY,
+    KEK_TRACE_METRIC_STATE_STORE_ROLLBACK_COPY,
+    KEK_TRACE_RUNTIME_METRIC_ID_COUNT
+} KekTraceRuntimeMetricId;
+
 typedef struct KekTraceHookMetric {
     const char* hook_name;
     int event_type;
@@ -40,6 +63,7 @@ typedef struct KekRuntimeTrace {
     int enabled;
     int runtime_csv_enabled;
     int hooks_csv_enabled;
+    int subscriber_timing_enabled;
     char runtime_csv_path[KEK_TRACE_PATH_CAPACITY];
     char hooks_csv_path[KEK_TRACE_PATH_CAPACITY];
     KekTraceRuntimeMetric runtime_metrics[KEK_TRACE_MAX_RUNTIME_METRICS];
@@ -60,6 +84,11 @@ void kek_trace_destroy(struct KekRuntime* runtime);
 int kek_trace_enabled(const struct KekRuntime* runtime);
 void kek_trace_record_runtime(struct KekRuntime* runtime, const char* name,
                               uint64_t duration_ns);
+void kek_trace_record_runtime_metric(struct KekRuntime* runtime,
+                                     KekTraceRuntimeMetricId metric_id,
+                                     uint64_t duration_ns);
+void kek_trace_count_runtime_metric(struct KekRuntime* runtime,
+                                    KekTraceRuntimeMetricId metric_id);
 void kek_trace_record_hook(struct KekRuntime* runtime,
                            const struct KekHookDescriptor* descriptor,
                            const struct KekEvent* event,

@@ -54,7 +54,7 @@ It is responsible for event processing and runtime-managed states. It is not res
 | RT-NFR-004 | Keep subscriber capacity bounded. | Implemented | `KEK_EVENT_MAX_SUBSCRIBERS` |
 | RT-NFR-005 | Keep runtime state capacity bounded. | Implemented | `KEK_RUNTIME_MAX_STATES` |
 | RT-NFR-006 | Keep stream buffers bounded. | Implemented | `KEK_STREAM_BUFFER_CAPACITY` |
-| RT-NFR-007 | Keep tracing optional and internally aggregated. | Implemented | Tracing is disabled unless a trace CSV environment variable is set. |
+| RT-NFR-007 | Keep tracing optional, internally aggregated, and low-overhead for known runtime metrics. | Implemented | Tracing is disabled unless a trace CSV environment variable is set; built-in runtime metrics use direct metric slots and per-subscriber timing is opt-in. |
 | RT-NFR-008 | Keep committed state buffers stable during hook transactions. | Implemented | Transaction drafts are not made active until hook commit. |
 
 ## Out Of Scope

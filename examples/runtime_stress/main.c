@@ -26,7 +26,7 @@
 enum {
     STRESS_AGENT_COUNT = 96,
     STRESS_PACKET_COUNT = 20,
-    STRESS_CYCLES = 120,
+    STRESS_CYCLES_DEFAULT = 120,
     STRESS_BATCH_SIZE = 8
 };
 
@@ -211,8 +211,9 @@ static int create_dynamic_slots(Runtime_stress_stateRuntime* stress,
 
 static int run_batched_cycles(Runtime_stress_stateRuntime* stress,
                               const size_t agents[STRESS_AGENT_COUNT],
-                              const size_t packets[STRESS_PACKET_COUNT]) {
-    for (size_t cycle = 0; cycle < STRESS_CYCLES; cycle++) {
+                              const size_t packets[STRESS_PACKET_COUNT],
+                              size_t cycles) {
+    for (size_t cycle = 0; cycle < cycles; cycle++) {
         Runtime_stress_stateUpdateItem updates[STRESS_BATCH_SIZE];
         AgentStep agent_steps[4];
         PacketStep packet_steps[2];
@@ -442,23 +443,40 @@ static int exercise_streams_and_timers(Runtime_stress_stateRuntime* stress,
 }
 
 static int verify_results(const Runtime_stress_stateRuntime* stress,
-                          const RuntimeStressApp* app) {
+                          const RuntimeStressApp* app,
+                          size_t cycles) {
     const Telemetry* telemetry =
         runtime_stress_state_telemetry_current_const(stress);
     const AuditLog* audit = runtime_stress_state_audit_current_const(stress);
     if (!telemetry || !audit || !app) {
         return 0;
     }
-    return telemetry->total_events > 1000 && telemetry->hook_hits > 1000 &&
+    uint64_t cycle_floor = (uint64_t)cycles * 8u;
+    return telemetry->total_events > cycle_floor &&
+           telemetry->hook_hits > cycle_floor &&
            telemetry->timer_ticks >= 3 && telemetry->stream_bytes > 0 &&
            audit->batch_count > 0 && audit->deleted_count >= 2 &&
            audit->eof_count > 0 && audit->error_count > 0 &&
-           app->subscriber_events[KEK_EVENT_STATE_CHANGED] > 1000 &&
-           app->subscriber_events[KEK_EVENT_STATE_BATCH_CHANGED] >= STRESS_CYCLES &&
+           app->subscriber_events[KEK_EVENT_STATE_CHANGED] > cycle_floor &&
+           app->subscriber_events[KEK_EVENT_STATE_BATCH_CHANGED] >= cycles &&
            app->subscriber_events[KEK_EVENT_STREAM_DATA] > 0 &&
            app->subscriber_events[KEK_EVENT_STREAM_EOF] > 0 &&
            app->subscriber_events[KEK_EVENT_STREAM_ERROR] > 0 &&
-           app->hook_calls > 1000;
+           app->hook_calls > cycle_floor;
+}
+
+static size_t stress_cycle_count(void) {
+    const char* value = getenv("KEK_STRESS_CYCLES");
+    if (!value || value[0] == '\0') {
+        return STRESS_CYCLES_DEFAULT;
+    }
+
+    char* end = NULL;
+    unsigned long long parsed = strtoull(value, &end, 10);
+    if (end == value || (end && *end != '\0') || parsed == 0) {
+        return STRESS_CYCLES_DEFAULT;
+    }
+    return (size_t)parsed;
 }
 
 int main(void) {
@@ -466,6 +484,8 @@ int main(void) {
     RuntimeStressApp app;
     size_t agents[STRESS_AGENT_COUNT];
     size_t packets[STRESS_PACKET_COUNT];
+    size_t cycles = stress_cycle_count();
+    uint64_t stress_start_ns = kek_trace_now_ns();
     int ok = 0;
 
     memset(&app, 0, sizeof(app));
@@ -488,17 +508,22 @@ int main(void) {
     STRESS_CHECK("active agent count",
                  runtime_stress_state_count_active_agent(&stress) > 0);
     STRESS_CHECK("rollback paths", exercise_rollbacks(&stress, &app));
-    STRESS_CHECK("batched cycles", run_batched_cycles(&stress, agents, packets));
+    STRESS_CHECK("batched cycles", run_batched_cycles(&stress, agents, packets,
+                                                      cycles));
     STRESS_CHECK("delete and slot reuse",
                  exercise_delete_and_reuse(&stress, agents, packets));
     STRESS_CHECK("streams and timers", exercise_streams_and_timers(&stress, &app));
-    STRESS_CHECK("final results", verify_results(&stress, &app));
+    STRESS_CHECK("final results", verify_results(&stress, &app, cycles));
     ok = 1;
 
 done:
     runtime_stress_state_runtime_destroy(&stress);
     if (ok) {
-        printf("runtime stress passed: hooks=%llu state_changed=%llu batches=%llu\n",
+        uint64_t stress_end_ns = kek_trace_now_ns();
+        printf("runtime stress passed: cycles=%zu elapsed_ns=%llu hooks=%llu "
+               "state_changed=%llu batches=%llu\n",
+               cycles,
+               (unsigned long long)(stress_end_ns - stress_start_ns),
                (unsigned long long)app.hook_calls,
                (unsigned long long)app.subscriber_events[KEK_EVENT_STATE_CHANGED],
                (unsigned long long)app.subscriber_events[KEK_EVENT_STATE_BATCH_CHANGED]);

@@ -42,6 +42,8 @@ flowchart TB
 | `runtime/state.h` | Runtime state kind and callback interface. |
 | `runtime/runtime.h` | Runtime object and public runtime API. |
 | `runtime/runtime.c` | Runtime initialization, state registry, event loop, drain, raw mode. |
+| `runtime/trace.h` | Optional aggregate tracing state, metric identifiers, and trace declarations. |
+| `runtime/trace.c` | Runtime and hook trace aggregation, runtime-owned memory counters, and CSV writing. |
 | `runtime/stream.h` | Stream state API and stream data structure. |
 | `runtime/stream.c` | Stream state implementation over file descriptors. |
 | `runtime/state_storage.h` | Rollback-safe generated state storage API. |
@@ -117,7 +119,9 @@ Several slots may share one descriptor, enabling multiple instances of one state
 
 ## Hook Architecture
 
-Hook descriptors declare their trigger plus read/write state type dependencies. The runtime hook registry filters events and invokes hook bodies supplied by application code. While a hook body runs, the state store checks writes against the active hook descriptor. Hooks may write the triggering slot when the triggering state type is declared writable.
+Hook descriptors declare their trigger plus read/write state type dependencies. The runtime hook registry indexes descriptors into fixed per-event-type buckets for wildcard-state hooks and fixed per-event/per-state buckets for exact-state hooks. Dispatch visits the wildcard event bucket and the exact state bucket for the incoming event before applying slot and changed-field filters. While a hook body runs, the state store checks writes against the active hook descriptor. Hooks may write the triggering slot when the triggering state type is declared writable.
+
+The bucket index is stored inside `KekHookRegistry`, rebuilt at attach time, and uses descriptor indices rather than extra descriptor copies. Registration and dynamic hook loading remain explicit safe-point operations, which keeps the dispatch path read-only over registry indexing data and leaves room for future lock or copy-and-swap synchronization.
 
 Hook bodies normally read committed state through `KekStateStore`. Transactional writes made earlier in the same hook are chained internally through the transaction draft rather than exposed as public draft pointers. When hooks need the exact triggering version, they can read the copied snapshot from the triggering event through `kek_hook_event_state()`.
 
@@ -186,6 +190,7 @@ flowchart LR
 
 - Single-threaded execution.
 - Hook transaction commit is the state visibility boundary for future threaded execution.
+- Optional tracing is stored per runtime; built-in runtime metrics use fixed metric slots instead of mutable global state or per-record string lookups. High-volume subscriber dispatch timing is opt-in so normal trace runs can count subscriber calls without paying a clock call around every subscriber.
 - Fixed maximum number of runtime states.
 - Fixed event queue capacity.
 - Fixed subscriber capacity per event type.

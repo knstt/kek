@@ -35,6 +35,7 @@ Tracing is disabled by default. Applications can enable it without code changes 
 | --- | --- |
 | `KEK_TRACE_RUNTIME_CSV` | Path for runtime/internal aggregate metrics. |
 | `KEK_TRACE_HOOKS_CSV` | Path for application hook aggregate metrics. |
+| `KEK_TRACE_SUBSCRIBER_TIMING` | Optional nonzero value that enables per-subscriber dispatch timing. |
 
 When tracing is enabled, the runtime records aggregate count, total time, average time, min time, and max time in nanoseconds. `kek_runtime_destroy()` writes the enabled CSV files on a best-effort basis; CSV write failures do not change runtime destroy behavior.
 
@@ -47,6 +48,10 @@ metric,count,total_ns,avg_ns,min_ns,max_ns,current_bytes,peak_bytes,total_alloca
 Runtime metrics include event publishing, event dispatch, subscriber dispatch, runtime state prepare/ready callbacks, `select()` wait time, state copy operations, validation callbacks, update callbacks, transaction snapshot copies, and runtime-owned allocation/free calls.
 
 Memory columns track runtime-owned allocations only, such as state buffers, transaction snapshots, stream states, and timer states. They do not report process RSS or allocations performed by application hook bodies.
+
+Built-in runtime metrics are recorded through fixed per-runtime metric slots. The public string-based runtime tracing helper remains available for ad hoc metrics, but runtime internals use direct metric identifiers to avoid per-record string lookup overhead and to keep future synchronization around trace aggregation localized to each runtime instance.
+
+By default, `event_subscriber_dispatch` counts subscriber calls without timing each subscriber individually, because high-volume per-subscriber clocks can dominate stress traces. Set `KEK_TRACE_SUBSCRIBER_TIMING` to a nonzero value to populate subscriber dispatch duration columns when that detail is needed.
 
 The hooks CSV uses:
 
@@ -152,7 +157,7 @@ Dispatch is synchronous: each active subscriber for the event type is called bef
 
 ## Hook Registry
 
-`KekHookRegistry` bridges generated hook descriptors to the event dispatcher. A registry stores hook descriptors, subscribes one internal handler to runtime event types, filters by event type plus optional generated state type and slot id, and invokes matching hook functions with `KekHookContext`.
+`KekHookRegistry` bridges generated hook descriptors to the event dispatcher. A registry stores hook descriptors, indexes wildcard-state hooks by event type, indexes exact-state hooks by event type and state type, subscribes one internal handler to runtime event types, filters the matching bucket entries by optional slot id and changed fields, and invokes matching hook functions with `KekHookContext`.
 
 `KekHookContext` contains:
 

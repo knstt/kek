@@ -80,16 +80,18 @@ int kek_event_publish(KekEventDispatcher* dispatcher, const KekEvent* event) {
         return 0;
     }
 
-    uint64_t start = kek_trace_enabled(dispatcher->runtime) ? kek_trace_now_ns() : 0;
+    int trace_enabled = kek_trace_enabled(dispatcher->runtime);
+    uint64_t start = trace_enabled ? kek_trace_now_ns() : 0;
     dispatcher->queue[dispatcher->queue_end] = *event;
-    if (kek_trace_enabled(dispatcher->runtime)) {
+    if (trace_enabled) {
         dispatcher->queue[dispatcher->queue_end].trace_published_ns = start;
     }
     dispatcher->queue_end = (dispatcher->queue_end + 1) % KEK_EVENT_QUEUE_CAPACITY;
     dispatcher->queue_size++;
-    if (kek_trace_enabled(dispatcher->runtime)) {
+    if (trace_enabled) {
         uint64_t end = kek_trace_now_ns();
-        kek_trace_record_runtime(dispatcher->runtime, "event_publish", end - start);
+        kek_trace_record_runtime_metric(
+            dispatcher->runtime, KEK_TRACE_METRIC_EVENT_PUBLISH, end - start);
     }
     return 1;
 }
@@ -99,8 +101,10 @@ int kek_event_dispatch_pending(KekEventDispatcher* dispatcher) {
         return 0;
     }
 
-    uint64_t dispatch_start =
-        kek_trace_enabled(dispatcher->runtime) ? kek_trace_now_ns() : 0;
+    int trace_enabled = kek_trace_enabled(dispatcher->runtime);
+    int trace_subscribers =
+        trace_enabled && dispatcher->runtime->trace.subscriber_timing_enabled;
+    uint64_t dispatch_start = trace_enabled ? kek_trace_now_ns() : 0;
     while (dispatcher->queue_size > 0) {
         KekEvent event = dispatcher->queue[dispatcher->queue_start];
         dispatcher->queue_start = (dispatcher->queue_start + 1) % KEK_EVENT_QUEUE_CAPACITY;
@@ -116,32 +120,48 @@ int kek_event_dispatch_pending(KekEventDispatcher* dispatcher) {
             KekEventSubscriber* subscriber = &list->subscribers[i];
             if (subscriber->active) {
                 uint64_t subscriber_start =
-                    kek_trace_enabled(dispatcher->runtime) ? kek_trace_now_ns() : 0;
+                    trace_subscribers ? kek_trace_now_ns() : 0;
                 if (!subscriber->handler(&event, subscriber->context)) {
-                    if (kek_trace_enabled(dispatcher->runtime)) {
-                        uint64_t subscriber_end = kek_trace_now_ns();
-                        kek_trace_record_runtime(dispatcher->runtime,
-                                                 "event_subscriber_dispatch",
-                                                 subscriber_end - subscriber_start);
-                        kek_trace_record_runtime(dispatcher->runtime,
-                                                 "event_dispatch_pending",
-                                                 subscriber_end - dispatch_start);
+                    if (trace_enabled) {
+                        uint64_t subscriber_end =
+                            trace_subscribers ? kek_trace_now_ns() : 0;
+                        if (trace_subscribers) {
+                            kek_trace_record_runtime_metric(
+                                dispatcher->runtime,
+                                KEK_TRACE_METRIC_EVENT_SUBSCRIBER_DISPATCH,
+                                subscriber_end - subscriber_start);
+                        } else {
+                            kek_trace_count_runtime_metric(
+                                dispatcher->runtime,
+                                KEK_TRACE_METRIC_EVENT_SUBSCRIBER_DISPATCH);
+                        }
+                        kek_trace_record_runtime_metric(
+                            dispatcher->runtime,
+                            KEK_TRACE_METRIC_EVENT_DISPATCH_PENDING,
+                            (trace_subscribers ? subscriber_end : kek_trace_now_ns()) -
+                                dispatch_start);
                     }
                     return 0;
                 }
-                if (kek_trace_enabled(dispatcher->runtime)) {
+                if (trace_subscribers) {
                     uint64_t subscriber_end = kek_trace_now_ns();
-                    kek_trace_record_runtime(dispatcher->runtime,
-                                             "event_subscriber_dispatch",
-                                             subscriber_end - subscriber_start);
+                    kek_trace_record_runtime_metric(
+                        dispatcher->runtime,
+                        KEK_TRACE_METRIC_EVENT_SUBSCRIBER_DISPATCH,
+                        subscriber_end - subscriber_start);
+                } else if (trace_enabled) {
+                    kek_trace_count_runtime_metric(
+                        dispatcher->runtime,
+                        KEK_TRACE_METRIC_EVENT_SUBSCRIBER_DISPATCH);
                 }
             }
         }
     }
-    if (kek_trace_enabled(dispatcher->runtime)) {
+    if (trace_enabled) {
         uint64_t dispatch_end = kek_trace_now_ns();
-        kek_trace_record_runtime(dispatcher->runtime, "event_dispatch_pending",
-                                 dispatch_end - dispatch_start);
+        kek_trace_record_runtime_metric(
+            dispatcher->runtime, KEK_TRACE_METRIC_EVENT_DISPATCH_PENDING,
+            dispatch_end - dispatch_start);
     }
     return 1;
 }

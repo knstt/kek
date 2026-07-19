@@ -8,11 +8,12 @@ static uint64_t runtime_trace_start(KekRuntime* runtime) {
     return kek_trace_enabled(runtime) ? kek_trace_now_ns() : 0;
 }
 
-static void runtime_trace_end(KekRuntime* runtime, const char* name,
+static void runtime_trace_end(KekRuntime* runtime,
+                              KekTraceRuntimeMetricId metric_id,
                               uint64_t start) {
     if (kek_trace_enabled(runtime)) {
         uint64_t end = kek_trace_now_ns();
-        kek_trace_record_runtime(runtime, name, end - start);
+        kek_trace_record_runtime_metric(runtime, metric_id, end - start);
     }
 }
 
@@ -49,10 +50,12 @@ static int runtime_prepare_states(KekRuntime* runtime, fd_set* read_fds,
             uint64_t start = runtime_trace_start(runtime);
             if (state->prepare(runtime, state, read_fds, write_fds, max_fd,
                                &state_timeout) < 0) {
-                runtime_trace_end(runtime, "runtime_state_prepare", start);
+                runtime_trace_end(runtime, KEK_TRACE_METRIC_RUNTIME_STATE_PREPARE,
+                                  start);
                 return -1;
             }
-            runtime_trace_end(runtime, "runtime_state_prepare", start);
+            runtime_trace_end(runtime, KEK_TRACE_METRIC_RUNTIME_STATE_PREPARE,
+                              start);
             runtime_min_timeout(timeout, &state_timeout);
         }
     }
@@ -66,10 +69,11 @@ static int runtime_ready_states(KekRuntime* runtime, const fd_set* read_fds,
         if (state->ready) {
             uint64_t start = runtime_trace_start(runtime);
             if (state->ready(runtime, state, read_fds, write_fds) < 0) {
-                runtime_trace_end(runtime, "runtime_state_ready", start);
+                runtime_trace_end(runtime, KEK_TRACE_METRIC_RUNTIME_STATE_READY,
+                                  start);
                 return -1;
             }
-            runtime_trace_end(runtime, "runtime_state_ready", start);
+            runtime_trace_end(runtime, KEK_TRACE_METRIC_RUNTIME_STATE_READY, start);
         }
     }
     return 0;
@@ -80,7 +84,7 @@ static int runtime_wait(KekRuntime* runtime, fd_set* read_fds, fd_set* write_fds
     uint64_t start = runtime_trace_start(runtime);
     int result = select(max_fd + 1, read_fds, write_fds, NULL,
                         timeout->tv_sec >= 0 ? timeout : NULL);
-    runtime_trace_end(runtime, "runtime_select_wait", start);
+    runtime_trace_end(runtime, KEK_TRACE_METRIC_RUNTIME_SELECT_WAIT, start);
     if (result < 0) {
         if (errno == EINTR) {
             return 1;

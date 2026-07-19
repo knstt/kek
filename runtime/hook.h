@@ -6,6 +6,8 @@
 #include "event.h"
 
 #define KEK_HOOK_MAX_DESCRIPTORS 64
+#define KEK_HOOK_MAX_STATE_BUCKETS KEK_HOOK_MAX_DESCRIPTORS
+#define KEK_HOOK_INVALID_DESCRIPTOR ((size_t)-1)
 #define KEK_HOOK_ANY_STATE ((size_t)-1)
 #define KEK_HOOK_ANY_SLOT ((size_t)-1)
 #define KEK_HOOK_UNRESOLVED_SLOT ((size_t)-2)
@@ -35,12 +37,27 @@ typedef struct KekHookDescriptor {
     KekHookFn run;
 } KekHookDescriptor;
 
+typedef struct KekHookBucket {
+    size_t first_descriptor_index;
+    size_t last_descriptor_index;
+    size_t count;
+} KekHookBucket;
+
+typedef struct KekHookStateBucket {
+    size_t state_type_id;
+    KekHookBucket bucket;
+} KekHookStateBucket;
+
 typedef struct KekHookRegistry {
     struct KekRuntime* runtime;
     struct KekStateStore* state_store;
     void* app_context;
     KekHookDescriptor descriptors[KEK_HOOK_MAX_DESCRIPTORS];
     size_t descriptor_count;
+    size_t next_descriptor_indices[KEK_HOOK_MAX_DESCRIPTORS];
+    KekHookBucket event_buckets[KEK_EVENT_TYPE_COUNT];
+    KekHookStateBucket state_buckets[KEK_EVENT_TYPE_COUNT][KEK_HOOK_MAX_STATE_BUCKETS];
+    size_t state_bucket_counts[KEK_EVENT_TYPE_COUNT];
     int attached;
 #ifdef KEK_HOOK_DYNAMIC
     void* dynamic_library;

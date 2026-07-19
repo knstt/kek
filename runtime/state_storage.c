@@ -26,21 +26,24 @@ int kek_state_storage_init(KekStateStorage* storage, KekRuntime* runtime,
     memcpy(storage->buffers[0], initial_state, state_size);
     memcpy(storage->buffers[1], initial_state, state_size);
     if (kek_trace_enabled(runtime)) {
-        kek_trace_record_runtime(runtime, "state_storage_init_copy",
-                                 kek_trace_now_ns() - copy_start);
+        kek_trace_record_runtime_metric(runtime,
+                                        KEK_TRACE_METRIC_STATE_STORAGE_INIT_COPY,
+                                        kek_trace_now_ns() - copy_start);
     }
     uint64_t check_start = kek_trace_enabled(runtime) ? kek_trace_now_ns() : 0;
     if (!check(storage->buffers[0])) {
         if (kek_trace_enabled(runtime)) {
-            kek_trace_record_runtime(runtime, "state_storage_validation",
-                                     kek_trace_now_ns() - check_start);
+            kek_trace_record_runtime_metric(
+                runtime, KEK_TRACE_METRIC_STATE_STORAGE_VALIDATION,
+                kek_trace_now_ns() - check_start);
         }
         kek_state_storage_destroy(storage);
         return 0;
     }
     if (kek_trace_enabled(runtime)) {
-        kek_trace_record_runtime(runtime, "state_storage_validation",
-                                 kek_trace_now_ns() - check_start);
+        kek_trace_record_runtime_metric(runtime,
+                                        KEK_TRACE_METRIC_STATE_STORAGE_VALIDATION,
+                                        kek_trace_now_ns() - check_start);
     }
 
     storage->active_index = 0;
@@ -101,34 +104,39 @@ int kek_state_storage_update(KekStateStorage* storage,
     uint64_t copy_start = kek_trace_enabled(storage->runtime) ? kek_trace_now_ns() : 0;
     memcpy(draft, current, storage->state_size);
     if (kek_trace_enabled(storage->runtime)) {
-        kek_trace_record_runtime(storage->runtime, "state_storage_draft_copy",
-                                 kek_trace_now_ns() - copy_start);
+        kek_trace_record_runtime_metric(
+            storage->runtime, KEK_TRACE_METRIC_STATE_STORAGE_DRAFT_COPY,
+            kek_trace_now_ns() - copy_start);
     }
 
     uint64_t update_start = kek_trace_enabled(storage->runtime) ? kek_trace_now_ns() : 0;
     update(draft, context);
     if (kek_trace_enabled(storage->runtime)) {
-        kek_trace_record_runtime(storage->runtime, "state_storage_update_callback",
-                                 kek_trace_now_ns() - update_start);
+        kek_trace_record_runtime_metric(
+            storage->runtime, KEK_TRACE_METRIC_STATE_STORAGE_UPDATE_CALLBACK,
+            kek_trace_now_ns() - update_start);
     }
     uint64_t check_start = kek_trace_enabled(storage->runtime) ? kek_trace_now_ns() : 0;
     if (!storage->check(draft)) {
         if (kek_trace_enabled(storage->runtime)) {
-            kek_trace_record_runtime(storage->runtime, "state_storage_validation",
-                                     kek_trace_now_ns() - check_start);
+            kek_trace_record_runtime_metric(
+                storage->runtime, KEK_TRACE_METRIC_STATE_STORAGE_VALIDATION,
+                kek_trace_now_ns() - check_start);
         }
         uint64_t rollback_start =
             kek_trace_enabled(storage->runtime) ? kek_trace_now_ns() : 0;
         memcpy(draft, current, storage->state_size);
         if (kek_trace_enabled(storage->runtime)) {
-            kek_trace_record_runtime(storage->runtime, "state_storage_rollback_copy",
-                                     kek_trace_now_ns() - rollback_start);
+            kek_trace_record_runtime_metric(
+                storage->runtime, KEK_TRACE_METRIC_STATE_STORAGE_ROLLBACK_COPY,
+                kek_trace_now_ns() - rollback_start);
         }
         return 0;
     }
     if (kek_trace_enabled(storage->runtime)) {
-        kek_trace_record_runtime(storage->runtime, "state_storage_validation",
-                                 kek_trace_now_ns() - check_start);
+        kek_trace_record_runtime_metric(
+            storage->runtime, KEK_TRACE_METRIC_STATE_STORAGE_VALIDATION,
+            kek_trace_now_ns() - check_start);
     }
 
     storage->active_index = inactive_index;
@@ -142,8 +150,9 @@ int kek_state_storage_update(KekStateStorage* storage,
         kek_trace_enabled(storage->runtime) ? kek_trace_now_ns() : 0;
     memcpy(draft, current, storage->state_size);
     if (kek_trace_enabled(storage->runtime)) {
-        kek_trace_record_runtime(storage->runtime, "state_storage_rollback_copy",
-                                 kek_trace_now_ns() - rollback_start);
+        kek_trace_record_runtime_metric(
+            storage->runtime, KEK_TRACE_METRIC_STATE_STORAGE_ROLLBACK_COPY,
+            kek_trace_now_ns() - rollback_start);
     }
     return 0;
 }

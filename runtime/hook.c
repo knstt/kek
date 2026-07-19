@@ -16,6 +16,110 @@ static int hook_registry_event_handler(const KekEvent* event, void* context) {
     return kek_hook_registry_dispatch((KekHookRegistry*)context, event);
 }
 
+static void hook_registry_clear_index(KekHookRegistry* registry) {
+    if (!registry) {
+        return;
+    }
+
+    for (size_t i = 0; i < KEK_HOOK_MAX_DESCRIPTORS; i++) {
+        registry->next_descriptor_indices[i] = KEK_HOOK_INVALID_DESCRIPTOR;
+    }
+    for (size_t i = 0; i < KEK_EVENT_TYPE_COUNT; i++) {
+        registry->event_buckets[i].first_descriptor_index =
+            KEK_HOOK_INVALID_DESCRIPTOR;
+        registry->event_buckets[i].last_descriptor_index =
+            KEK_HOOK_INVALID_DESCRIPTOR;
+        registry->event_buckets[i].count = 0;
+        registry->state_bucket_counts[i] = 0;
+    }
+}
+
+static KekHookBucket* hook_registry_find_state_bucket(KekHookRegistry* registry,
+                                                      KekEventType event_type,
+                                                      size_t state_type_id,
+                                                      int create) {
+    if (!registry || event_type < 0 || event_type >= KEK_EVENT_TYPE_COUNT) {
+        return NULL;
+    }
+
+    size_t* bucket_count = &registry->state_bucket_counts[event_type];
+    KekHookStateBucket* buckets = registry->state_buckets[event_type];
+    for (size_t i = 0; i < *bucket_count; i++) {
+        if (buckets[i].state_type_id == state_type_id) {
+            return &buckets[i].bucket;
+        }
+    }
+    if (!create || *bucket_count >= KEK_HOOK_MAX_STATE_BUCKETS) {
+        return NULL;
+    }
+
+    KekHookStateBucket* bucket = &buckets[(*bucket_count)++];
+    bucket->state_type_id = state_type_id;
+    bucket->bucket.first_descriptor_index = KEK_HOOK_INVALID_DESCRIPTOR;
+    bucket->bucket.last_descriptor_index = KEK_HOOK_INVALID_DESCRIPTOR;
+    bucket->bucket.count = 0;
+    return &bucket->bucket;
+}
+
+static int hook_registry_append_to_bucket(KekHookRegistry* registry,
+                                          KekHookBucket* bucket,
+                                          size_t descriptor_index) {
+    if (!registry || !bucket || descriptor_index >= registry->descriptor_count ||
+        bucket->count >= KEK_HOOK_MAX_DESCRIPTORS) {
+        return 0;
+    }
+
+    registry->next_descriptor_indices[descriptor_index] =
+        KEK_HOOK_INVALID_DESCRIPTOR;
+    if (bucket->last_descriptor_index != KEK_HOOK_INVALID_DESCRIPTOR) {
+        registry->next_descriptor_indices[bucket->last_descriptor_index] =
+            descriptor_index;
+    } else {
+        bucket->first_descriptor_index = descriptor_index;
+    }
+    bucket->last_descriptor_index = descriptor_index;
+    bucket->count++;
+    return 1;
+}
+
+static int hook_registry_index_descriptor(KekHookRegistry* registry,
+                                          size_t descriptor_index) {
+    if (!registry || descriptor_index >= registry->descriptor_count) {
+        return 0;
+    }
+
+    const KekHookDescriptor* descriptor = &registry->descriptors[descriptor_index];
+    if (descriptor->event_type < 0 ||
+        descriptor->event_type >= KEK_EVENT_TYPE_COUNT) {
+        return 0;
+    }
+
+    KekHookBucket* bucket = descriptor->state_type_id == KEK_HOOK_ANY_STATE
+                                ? &registry->event_buckets[descriptor->event_type]
+                                : hook_registry_find_state_bucket(
+                                      registry, descriptor->event_type,
+                                      descriptor->state_type_id, 1);
+    if (!bucket) {
+        return 0;
+    }
+    return hook_registry_append_to_bucket(registry, bucket, descriptor_index);
+}
+
+static int hook_registry_rebuild_index(KekHookRegistry* registry) {
+    if (!registry) {
+        return 0;
+    }
+
+    hook_registry_clear_index(registry);
+    for (size_t i = 0; i < registry->descriptor_count; i++) {
+        if (!hook_registry_index_descriptor(registry, i)) {
+            hook_registry_clear_index(registry);
+            return 0;
+        }
+    }
+    return 1;
+}
+
 void kek_hook_registry_init(KekHookRegistry* registry, struct KekRuntime* runtime,
                             struct KekStateStore* state_store, void* app_context) {
     if (!registry) {
@@ -26,6 +130,7 @@ void kek_hook_registry_init(KekHookRegistry* registry, struct KekRuntime* runtim
     registry->state_store = state_store;
     registry->app_context = app_context;
     registry->descriptor_count = 0;
+    hook_registry_clear_index(registry);
     registry->attached = 0;
 #ifdef KEK_HOOK_DYNAMIC
     registry->dynamic_library = NULL;
@@ -45,7 +150,13 @@ int kek_hook_registry_add(KekHookRegistry* registry,
         return 0;
     }
 
-    registry->descriptors[registry->descriptor_count++] = *descriptor;
+    size_t descriptor_index = registry->descriptor_count;
+    registry->descriptors[descriptor_index] = *descriptor;
+    registry->descriptor_count++;
+    if (!hook_registry_index_descriptor(registry, descriptor_index)) {
+        registry->descriptor_count--;
+        return 0;
+    }
     return 1;
 }
 
@@ -66,6 +177,9 @@ int kek_hook_registry_add_many(KekHookRegistry* registry,
 
 void kek_hook_registry_attach(KekHookRegistry* registry) {
     if (!registry || !registry->runtime || registry->attached) {
+        return;
+    }
+    if (!hook_registry_rebuild_index(registry)) {
         return;
     }
 
@@ -107,73 +221,110 @@ static int hook_matches_changed_fields(const KekHookDescriptor* descriptor,
     return (descriptor->trigger_fields & event->changed_fields) != 0;
 }
 
+static int hook_registry_dispatch_descriptor(KekHookRegistry* registry,
+                                             const KekEvent* event,
+                                             size_t descriptor_index) {
+    if (!registry || !event || descriptor_index >= registry->descriptor_count) {
+        return 0;
+    }
+
+    const KekHookDescriptor* descriptor = &registry->descriptors[descriptor_index];
+    if (descriptor->state_slot_id != KEK_HOOK_ANY_SLOT &&
+        descriptor->state_slot_id != event->state_slot_id) {
+        return 1;
+    }
+    if (!hook_matches_changed_fields(descriptor, event)) {
+        return 1;
+    }
+
+    KekHookContext context;
+    context.runtime = registry->runtime;
+    context.state_store = registry->state_store;
+    context.event = event;
+    context.app_context = registry->app_context;
+    KekStateStoreTransaction state_transaction;
+    KekEventTransaction event_transaction;
+    if (!kek_state_store_transaction_begin_for_hook(
+            registry->state_store, &state_transaction, descriptor) ||
+        !kek_event_transaction_begin(kek_runtime_events(registry->runtime),
+                                     &event_transaction)) {
+        kek_state_store_transaction_rollback(&state_transaction);
+        return 0;
+    }
+    KekStateStoreHookExecution previous_hook;
+    kek_state_store_begin_hook(registry->state_store, descriptor,
+                               event->state_slot_id, &previous_hook);
+    if (!descriptor->run) {
+        kek_state_store_end_hook(registry->state_store, &previous_hook);
+        kek_event_transaction_rollback(&event_transaction);
+        kek_state_store_transaction_rollback(&state_transaction);
+        return 0;
+    }
+    uint64_t hook_start = kek_trace_enabled(registry->runtime)
+                              ? kek_trace_now_ns()
+                              : 0;
+    uint64_t wait_ns = 0;
+    if (hook_start != 0 && event->trace_published_ns != 0 &&
+        hook_start >= event->trace_published_ns) {
+        wait_ns = hook_start - event->trace_published_ns;
+    }
+    int ok = descriptor->run(&context);
+    if (kek_trace_enabled(registry->runtime)) {
+        uint64_t hook_end = kek_trace_now_ns();
+        kek_trace_record_hook(registry->runtime, descriptor, event, wait_ns,
+                              hook_end - hook_start, ok);
+    }
+    kek_state_store_end_hook(registry->state_store, &previous_hook);
+    if (!ok) {
+        kek_event_transaction_rollback(&event_transaction);
+        kek_state_store_transaction_rollback(&state_transaction);
+        return 0;
+    }
+    kek_event_transaction_commit(&event_transaction);
+    kek_state_store_transaction_commit(&state_transaction);
+    return 1;
+}
+
+static int hook_registry_dispatch_bucket(KekHookRegistry* registry,
+                                         const KekEvent* event,
+                                         const KekHookBucket* bucket) {
+    if (!registry || !event || !bucket) {
+        return 0;
+    }
+
+    size_t descriptor_index = bucket->first_descriptor_index;
+    for (size_t i = 0; i < bucket->count; i++) {
+        if (descriptor_index >= registry->descriptor_count) {
+            return 0;
+        }
+        if (!hook_registry_dispatch_descriptor(registry, event, descriptor_index)) {
+            return 0;
+        }
+        descriptor_index = registry->next_descriptor_indices[descriptor_index];
+    }
+    return 1;
+}
+
 int kek_hook_registry_dispatch(KekHookRegistry* registry, const KekEvent* event) {
     if (!registry || !event) {
         return 0;
     }
 
-    for (size_t i = 0; i < registry->descriptor_count; i++) {
-        const KekHookDescriptor* descriptor = &registry->descriptors[i];
-        if (!descriptor || descriptor->event_type != event->type) {
-            continue;
-        }
-        if (descriptor->state_type_id != KEK_HOOK_ANY_STATE &&
-            descriptor->state_type_id != event->state_type_id) {
-            continue;
-        }
-        if (descriptor->state_slot_id != KEK_HOOK_ANY_SLOT &&
-            descriptor->state_slot_id != event->state_slot_id) {
-            continue;
-        }
-        if (!hook_matches_changed_fields(descriptor, event)) {
-            continue;
-        }
+    if (event->type < 0 || event->type >= KEK_EVENT_TYPE_COUNT) {
+        return 1;
+    }
 
-        KekHookContext context;
-        context.runtime = registry->runtime;
-        context.state_store = registry->state_store;
-        context.event = event;
-        context.app_context = registry->app_context;
-        KekStateStoreTransaction state_transaction;
-        KekEventTransaction event_transaction;
-        if (!kek_state_store_transaction_begin_for_hook(
-                registry->state_store, &state_transaction, descriptor) ||
-            !kek_event_transaction_begin(kek_runtime_events(registry->runtime),
-                                         &event_transaction)) {
-            kek_state_store_transaction_rollback(&state_transaction);
-            return 0;
-        }
-        KekStateStoreHookExecution previous_hook;
-        kek_state_store_begin_hook(registry->state_store, descriptor,
-                                   event->state_slot_id, &previous_hook);
-        if (!descriptor->run) {
-            kek_state_store_end_hook(registry->state_store, &previous_hook);
-            kek_event_transaction_rollback(&event_transaction);
-            kek_state_store_transaction_rollback(&state_transaction);
-            return 0;
-        }
-        uint64_t hook_start = kek_trace_enabled(registry->runtime)
-                                  ? kek_trace_now_ns()
-                                  : 0;
-        uint64_t wait_ns = 0;
-        if (hook_start != 0 && event->trace_published_ns != 0 &&
-            hook_start >= event->trace_published_ns) {
-            wait_ns = hook_start - event->trace_published_ns;
-        }
-        int ok = descriptor->run(&context);
-        if (kek_trace_enabled(registry->runtime)) {
-            uint64_t hook_end = kek_trace_now_ns();
-            kek_trace_record_hook(registry->runtime, descriptor, event, wait_ns,
-                                  hook_end - hook_start, ok);
-        }
-        kek_state_store_end_hook(registry->state_store, &previous_hook);
-        if (!ok) {
-            kek_event_transaction_rollback(&event_transaction);
-            kek_state_store_transaction_rollback(&state_transaction);
-            return 0;
-        }
-        kek_event_transaction_commit(&event_transaction);
-        kek_state_store_transaction_commit(&state_transaction);
+    if (!hook_registry_dispatch_bucket(registry, event,
+                                       &registry->event_buckets[event->type])) {
+        return 0;
+    }
+
+    const KekHookBucket* state_bucket =
+        hook_registry_find_state_bucket(registry, event->type, event->state_type_id,
+                                        0);
+    if (state_bucket &&
+        !hook_registry_dispatch_bucket(registry, event, state_bucket)) {
+        return 0;
     }
     return 1;
 }
