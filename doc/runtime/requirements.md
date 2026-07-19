@@ -42,6 +42,7 @@ It is responsible for event processing and runtime-managed states. It is not res
 | RT-FR-024 | Provide reusable standard text state bridge helpers. | Implemented | `KekStandardTextBridge` |
 | RT-FR-025 | Support debug loading and replacement of hook functions from dynamic libraries. | Implemented | `kek_hook_registry_load_library()`, `kek_hook_registry_reload_library()` |
 | RT-FR-026 | Write runtime and hook tracing metrics to separate CSV files when enabled. | Implemented | `KEK_TRACE_RUNTIME_CSV`, `KEK_TRACE_HOOKS_CSV`, `runtime/trace.c` |
+| RT-FR-027 | Roll back hook state writes and queued events without copying untouched writable slots. | Implemented | Internal copy-on-write `KekStateStoreTransaction` journal |
 
 ## Non-Functional Requirements
 
@@ -54,6 +55,7 @@ It is responsible for event processing and runtime-managed states. It is not res
 | RT-NFR-005 | Keep runtime state capacity bounded. | Implemented | `KEK_RUNTIME_MAX_STATES` |
 | RT-NFR-006 | Keep stream buffers bounded. | Implemented | `KEK_STREAM_BUFFER_CAPACITY` |
 | RT-NFR-007 | Keep tracing optional and internally aggregated. | Implemented | Tracing is disabled unless a trace CSV environment variable is set. |
+| RT-NFR-008 | Keep committed state buffers stable during hook transactions. | Implemented | Transaction drafts are not made active until hook commit. |
 
 ## Out Of Scope
 

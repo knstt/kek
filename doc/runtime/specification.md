@@ -79,6 +79,10 @@ Multiple slots may reference the same descriptor. This supports multiple instanc
 
 `kek_state_store_remove()` deletes a slot, publishes `KEK_EVENT_STATE_DELETED`, and makes the slot id available for reuse. `kek_state_store_add()` reuses deleted slots before growing the store and publishes `KEK_EVENT_STATE_CREATED` for the new slot.
 
+Hook dispatch opens an internal copy-on-write state-store transaction. Beginning a hook transaction records the current slot count but does not copy live state buffers. The first transactional update to an existing slot copies the committed active buffer into the inactive draft, keeps the original active buffer visible through `kek_state_store_current*()`, and records the original metadata in a bounded journal. Repeated transactional updates to the same slot continue from the transaction draft and validate after each update. Successful transactional updates publish events whose snapshots contain the draft bytes and pending version, even though store reads continue to expose the committed active buffer until the hook commits.
+
+If a hook succeeds, the transaction commits by making dirty drafts active and applying pending versions. If a hook fails, the transaction restores recorded metadata, removes slots created by the hook, restores deleted slots, restores deleted-and-reused slot ids, and discards queued events produced by the hook. Nested transactions merge successful child journals into their parent and restore the parent draft if the child fails after writing a parent-dirty slot.
+
 ## Runtime State Interface
 
 `KekRuntimeState` is the generic state interface used by the event loop.
@@ -161,7 +165,7 @@ Dispatch is synchronous: each active subscriber for the event type is called bef
 
 Hook descriptors declare read and write state type ids. A descriptor may match all slots of a state type or one concrete slot id. It may also declare `trigger_fields`; when nonzero, the hook only runs for state-change events whose changed-field mask intersects the descriptor mask. Unknown changed-field masks conservatively run matching hooks.
 
-During hook execution, `KekStateStore` write operations are rejected when the target state type is not listed in the running hook descriptor's `writes`. Hooks may update the exact slot that triggered them when that state type is declared writable. If a hook returns failure, state changes and queued events produced by that hook invocation are rolled back, event dispatch fails, and the runtime run/drain call propagates that error.
+During hook execution, `KekStateStore` write operations are rejected when the target state type is not listed in the running hook descriptor's `writes`. Hooks may update the exact slot that triggered them when that state type is declared writable. If a hook returns failure, state changes and queued events produced by that hook invocation are rolled back, event dispatch fails, and the runtime run/drain call propagates that error. The transaction API remains internal to hook dispatch; application code should continue using the state-store update/create/delete APIs.
 
 `kek_hook_event_state()` returns the copied event-version state snapshot when present. Hook bodies can use this when the triggering state value must match `event->state_version` instead of the current store value after later queued updates.
 

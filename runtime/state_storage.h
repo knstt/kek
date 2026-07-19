@@ -51,6 +51,7 @@ typedef struct KekStateStore {
     KekStateSlot slots[KEK_STATE_STORE_MAX_SLOTS];
     size_t slot_count;
     KekStateStoreHookExecution active_hook;
+    struct KekStateStoreTransaction* active_transaction;
 } KekStateStore;
 
 typedef struct KekStateStoreTransactionSlot {
@@ -58,12 +59,19 @@ typedef struct KekStateStoreTransactionSlot {
     unsigned char* buffers[2];
     size_t active_index;
     uint64_t version;
+    uint64_t pending_version;
     int in_use;
-    int snapshotted;
+    int recorded;
+    int dirty;
+    int created;
+    int deleted;
+    int owns_buffers;
+    size_t draft_index;
 } KekStateStoreTransactionSlot;
 
 typedef struct KekStateStoreTransaction {
     KekStateStore* store;
+    struct KekStateStoreTransaction* parent;
     KekStateStoreTransactionSlot slots[KEK_STATE_STORE_MAX_SLOTS];
     size_t slot_count;
 } KekStateStoreTransaction;

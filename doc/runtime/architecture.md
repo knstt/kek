@@ -93,7 +93,9 @@ The runtime owns generic state slots. Each state implementation supplies callbac
 
 ## Generated State Store Architecture
 
-Generated state objects can be stored independently in `KekStateStore`. Each slot points to a generated descriptor and owns two buffers for validate-before-swap updates. Single-slot updates swap and publish immediately. Multi-slot updates prepare all drafts, validate all drafts, swap all active buffers, publish state-change events, and then publish one aggregate batch event only after the whole batch succeeds.
+Generated state objects can be stored independently in `KekStateStore`. Each slot points to a generated descriptor and owns two buffers for validate-before-swap updates. Single-slot updates outside hook dispatch swap and publish immediately. Multi-slot updates prepare all drafts, validate all drafts, swap all active buffers, publish state-change events, and then publish one aggregate batch event only after the whole batch succeeds.
+
+Hook transactions use the same two buffers as a copy-on-write boundary. The store keeps a stack of active internal transactions. A transaction begins by recording the slot count only. Each touched slot gets a journal entry the first time it is updated, created, deleted, or reused. Existing-slot writes preserve the committed active buffer and mutate the inactive draft until the root hook transaction commits. That root commit is the intended future synchronization or MVCC visibility point for multithreaded readers; this implementation still runs the runtime and hooks on one thread.
 
 ```mermaid
 flowchart LR
@@ -117,7 +119,7 @@ Several slots may share one descriptor, enabling multiple instances of one state
 
 Hook descriptors declare their trigger plus read/write state type dependencies. The runtime hook registry filters events and invokes hook bodies supplied by application code. While a hook body runs, the state store checks writes against the active hook descriptor. Hooks may write the triggering slot when the triggering state type is declared writable.
 
-Hook bodies normally read current state through `KekStateStore`. When they need the exact triggering version, they can read the copied snapshot from the triggering event through `kek_hook_event_state()`.
+Hook bodies normally read committed state through `KekStateStore`. Transactional writes made earlier in the same hook are chained internally through the transaction draft rather than exposed as public draft pointers. When hooks need the exact triggering version, they can read the copied snapshot from the triggering event through `kek_hook_event_state()`.
 
 In debug builds compiled with `KEK_HOOK_DYNAMIC`, the registry owns mutable descriptor copies and can replace their `run` pointers from a dynamic library. The loader resolves every registered hook by descriptor name before swapping any functions, so a failed reload keeps the previous implementation active. Reloading is manual and should be called by the host at a known safe point, such as before dispatch in a frame loop.
 
@@ -183,6 +185,7 @@ flowchart LR
 ## Design Constraints
 
 - Single-threaded execution.
+- Hook transaction commit is the state visibility boundary for future threaded execution.
 - Fixed maximum number of runtime states.
 - Fixed event queue capacity.
 - Fixed subscriber capacity per event type.

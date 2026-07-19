@@ -47,6 +47,11 @@ typedef struct SmokeApp {
     size_t self_hook_runs;
     size_t text_hook_runs;
     size_t failing_hook_runs;
+    size_t double_text_hook_runs;
+    size_t text_snapshot_first_events;
+    size_t text_snapshot_second_events;
+    size_t nested_child_hook_runs;
+    int saw_committed_text_during_hook;
     int write_stream_id;
 } SmokeApp;
 
@@ -184,12 +189,55 @@ static int text_field_hook(KekHookContext* context) {
     return 1;
 }
 
+static int text_snapshot_counter(const KekEvent* event, void* context) {
+    SmokeApp* app = (SmokeApp*)context;
+    if (event->type != KEK_EVENT_STATE_CHANGED ||
+        event->state_type_id != SMOKE_STATE_TEXT || !event->has_state_snapshot ||
+        event->state_snapshot_size != sizeof(SmokeTextState)) {
+        return 1;
+    }
+    const SmokeTextState* text =
+        (const SmokeTextState*)event->state_snapshot.data;
+    if (strcmp(text->text, "first") == 0) {
+        app->text_snapshot_first_events++;
+    }
+    if (strcmp(text->text, "second") == 0) {
+        app->text_snapshot_second_events++;
+    }
+    return 1;
+}
+
+static int double_text_hook(KekHookContext* context) {
+    SmokeApp* app = (SmokeApp*)context->app_context;
+    app->double_text_hook_runs++;
+    if (!set_text_state(context->state_store, app->input_slot, "first", 5)) {
+        return 0;
+    }
+    const SmokeTextState* current =
+        (const SmokeTextState*)kek_state_store_current_const(context->state_store,
+                                                            app->input_slot);
+    if (current && strcmp(current->text, "seed") == 0) {
+        app->saw_committed_text_during_hook = 1;
+    }
+    return set_text_state(context->state_store, app->input_slot, "second", 6);
+}
+
 static int failing_counter_hook(KekHookContext* context) {
     SmokeApp* app = (SmokeApp*)context->app_context;
     app->failing_hook_runs++;
     int value = 4;
     if (!kek_state_store_update_fields(context->state_store, app->counter_slot,
                                        set_counter_value, &value, 1ull << 0)) {
+        return 0;
+    }
+    return 0;
+}
+
+static int failing_double_text_hook(KekHookContext* context) {
+    SmokeApp* app = (SmokeApp*)context->app_context;
+    app->failing_hook_runs++;
+    if (!set_text_state(context->state_store, app->input_slot, "first", 5) ||
+        !set_text_state(context->state_store, app->input_slot, "second", 6)) {
         return 0;
     }
     return 0;
@@ -202,6 +250,55 @@ static int failing_create_text_hook(KekHookContext* context) {
            KEK_STATE_INVALID_ID
                ? 0
                : 1;
+}
+
+static int failing_delete_text_hook(KekHookContext* context) {
+    SmokeApp* app = (SmokeApp*)context->app_context;
+    app->failing_hook_runs++;
+    if (!kek_state_store_remove(context->state_store, app->input_slot)) {
+        return 0;
+    }
+    return 0;
+}
+
+static int failing_delete_reuse_text_hook(KekHookContext* context) {
+    SmokeApp* app = (SmokeApp*)context->app_context;
+    app->failing_hook_runs++;
+    if (!kek_state_store_remove(context->state_store, app->input_slot)) {
+        return 0;
+    }
+    size_t reused_slot =
+        kek_state_store_add_default(context->state_store, &text_descriptor);
+    if (reused_slot != app->input_slot) {
+        return 0;
+    }
+    return set_text_state(context->state_store, reused_slot, "replacement", 11) ? 0
+                                                                               : 1;
+}
+
+static int nested_parent_text_hook(KekHookContext* context) {
+    SmokeApp* app = (SmokeApp*)context->app_context;
+    if (!set_text_state(context->state_store, app->input_slot, "first", 5)) {
+        return 0;
+    }
+    if (kek_event_dispatch_pending(kek_runtime_events(context->runtime))) {
+        return 0;
+    }
+    return set_text_state(context->state_store, app->input_slot, "second", 6);
+}
+
+static int nested_failing_text_hook(KekHookContext* context) {
+    SmokeApp* app = (SmokeApp*)context->app_context;
+    const SmokeTextState* snapshot =
+        (const SmokeTextState*)kek_hook_event_state(context, NULL);
+    if (!snapshot || strcmp(snapshot->text, "first") != 0) {
+        return 1;
+    }
+    app->nested_child_hook_runs++;
+    if (!set_text_state(context->state_store, app->input_slot, "child", 5)) {
+        return 0;
+    }
+    return 0;
 }
 
 static size_t count_state_type(KekStateStore* store, size_t state_type_id) {
@@ -277,6 +374,24 @@ static int run_behavior_checks(void) {
         {"failing create text", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
          app.counter_slot, 1ull << 0, NULL, 0, text_writes, 1,
          failing_create_text_hook},
+        {"double text", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
+         app.counter_slot, 1ull << 0, NULL, 0, text_writes, 1,
+         double_text_hook},
+        {"failing double text", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
+         app.counter_slot, 1ull << 0, NULL, 0, text_writes, 1,
+         failing_double_text_hook},
+        {"failing delete text", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
+         app.counter_slot, 1ull << 0, NULL, 0, text_writes, 1,
+         failing_delete_text_hook},
+        {"failing delete reuse text", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
+         app.counter_slot, 1ull << 0, NULL, 0, text_writes, 1,
+         failing_delete_reuse_text_hook},
+        {"nested parent text", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
+         app.counter_slot, 1ull << 0, NULL, 0, text_writes, 1,
+         nested_parent_text_hook},
+        {"nested failing text", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_TEXT,
+         app.input_slot, 1ull << 0 | 1ull << 1, NULL, 0, text_writes, 1,
+         nested_failing_text_hook},
     };
     kek_hook_registry_init(&hooks, &runtime, &store, &app);
     if (!kek_hook_registry_add(&hooks, &descriptors[0]) ||
@@ -324,6 +439,41 @@ static int run_behavior_checks(void) {
 
     kek_hook_registry_detach(&hooks);
     kek_hook_registry_init(&hooks, &runtime, &store, &app);
+    if (!kek_hook_registry_add(&hooks, &descriptors[4]) ||
+        !kek_event_subscribe(kek_runtime_events(&runtime), KEK_EVENT_STATE_CHANGED,
+                             text_snapshot_counter, &app)) {
+        return 1;
+    }
+    kek_hook_registry_attach(&hooks);
+    if (!set_text_state(&store, app.input_slot, "seed", 4) ||
+        !kek_event_dispatch_pending(kek_runtime_events(&runtime))) {
+        return 1;
+    }
+    app.text_snapshot_first_events = 0;
+    app.text_snapshot_second_events = 0;
+    value = 5;
+    if (!kek_state_store_update_fields(&store, app.counter_slot,
+                                       set_counter_value, &value, 1ull << 0) ||
+        !kek_event_dispatch_pending(kek_runtime_events(&runtime)) ||
+        app.double_text_hook_runs != 1 ||
+        !app.saw_committed_text_during_hook ||
+        app.text_snapshot_first_events != 1 ||
+        app.text_snapshot_second_events != 1) {
+        return 1;
+    }
+    const SmokeTextState* text =
+        (const SmokeTextState*)kek_state_store_current_const(&store, app.input_slot);
+    if (!text || strcmp(text->text, "second") != 0) {
+        return 1;
+    }
+    if (!kek_event_unsubscribe(kek_runtime_events(&runtime),
+                               KEK_EVENT_STATE_CHANGED,
+                               text_snapshot_counter, &app)) {
+        return 1;
+    }
+
+    kek_hook_registry_detach(&hooks);
+    kek_hook_registry_init(&hooks, &runtime, &store, &app);
     if (!kek_hook_registry_add(&hooks, &descriptors[2])) {
         return 1;
     }
@@ -344,6 +494,29 @@ static int run_behavior_checks(void) {
 
     kek_hook_registry_detach(&hooks);
     kek_hook_registry_init(&hooks, &runtime, &store, &app);
+    if (!kek_hook_registry_add(&hooks, &descriptors[5])) {
+        return 1;
+    }
+    kek_hook_registry_attach(&hooks);
+    if (!set_text_state(&store, app.input_slot, "stable", 6) ||
+        !kek_event_dispatch_pending(kek_runtime_events(&runtime))) {
+        return 1;
+    }
+    value = 6;
+    if (!kek_state_store_update_fields(&store, app.counter_slot,
+                                       set_counter_value, &value, 1ull << 0) ||
+        kek_event_dispatch_pending(kek_runtime_events(&runtime)) ||
+        kek_event_has_pending(kek_runtime_events(&runtime))) {
+        return 1;
+    }
+    text = (const SmokeTextState*)kek_state_store_current_const(&store,
+                                                               app.input_slot);
+    if (!text || strcmp(text->text, "stable") != 0) {
+        return 1;
+    }
+
+    kek_hook_registry_detach(&hooks);
+    kek_hook_registry_init(&hooks, &runtime, &store, &app);
     if (!kek_hook_registry_add(&hooks, &descriptors[3])) {
         return 1;
     }
@@ -355,6 +528,68 @@ static int run_behavior_checks(void) {
         kek_event_dispatch_pending(kek_runtime_events(&runtime)) ||
         count_state_type(&store, SMOKE_STATE_TEXT) != text_count_before ||
         kek_event_has_pending(kek_runtime_events(&runtime))) {
+        return 1;
+    }
+
+    kek_hook_registry_detach(&hooks);
+    kek_hook_registry_init(&hooks, &runtime, &store, &app);
+    if (!kek_hook_registry_add(&hooks, &descriptors[6])) {
+        return 1;
+    }
+    kek_hook_registry_attach(&hooks);
+    value = 7;
+    if (!kek_state_store_update_fields(&store, app.counter_slot,
+                                       set_counter_value, &value, 1ull << 0) ||
+        kek_event_dispatch_pending(kek_runtime_events(&runtime)) ||
+        kek_state_store_current_const(&store, app.input_slot) == NULL ||
+        count_state_type(&store, SMOKE_STATE_TEXT) != text_count_before ||
+        kek_event_has_pending(kek_runtime_events(&runtime))) {
+        return 1;
+    }
+
+    kek_hook_registry_detach(&hooks);
+    kek_hook_registry_init(&hooks, &runtime, &store, &app);
+    if (!kek_hook_registry_add(&hooks, &descriptors[7])) {
+        return 1;
+    }
+    kek_hook_registry_attach(&hooks);
+    if (!set_text_state(&store, app.input_slot, "original", 8) ||
+        !kek_event_dispatch_pending(kek_runtime_events(&runtime))) {
+        return 1;
+    }
+    value = 8;
+    if (!kek_state_store_update_fields(&store, app.counter_slot,
+                                       set_counter_value, &value, 1ull << 0) ||
+        kek_event_dispatch_pending(kek_runtime_events(&runtime)) ||
+        count_state_type(&store, SMOKE_STATE_TEXT) != text_count_before ||
+        kek_event_has_pending(kek_runtime_events(&runtime))) {
+        return 1;
+    }
+    text = (const SmokeTextState*)kek_state_store_current_const(&store,
+                                                               app.input_slot);
+    if (!text || strcmp(text->text, "original") != 0) {
+        return 1;
+    }
+
+    kek_hook_registry_detach(&hooks);
+    kek_hook_registry_init(&hooks, &runtime, &store, &app);
+    if (!kek_hook_registry_add(&hooks, &descriptors[8]) ||
+        !kek_hook_registry_add(&hooks, &descriptors[9])) {
+        return 1;
+    }
+    kek_hook_registry_attach(&hooks);
+    app.nested_child_hook_runs = 0;
+    value = 9;
+    if (!kek_state_store_update_fields(&store, app.counter_slot,
+                                       set_counter_value, &value, 1ull << 0) ||
+        !kek_event_dispatch_pending(kek_runtime_events(&runtime)) ||
+        app.nested_child_hook_runs != 1 ||
+        kek_event_has_pending(kek_runtime_events(&runtime))) {
+        return 1;
+    }
+    text = (const SmokeTextState*)kek_state_store_current_const(&store,
+                                                               app.input_slot);
+    if (!text || strcmp(text->text, "second") != 0) {
         return 1;
     }
 
