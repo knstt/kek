@@ -1,5 +1,6 @@
 #include "runtime_stress_support.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct TelemetryDelta {
@@ -56,6 +57,28 @@ static void update_audit(void* draft, void* context) {
 
 static RuntimeStressApp* stress_app(KekHookContext* context) {
     return context ? (RuntimeStressApp*)context->app_context : NULL;
+}
+
+static void stress_note_readonly_active(RuntimeStressApp* app, uint64_t active) {
+    uint64_t previous = atomic_load(&app->readonly_max_active);
+    while (active > previous &&
+           !atomic_compare_exchange_weak(&app->readonly_max_active, &previous,
+                                         active)) {
+    }
+}
+
+static uint64_t stress_readonly_work_iterations(void) {
+    const char* value = getenv("KEK_STRESS_READONLY_WORK");
+    if (!value || value[0] == '\0') {
+        return 40000;
+    }
+
+    char* end = NULL;
+    unsigned long long parsed = strtoull(value, &end, 10);
+    if (end == value || (end && *end != '\0')) {
+        return 40000;
+    }
+    return (uint64_t)parsed;
 }
 
 int runtime_stress_note_telemetry(KekHookContext* context, uint64_t stream_bytes,
@@ -162,5 +185,45 @@ int runtime_stress_check_forbidden_audit_write(KekHookContext* context) {
         return 0;
     }
     app->forbidden_write_checks++;
+    return 1;
+}
+
+int runtime_stress_readonly_probe(KekHookContext* context, uint64_t salt) {
+    RuntimeStressApp* app = stress_app(context);
+    if (!context || !context->state_store || !app) {
+        return 0;
+    }
+
+    size_t size = 0;
+    const Agent* agent = (const Agent*)kek_hook_event_state(context, &size);
+    if (!agent || size != sizeof(*agent)) {
+        return 1;
+    }
+
+    size_t clock_slot =
+        runtime_stress_state_simulation_clock_first(context->state_store);
+    const SimulationClock* clock =
+        (const SimulationClock*)kek_state_store_current_const(context->state_store,
+                                                             clock_slot);
+    uint64_t seed = salt ^ agent->id ^ agent->flags;
+    if (clock) {
+        seed ^= clock->tick + ((uint64_t)(uint32_t)clock->phase << 32);
+    }
+
+    uint64_t active = atomic_fetch_add(&app->readonly_active, 1) + 1;
+    stress_note_readonly_active(app, active);
+
+    uint64_t digest = seed ? seed : salt;
+    uint64_t iterations = stress_readonly_work_iterations();
+    for (uint64_t i = 0; i < iterations; i++) {
+        digest ^= digest << 13;
+        digest ^= digest >> 7;
+        digest ^= digest << 17;
+        digest += (uint64_t)(agent->energy * 1000.0) + i + salt;
+    }
+
+    atomic_fetch_add(&app->readonly_digest, digest);
+    atomic_fetch_add(&app->readonly_hook_calls, 1);
+    atomic_fetch_sub(&app->readonly_active, 1);
     return 1;
 }

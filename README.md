@@ -3,7 +3,7 @@
 This repository prototypes two related components:
 
 - A JSON state-schema generator that emits plain C data structures and verification helpers.
-- A small single-threaded C runtime with event dispatch, hook dispatch, runtime state registration, and stream state support.
+- A small C runtime with event dispatch, automatic read-only hook multithreading, runtime state registration, and stream state support.
 - A local no-framework browser editor for project-folder JSON schemas.
 
 The current goal is to keep generated state data and runtime behavior separate. The generator owns the C data ABI. The runtime owns event processing and runtime-managed state callbacks.
@@ -21,6 +21,7 @@ Runtime documentation:
 - [Runtime Requirements](doc/runtime/requirements.md)
 - [Runtime Specification](doc/runtime/specification.md)
 - [Runtime Architecture](doc/runtime/architecture.md)
+- [Generator-Assisted Parallel Hook Scheduling Proposal](doc/runtime/parallel-hook-generation-proposal.md)
 
 ```mermaid
 flowchart TD
@@ -78,7 +79,7 @@ flowchart TD
 
 ## Runtime Smoke Example
 
-`examples/runtime_smoke/main.c` exercises the runtime as an integration smoke test. It covers runtime initialization and destruction, event subscription and dispatch, stream read/write states, standard text bridge helpers, generated-style state slots, transactional state events, timer state updates, hook dispatch, hook write authorization, state snapshots, drain behavior, and raw-mode no-op behavior for a non-TTY fd.
+`examples/runtime_smoke/main.c` exercises the runtime as an integration smoke test. It covers runtime initialization and destruction, event subscription and dispatch, stream read/write states, standard text bridge helpers, generated-style state slots, transactional state events, timer state updates, hook dispatch, automatic read-only hook multithreading, hook write authorization, state snapshots, drain behavior, and raw-mode no-op behavior for a non-TTY fd.
 
 Run it with `make smoke`.
 

@@ -8,7 +8,7 @@ Related documents:
 
 ## Overview
 
-The runtime is a small single-threaded C framework built around a bounded event queue, rollback-safe generated state storage, an instance-aware generated state store, a fixed-size runtime state registry, and `select()`-based file descriptor readiness.
+The runtime is a small C framework built around a bounded event queue, rollback-safe generated state storage, an instance-aware generated state store, a fixed-size runtime state registry, automatic read-only hook multithreading, and `select()`-based file descriptor readiness.
 
 ```mermaid
 flowchart TB
@@ -42,6 +42,8 @@ flowchart TB
 | `runtime/state.h` | Runtime state kind and callback interface. |
 | `runtime/runtime.h` | Runtime object and public runtime API. |
 | `runtime/runtime.c` | Runtime initialization, state registry, event loop, drain, raw mode. |
+| `runtime/thread_pool.h` | Internal worker pool declarations. |
+| `runtime/thread_pool.c` | Automatic runtime worker pool and `KEK_RUNTIME_THREADS` handling. |
 | `runtime/trace.h` | Optional aggregate tracing state, metric identifiers, and trace declarations. |
 | `runtime/trace.c` | Runtime and hook trace aggregation, runtime-owned memory counters, and CSV writing. |
 | `runtime/stream.h` | Stream state API and stream data structure. |
@@ -97,7 +99,7 @@ The runtime owns generic state slots. Each state implementation supplies callbac
 
 Generated state objects can be stored independently in `KekStateStore`. Each slot points to a generated descriptor and owns two buffers for validate-before-swap updates. Single-slot updates outside hook dispatch swap and publish immediately. Multi-slot updates prepare all drafts, validate all drafts, swap all active buffers, publish state-change events, and then publish one aggregate batch event only after the whole batch succeeds.
 
-Hook transactions use the same two buffers as a copy-on-write boundary. The store keeps a stack of active internal transactions. A transaction begins by recording the slot count only. Each touched slot gets a journal entry the first time it is updated, created, deleted, or reused. Existing-slot writes preserve the committed active buffer and mutate the inactive draft until the root hook transaction commits. That root commit is the intended future synchronization or MVCC visibility point for multithreaded readers; this implementation still runs the runtime and hooks on one thread.
+Hook transactions use the same two buffers as a copy-on-write boundary. The store keeps a stack of active internal transactions. A transaction begins by recording the slot count only. Each touched slot gets a journal entry the first time it is updated, created, deleted, or reused. Existing-slot writes preserve the committed active buffer and mutate the inactive draft until the root hook transaction commits. That root commit is the state visibility boundary for hook execution.
 
 ```mermaid
 flowchart LR
@@ -124,6 +126,8 @@ Hook descriptors declare their trigger plus read/write state type dependencies. 
 The bucket index is stored inside `KekHookRegistry`, rebuilt at attach time, and uses descriptor indices rather than extra descriptor copies. Registration and dynamic hook loading remain explicit safe-point operations, which keeps the dispatch path read-only over registry indexing data and leaves room for future lock or copy-and-swap synchronization.
 
 Hook bodies normally read committed state through `KekStateStore`. Transactional writes made earlier in the same hook are chained internally through the transaction draft rather than exposed as public draft pointers. When hooks need the exact triggering version, they can read the copied snapshot from the triggering event through `kek_hook_event_state()`.
+
+The registry can run adjacent read-only hooks concurrently when descriptors declare concrete read dependencies and no write dependencies. Each worker receives a cloned runtime, event queue, and committed state-store snapshot; the main runtime remains the only owner of the real event queue and committed store. After a parallel wave completes successfully, buffered worker events are replayed in descriptor order. Hooks with writes, unknown dependencies, wildcard dependencies, or dynamic hook uncertainty continue through the serial transaction path.
 
 In debug builds compiled with `KEK_HOOK_DYNAMIC`, the registry owns mutable descriptor copies and can replace their `run` pointers from a dynamic library. The loader resolves every registered hook by descriptor name before swapping any functions, so a failed reload keeps the previous implementation active. Reloading is manual and should be called by the host at a known safe point, such as before dispatch in a frame loop.
 
@@ -188,8 +192,9 @@ flowchart LR
 
 ## Design Constraints
 
-- Single-threaded execution.
-- Hook transaction commit is the state visibility boundary for future threaded execution.
+- Single-threaded runtime state prepare/ready execution.
+- FIFO event dispatch from the caller's perspective.
+- Hook transaction commit is the state visibility boundary.
 - Optional tracing is stored per runtime; built-in runtime metrics use fixed metric slots instead of mutable global state or per-record string lookups. High-volume subscriber dispatch timing is opt-in so normal trace runs can count subscriber calls without paying a clock call around every subscriber.
 - Fixed maximum number of runtime states.
 - Fixed event queue capacity.

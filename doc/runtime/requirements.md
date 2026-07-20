@@ -8,7 +8,7 @@ Related documents:
 
 ## Scope
 
-The runtime provides a single-threaded C event loop, bounded event dispatch, runtime state registration, and stream state support.
+The runtime provides a C event loop, bounded event dispatch, automatic read-only hook multithreading, runtime state registration, and stream state support.
 
 It is responsible for event processing and runtime-managed states. It is not responsible for parsing schemas or generating C code.
 
@@ -43,13 +43,15 @@ It is responsible for event processing and runtime-managed states. It is not res
 | RT-FR-025 | Support debug loading and replacement of hook functions from dynamic libraries. | Implemented | `kek_hook_registry_load_library()`, `kek_hook_registry_reload_library()` |
 | RT-FR-026 | Write runtime and hook tracing metrics to separate CSV files when enabled. | Implemented | `KEK_TRACE_RUNTIME_CSV`, `KEK_TRACE_HOOKS_CSV`, `runtime/trace.c` |
 | RT-FR-027 | Roll back hook state writes and queued events without copying untouched writable slots. | Implemented | Internal copy-on-write `KekStateStoreTransaction` journal |
+| RT-FR-028 | Configure runtime hook worker count automatically or through an environment override. | Implemented | `KEK_RUNTIME_THREADS`, `runtime/thread_pool.c` |
+| RT-FR-029 | Run dependency-safe read-only generated hooks concurrently without changing hook bodies. | Implemented | `KekHookDescriptor.reads`, `runtime/hook.c` |
 
 ## Non-Functional Requirements
 
 | ID | Requirement | Current Status | Evidence |
 | --- | --- | --- | --- |
 | RT-NFR-001 | Use plain C. | Implemented | `runtime/*.c`, `runtime/*.h` |
-| RT-NFR-002 | Keep execution single-threaded. | Implemented | `select()` loop |
+| RT-NFR-002 | Keep runtime state prepare/ready execution single-threaded and event dispatch FIFO from the caller's perspective. | Implemented | `select()` loop, `kek_event_dispatch_pending()` |
 | RT-NFR-003 | Keep event queue capacity bounded. | Implemented | `KEK_EVENT_QUEUE_CAPACITY` |
 | RT-NFR-004 | Keep subscriber capacity bounded. | Implemented | `KEK_EVENT_MAX_SUBSCRIBERS` |
 | RT-NFR-005 | Keep runtime state capacity bounded. | Implemented | `KEK_RUNTIME_MAX_STATES` |
@@ -59,7 +61,7 @@ It is responsible for event processing and runtime-managed states. It is not res
 
 ## Out Of Scope
 
-- Multi-threaded scheduling.
+- Multi-threaded scheduling for runtime state `prepare`/`ready` callbacks and state-writing hooks.
 - Dynamic growth of event queues, subscribers, runtime states, or stream buffers.
 - Per-generated-state queues.
 - Compiled transition or hook dispatch.

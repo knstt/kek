@@ -1,10 +1,11 @@
 #include "hook.h"
 
+#include <stdlib.h>
+#include <string.h>
+
 #ifdef KEK_HOOK_DYNAMIC
 #include <dlfcn.h>
-#include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
 #include <unistd.h>
 #endif
 
@@ -221,6 +222,197 @@ static int hook_matches_changed_fields(const KekHookDescriptor* descriptor,
     return (descriptor->trigger_fields & event->changed_fields) != 0;
 }
 
+typedef struct KekHookDispatchJob {
+    KekHookRegistry* registry;
+    KekEvent event;
+    const KekHookDescriptor* descriptor;
+    int ok;
+    int quit_requested;
+    uint64_t wait_ns;
+    uint64_t run_ns;
+    KekRuntime runtime;
+    KekStateStore state_store;
+} KekHookDispatchJob;
+
+static int hook_descriptor_has_dependency(const size_t* dependencies,
+                                          size_t dependency_count,
+                                          size_t state_type_id) {
+    if (!dependencies) {
+        return 0;
+    }
+    for (size_t i = 0; i < dependency_count; i++) {
+        if (dependencies[i] == state_type_id ||
+            dependencies[i] == KEK_HOOK_ANY_STATE) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int hook_descriptor_can_run_parallel(const KekHookDescriptor* descriptor) {
+    if (!descriptor || !descriptor->run || descriptor->write_count != 0 ||
+        descriptor->read_count == 0 || !descriptor->reads) {
+        return 0;
+    }
+    for (size_t i = 0; i < descriptor->read_count; i++) {
+        if (descriptor->reads[i] == KEK_HOOK_ANY_STATE) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int hook_descriptors_conflict(const KekHookDescriptor* left,
+                                     const KekHookDescriptor* right) {
+    if (!left || !right) {
+        return 1;
+    }
+    if (!hook_descriptor_can_run_parallel(left) ||
+        !hook_descriptor_can_run_parallel(right)) {
+        return 1;
+    }
+    for (size_t i = 0; i < left->write_count; i++) {
+        if (hook_descriptor_has_dependency(right->reads, right->read_count,
+                                           left->writes[i]) ||
+            hook_descriptor_has_dependency(right->writes, right->write_count,
+                                           left->writes[i])) {
+            return 1;
+        }
+    }
+    for (size_t i = 0; i < right->write_count; i++) {
+        if (hook_descriptor_has_dependency(left->reads, left->read_count,
+                                           right->writes[i]) ||
+            hook_descriptor_has_dependency(left->writes, left->write_count,
+                                           right->writes[i])) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void hook_job_destroy(KekHookDispatchJob* job) {
+    if (!job) {
+        return;
+    }
+    kek_state_store_destroy(&job->state_store);
+}
+
+static int hook_job_init(KekHookDispatchJob* job, KekHookRegistry* registry,
+                         const KekEvent* event,
+                         const KekHookDescriptor* descriptor) {
+    if (!job || !registry || !registry->runtime || !registry->state_store ||
+        !event || !descriptor) {
+        return 0;
+    }
+
+    memset(job, 0, sizeof(*job));
+    job->registry = registry;
+    job->event = *event;
+    job->descriptor = descriptor;
+
+    memset(&job->runtime, 0, sizeof(job->runtime));
+    kek_event_dispatcher_init(&job->runtime.events);
+    job->runtime.events.runtime = &job->runtime;
+    job->runtime.quit_requested = registry->runtime->quit_requested;
+
+    memset(&job->state_store, 0, sizeof(job->state_store));
+    job->state_store.runtime = &job->runtime;
+    job->state_store.slot_count = registry->state_store->slot_count;
+    job->state_store.active_hook.trigger_state_slot = KEK_STATE_INVALID_ID;
+
+    for (size_t i = 0; i < registry->state_store->slot_count; i++) {
+        const KekStateSlot* source = &registry->state_store->slots[i];
+        KekStateSlot* target = &job->state_store.slots[i];
+        target->descriptor = source->descriptor;
+        target->active_index = 0;
+        target->version = source->version;
+        target->in_use = source->in_use;
+        if (!source->in_use || !source->descriptor) {
+            continue;
+        }
+
+        size_t size = source->descriptor->size;
+        target->buffers[0] = (unsigned char*)malloc(size);
+        target->buffers[1] = (unsigned char*)malloc(size);
+        if (!target->buffers[0] || !target->buffers[1]) {
+            hook_job_destroy(job);
+            return 0;
+        }
+        const void* current = source->buffers[source->active_index];
+        memcpy(target->buffers[0], current, size);
+        memcpy(target->buffers[1], current, size);
+    }
+    return 1;
+}
+
+static void hook_job_publish_events(KekHookDispatchJob* job) {
+    if (!job || !job->registry || !job->registry->runtime) {
+        return;
+    }
+    KekEventDispatcher* dispatcher = &job->runtime.events;
+    if (kek_event_capacity_remaining(kek_runtime_events(job->registry->runtime)) <
+        dispatcher->queue_size) {
+        job->ok = 0;
+        return;
+    }
+    while (dispatcher->queue_size > 0) {
+        KekEvent event = dispatcher->queue[dispatcher->queue_start];
+        dispatcher->queue_start =
+            (dispatcher->queue_start + 1) % KEK_EVENT_QUEUE_CAPACITY;
+        dispatcher->queue_size--;
+        if (!kek_event_publish(kek_runtime_events(job->registry->runtime), &event)) {
+            job->ok = 0;
+            return;
+        }
+    }
+}
+
+static void hook_job_run(void* context) {
+    KekHookDispatchJob* job = (KekHookDispatchJob*)context;
+    if (!job || !job->descriptor || !job->descriptor->run) {
+        return;
+    }
+
+    KekHookContext hook_context;
+    hook_context.runtime = &job->runtime;
+    hook_context.state_store = &job->state_store;
+    hook_context.event = &job->event;
+    hook_context.app_context = job->registry->app_context;
+
+    KekStateStoreTransaction state_transaction;
+    KekEventTransaction event_transaction;
+    if (!kek_state_store_transaction_begin_for_hook(
+            &job->state_store, &state_transaction, job->descriptor) ||
+        !kek_event_transaction_begin(kek_runtime_events(&job->runtime),
+                                     &event_transaction)) {
+        kek_state_store_transaction_rollback(&state_transaction);
+        job->ok = 0;
+        return;
+    }
+
+    KekStateStoreHookExecution previous_hook;
+    kek_state_store_begin_hook(&job->state_store, job->descriptor,
+                               job->event.state_slot_id, &previous_hook);
+    uint64_t hook_start = kek_trace_now_ns();
+    if (job->event.trace_published_ns != 0 &&
+        hook_start >= job->event.trace_published_ns) {
+        job->wait_ns = hook_start - job->event.trace_published_ns;
+    }
+    job->ok = job->descriptor->run(&hook_context);
+    uint64_t hook_end = kek_trace_now_ns();
+    job->run_ns = hook_end >= hook_start ? hook_end - hook_start : 0;
+    job->quit_requested = job->runtime.quit_requested;
+
+    kek_state_store_end_hook(&job->state_store, &previous_hook);
+    if (!job->ok) {
+        kek_event_transaction_rollback(&event_transaction);
+        kek_state_store_transaction_rollback(&state_transaction);
+        return;
+    }
+    kek_event_transaction_commit(&event_transaction);
+    kek_state_store_transaction_commit(&state_transaction);
+}
+
 static int hook_registry_dispatch_descriptor(KekHookRegistry* registry,
                                              const KekEvent* event,
                                              size_t descriptor_index) {
@@ -285,20 +477,108 @@ static int hook_registry_dispatch_descriptor(KekHookRegistry* registry,
     return 1;
 }
 
-static int hook_registry_dispatch_bucket(KekHookRegistry* registry,
-                                         const KekEvent* event,
-                                         const KekHookBucket* bucket) {
-    if (!registry || !event || !bucket) {
+static int hook_registry_dispatch_parallel_wave(KekHookRegistry* registry,
+                                                const KekEvent* event,
+                                                const size_t* descriptor_indices,
+                                                size_t descriptor_count) {
+    if (!registry || !event || !descriptor_indices || descriptor_count == 0) {
+        return 0;
+    }
+    if (descriptor_count == 1 || kek_runtime_thread_count(registry->runtime) <= 1) {
+        for (size_t i = 0; i < descriptor_count; i++) {
+            if (!hook_registry_dispatch_descriptor(registry, event,
+                                                   descriptor_indices[i])) {
+                return 0;
+            }
+        }
+        return 1;
+    }
+
+    KekHookDispatchJob* dispatch_jobs =
+        (KekHookDispatchJob*)calloc(descriptor_count, sizeof(*dispatch_jobs));
+    KekThreadPoolJob* pool_jobs =
+        (KekThreadPoolJob*)calloc(descriptor_count, sizeof(*pool_jobs));
+    if (!dispatch_jobs || !pool_jobs) {
+        free(dispatch_jobs);
+        free(pool_jobs);
+        return 0;
+    }
+
+    for (size_t i = 0; i < descriptor_count; i++) {
+        const KekHookDescriptor* descriptor =
+            &registry->descriptors[descriptor_indices[i]];
+        if (!hook_job_init(&dispatch_jobs[i], registry, event, descriptor)) {
+            for (size_t j = 0; j < i; j++) {
+                hook_job_destroy(&dispatch_jobs[j]);
+            }
+            free(dispatch_jobs);
+            free(pool_jobs);
+            return 0;
+        }
+        pool_jobs[i].run = hook_job_run;
+        pool_jobs[i].context = &dispatch_jobs[i];
+    }
+
+    if (!kek_thread_pool_run(&registry->runtime->thread_pool, pool_jobs,
+                             descriptor_count)) {
+        for (size_t i = 0; i < descriptor_count; i++) {
+            hook_job_destroy(&dispatch_jobs[i]);
+        }
+        free(dispatch_jobs);
+        free(pool_jobs);
+        return 0;
+    }
+
+    int ok = 1;
+    for (size_t i = 0; i < descriptor_count; i++) {
+        KekHookDispatchJob* job = &dispatch_jobs[i];
+        if (kek_trace_enabled(registry->runtime)) {
+            kek_trace_record_hook(registry->runtime, job->descriptor, event,
+                                  job->wait_ns, job->run_ns, job->ok);
+        }
+        if (!job->ok) {
+            ok = 0;
+            break;
+        }
+        hook_job_publish_events(job);
+        if (!job->ok) {
+            ok = 0;
+            break;
+        }
+        if (job->quit_requested) {
+            kek_runtime_request_quit(registry->runtime);
+        }
+    }
+
+    for (size_t i = 0; i < descriptor_count; i++) {
+        hook_job_destroy(&dispatch_jobs[i]);
+    }
+    free(dispatch_jobs);
+    free(pool_jobs);
+    return ok;
+}
+
+static int hook_registry_collect_bucket(KekHookRegistry* registry,
+                                        const KekEvent* event,
+                                        const KekHookBucket* bucket,
+                                        size_t* matches,
+                                        size_t* match_count) {
+    if (!registry || !event || !bucket || !matches || !match_count) {
         return 0;
     }
 
     size_t descriptor_index = bucket->first_descriptor_index;
     for (size_t i = 0; i < bucket->count; i++) {
-        if (descriptor_index >= registry->descriptor_count) {
+        if (descriptor_index >= registry->descriptor_count ||
+            *match_count >= KEK_HOOK_MAX_DESCRIPTORS) {
             return 0;
         }
-        if (!hook_registry_dispatch_descriptor(registry, event, descriptor_index)) {
-            return 0;
+        const KekHookDescriptor* descriptor =
+            &registry->descriptors[descriptor_index];
+        if ((descriptor->state_slot_id == KEK_HOOK_ANY_SLOT ||
+             descriptor->state_slot_id == event->state_slot_id) &&
+            hook_matches_changed_fields(descriptor, event)) {
+            matches[(*match_count)++] = descriptor_index;
         }
         descriptor_index = registry->next_descriptor_indices[descriptor_index];
     }
@@ -314,17 +594,61 @@ int kek_hook_registry_dispatch(KekHookRegistry* registry, const KekEvent* event)
         return 1;
     }
 
-    if (!hook_registry_dispatch_bucket(registry, event,
-                                       &registry->event_buckets[event->type])) {
+    size_t matches[KEK_HOOK_MAX_DESCRIPTORS];
+    size_t match_count = 0;
+    if (!hook_registry_collect_bucket(registry, event,
+                                      &registry->event_buckets[event->type],
+                                      matches, &match_count)) {
         return 0;
     }
 
     const KekHookBucket* state_bucket =
         hook_registry_find_state_bucket(registry, event->type, event->state_type_id,
                                         0);
-    if (state_bucket &&
-        !hook_registry_dispatch_bucket(registry, event, state_bucket)) {
+    if (state_bucket && !hook_registry_collect_bucket(registry, event, state_bucket,
+                                                      matches, &match_count)) {
         return 0;
+    }
+
+    size_t cursor = 0;
+    while (cursor < match_count) {
+        const KekHookDescriptor* descriptor =
+            &registry->descriptors[matches[cursor]];
+        if (!hook_descriptor_can_run_parallel(descriptor)) {
+            if (!hook_registry_dispatch_descriptor(registry, event,
+                                                   matches[cursor])) {
+                return 0;
+            }
+            cursor++;
+            continue;
+        }
+
+        size_t wave[KEK_HOOK_MAX_DESCRIPTORS];
+        size_t wave_count = 0;
+        while (cursor < match_count) {
+            const KekHookDescriptor* candidate =
+                &registry->descriptors[matches[cursor]];
+            if (!hook_descriptor_can_run_parallel(candidate)) {
+                break;
+            }
+            int conflict = 0;
+            for (size_t i = 0; i < wave_count; i++) {
+                if (hook_descriptors_conflict(
+                        &registry->descriptors[wave[i]], candidate)) {
+                    conflict = 1;
+                    break;
+                }
+            }
+            if (conflict) {
+                break;
+            }
+            wave[wave_count++] = matches[cursor++];
+        }
+
+        if (!hook_registry_dispatch_parallel_wave(registry, event, wave,
+                                                  wave_count)) {
+            return 0;
+        }
     }
     return 1;
 }

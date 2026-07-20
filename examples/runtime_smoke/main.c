@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -53,6 +54,9 @@ typedef struct SmokeApp {
     size_t nested_child_hook_runs;
     int saw_committed_text_during_hook;
     int write_stream_id;
+    atomic_int parallel_active;
+    atomic_int parallel_max_active;
+    atomic_int parallel_runs;
 } SmokeApp;
 
 typedef struct TextUpdate {
@@ -301,6 +305,30 @@ static int nested_failing_text_hook(KekHookContext* context) {
     return 0;
 }
 
+static void note_parallel_active(SmokeApp* app, int active) {
+    int previous = atomic_load(&app->parallel_max_active);
+    while (active > previous &&
+           !atomic_compare_exchange_weak(&app->parallel_max_active, &previous,
+                                         active)) {
+    }
+}
+
+static int readonly_parallel_hook(KekHookContext* context) {
+    SmokeApp* app = (SmokeApp*)context->app_context;
+    const SmokeCounterState* counter =
+        (const SmokeCounterState*)kek_hook_event_state(context, NULL);
+    if (!counter || counter->value <= 0) {
+        return 1;
+    }
+
+    int active = atomic_fetch_add(&app->parallel_active, 1) + 1;
+    note_parallel_active(app, active);
+    usleep(120000);
+    atomic_fetch_add(&app->parallel_runs, 1);
+    atomic_fetch_sub(&app->parallel_active, 1);
+    return 1;
+}
+
 static size_t count_state_type(KekStateStore* store, size_t state_type_id) {
     size_t count = 0;
     size_t slot_id = KEK_STATE_INVALID_ID;
@@ -309,6 +337,74 @@ static size_t count_state_type(KekStateStore* store, size_t state_type_id) {
         count++;
     }
     return count;
+}
+
+static int run_threading_mode_check(const char* thread_setting,
+                                    int expect_parallel) {
+    if (setenv("KEK_RUNTIME_THREADS", thread_setting, 1) != 0) {
+        return 1;
+    }
+
+    KekRuntime runtime;
+    KekStateStore store;
+    KekHookRegistry hooks;
+    SmokeApp app;
+
+    kek_runtime_init(&runtime);
+    kek_state_store_init(&store, &runtime);
+    memset(&app, 0, sizeof(app));
+    atomic_init(&app.parallel_active, 0);
+    atomic_init(&app.parallel_max_active, 0);
+    atomic_init(&app.parallel_runs, 0);
+    app.runtime = &runtime;
+    app.store = &store;
+    app.counter_slot = kek_state_store_add_default(&store, &counter_descriptor);
+    if (app.counter_slot == KEK_STATE_INVALID_ID ||
+        !kek_event_dispatch_pending(kek_runtime_events(&runtime))) {
+        return 1;
+    }
+
+    size_t counter_reads[] = {SMOKE_STATE_COUNTER};
+    KekHookDescriptor descriptors[] = {
+        {"parallel readonly a", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
+         app.counter_slot, 1ull << 0, counter_reads, 1, NULL, 0,
+         readonly_parallel_hook},
+        {"parallel readonly b", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
+         app.counter_slot, 1ull << 0, counter_reads, 1, NULL, 0,
+         readonly_parallel_hook},
+    };
+
+    kek_hook_registry_init(&hooks, &runtime, &store, &app);
+    if (!kek_hook_registry_add_many(&hooks, descriptors, 2)) {
+        return 1;
+    }
+    kek_hook_registry_attach(&hooks);
+
+    int value = 1;
+    if (!kek_state_store_update_fields(&store, app.counter_slot,
+                                       set_counter_value, &value, 1ull << 0) ||
+        !kek_event_dispatch_pending(kek_runtime_events(&runtime))) {
+        return 1;
+    }
+
+    int runs = atomic_load(&app.parallel_runs);
+    int max_active = atomic_load(&app.parallel_max_active);
+    int thread_count = (int)kek_runtime_thread_count(&runtime);
+    int ok = runs == 2 && thread_count == (expect_parallel ? 3 : 1) &&
+             max_active == (expect_parallel ? 2 : 1);
+
+    kek_hook_registry_detach(&hooks);
+    kek_state_store_destroy(&store);
+    kek_runtime_destroy(&runtime);
+    unsetenv("KEK_RUNTIME_THREADS");
+    return ok ? 0 : 1;
+}
+
+static int run_threading_checks(void) {
+    if (run_threading_mode_check("1", 0) != 0) {
+        return 1;
+    }
+    return run_threading_mode_check("3", 1);
 }
 
 static int run_behavior_checks(void) {
@@ -725,7 +821,8 @@ static int run_tracing_checks(void) {
     unlink(hooks_csv);
 
     if (setenv("KEK_TRACE_RUNTIME_CSV", runtime_csv, 1) != 0 ||
-        setenv("KEK_TRACE_HOOKS_CSV", hooks_csv, 1) != 0) {
+        setenv("KEK_TRACE_HOOKS_CSV", hooks_csv, 1) != 0 ||
+        setenv("KEK_RUNTIME_THREADS", "3", 1) != 0) {
         return 1;
     }
 
@@ -737,6 +834,9 @@ static int run_tracing_checks(void) {
     kek_runtime_init(&runtime);
     kek_state_store_init(&store, &runtime);
     memset(&app, 0, sizeof(app));
+    atomic_init(&app.parallel_active, 0);
+    atomic_init(&app.parallel_max_active, 0);
+    atomic_init(&app.parallel_runs, 0);
     app.runtime = &runtime;
     app.store = &store;
 
@@ -748,11 +848,17 @@ static int run_tracing_checks(void) {
         return 1;
     }
 
-    KekHookDescriptor descriptor = {
-        "trace counter hook", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
-        app.counter_slot, 1ull << 0, NULL, 0, NULL, 0, text_field_hook};
+    size_t counter_reads[] = {SMOKE_STATE_COUNTER};
+    KekHookDescriptor descriptors[] = {
+        {"trace counter hook a", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
+         app.counter_slot, 1ull << 0, counter_reads, 1, NULL, 0,
+         readonly_parallel_hook},
+        {"trace counter hook b", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
+         app.counter_slot, 1ull << 0, counter_reads, 1, NULL, 0,
+         readonly_parallel_hook},
+    };
     kek_hook_registry_init(&hooks, &runtime, &store, &app);
-    if (!kek_hook_registry_add(&hooks, &descriptor)) {
+    if (!kek_hook_registry_add_many(&hooks, descriptors, 2)) {
         return 1;
     }
     kek_hook_registry_attach(&hooks);
@@ -761,7 +867,7 @@ static int run_tracing_checks(void) {
     if (!kek_state_store_update_fields(&store, app.counter_slot,
                                        set_counter_value, &value, 1ull << 0) ||
         !kek_event_dispatch_pending(kek_runtime_events(&runtime)) ||
-        app.text_hook_runs != 1) {
+        atomic_load(&app.parallel_runs) != 2) {
         return 1;
     }
 
@@ -770,12 +876,14 @@ static int run_tracing_checks(void) {
     kek_runtime_destroy(&runtime);
     unsetenv("KEK_TRACE_RUNTIME_CSV");
     unsetenv("KEK_TRACE_HOOKS_CSV");
+    unsetenv("KEK_RUNTIME_THREADS");
 
     int ok = trace_file_contains(runtime_csv, "metric,count,total_ns") &&
              trace_file_contains(runtime_csv, "event_publish") &&
              trace_file_contains(runtime_csv, "runtime_memory") &&
              trace_file_contains(hooks_csv, "hook,event_type,state_type_id") &&
-             trace_file_contains(hooks_csv, "trace counter hook");
+             trace_file_contains(hooks_csv, "trace counter hook a") &&
+             trace_file_contains(hooks_csv, "trace counter hook b");
 
     unlink(runtime_csv);
     unlink(hooks_csv);
@@ -786,6 +894,9 @@ int main(void) {
     int result = run_smoke();
     if (result == 0) {
         result = run_behavior_checks();
+    }
+    if (result == 0) {
+        result = run_threading_checks();
     }
     if (result == 0) {
         result = run_tracing_checks();

@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include <errno.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -452,6 +453,7 @@ static int verify_results(const Runtime_stress_stateRuntime* stress,
         return 0;
     }
     uint64_t cycle_floor = (uint64_t)cycles * 8u;
+    uint64_t readonly_floor = (uint64_t)cycles * 16u;
     return telemetry->total_events > cycle_floor &&
            telemetry->hook_hits > cycle_floor &&
            telemetry->timer_ticks >= 3 && telemetry->stream_bytes > 0 &&
@@ -462,6 +464,8 @@ static int verify_results(const Runtime_stress_stateRuntime* stress,
            app->subscriber_events[KEK_EVENT_STREAM_DATA] > 0 &&
            app->subscriber_events[KEK_EVENT_STREAM_EOF] > 0 &&
            app->subscriber_events[KEK_EVENT_STREAM_ERROR] > 0 &&
+           atomic_load(&app->readonly_hook_calls) >= readonly_floor &&
+           atomic_load(&app->readonly_digest) != 0 &&
            app->hook_calls > cycle_floor;
 }
 
@@ -489,6 +493,10 @@ int main(void) {
     int ok = 0;
 
     memset(&app, 0, sizeof(app));
+    atomic_init(&app.readonly_hook_calls, 0);
+    atomic_init(&app.readonly_digest, 0);
+    atomic_init(&app.readonly_active, 0);
+    atomic_init(&app.readonly_max_active, 0);
     memset(agents, 0xff, sizeof(agents));
     memset(packets, 0xff, sizeof(packets));
 
@@ -521,10 +529,13 @@ done:
     if (ok) {
         uint64_t stress_end_ns = kek_trace_now_ns();
         printf("runtime stress passed: cycles=%zu elapsed_ns=%llu hooks=%llu "
+               "readonly_hooks=%llu readonly_max_active=%llu "
                "state_changed=%llu batches=%llu\n",
                cycles,
                (unsigned long long)(stress_end_ns - stress_start_ns),
                (unsigned long long)app.hook_calls,
+               (unsigned long long)atomic_load(&app.readonly_hook_calls),
+               (unsigned long long)atomic_load(&app.readonly_max_active),
                (unsigned long long)app.subscriber_events[KEK_EVENT_STATE_CHANGED],
                (unsigned long long)app.subscriber_events[KEK_EVENT_STATE_BATCH_CHANGED]);
     }

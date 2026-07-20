@@ -16,6 +16,7 @@ Related documents:
 - Quit flag.
 - Raw terminal mode bookkeeping.
 - Optional aggregate tracing state.
+- An automatic worker pool for dependency-safe generated hook dispatch.
 
 The runtime capacity is `KEK_RUNTIME_MAX_STATES`.
 
@@ -60,6 +61,18 @@ hook,event_type,state_type_id,state_slot_id,call_count,success_count,failure_cou
 ```
 
 Hook wait time is measured from event publication to immediately before the matching hook body is invoked. Hook run time is measured around the hook function call itself. Hook bodies and generated descriptors do not need tracing-specific changes.
+
+## Runtime Threads
+
+`KekRuntime` initializes a small worker pool automatically. Applications can configure the pool before `kek_runtime_init()` with `KEK_RUNTIME_THREADS`:
+
+| Value | Behavior |
+| --- | --- |
+| unset or `auto` | Use a conservative CPU-based worker count. |
+| `1` | Force single-threaded hook dispatch. |
+| positive integer `N` | Use up to `N` total runtime threads, including the caller thread. |
+
+`kek_runtime_thread_count()` reports the caller thread plus active worker threads. If worker creation fails or the requested count is one, dispatch falls back to serial execution.
 
 ## State Storage
 
@@ -171,6 +184,8 @@ Dispatch is synchronous: each active subscriber for the event type is called bef
 Hook descriptors declare read and write state type ids. A descriptor may match all slots of a state type or one concrete slot id. It may also declare `trigger_fields`; when nonzero, the hook only runs for state-change events whose changed-field mask intersects the descriptor mask. Unknown changed-field masks conservatively run matching hooks.
 
 During hook execution, `KekStateStore` write operations are rejected when the target state type is not listed in the running hook descriptor's `writes`. Hooks may update the exact slot that triggered them when that state type is declared writable. If a hook returns failure, state changes and queued events produced by that hook invocation are rolled back, event dispatch fails, and the runtime run/drain call propagates that error. The transaction API remains internal to hook dispatch; application code should continue using the state-store update/create/delete APIs.
+
+Dispatch remains FIFO at the event level. For one event, the hook registry collects matching generated hook descriptors in descriptor order, partitions adjacent dependency-safe hooks into waves, and may run read-only hooks with explicit `reads` metadata concurrently. Hooks with declared writes, missing read metadata, wildcard dependencies, or dynamic replacement uncertainty use the existing serial transaction path. Worker-thread hooks run against cloned runtime/store/event contexts, and buffered events are replayed on the main runtime in descriptor order after every hook in the wave succeeds.
 
 `kek_hook_event_state()` returns the copied event-version state snapshot when present. Hook bodies can use this when the triggering state value must match `event->state_version` instead of the current store value after later queued updates.
 

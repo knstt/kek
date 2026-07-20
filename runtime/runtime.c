@@ -100,6 +100,7 @@ void kek_runtime_init(KekRuntime* runtime) {
     kek_event_dispatcher_init(&runtime->events);
     runtime->events.runtime = runtime;
     kek_trace_init(runtime);
+    kek_thread_pool_init(&runtime->thread_pool);
 }
 
 void kek_runtime_destroy(KekRuntime* runtime) {
@@ -118,6 +119,7 @@ void kek_runtime_destroy(KekRuntime* runtime) {
         }
     }
     runtime->state_count = 0;
+    kek_thread_pool_destroy(&runtime->thread_pool);
     kek_trace_destroy(runtime);
 }
 
@@ -325,4 +327,11 @@ int kek_runtime_drain(KekRuntime* runtime) {
     }
 
     return 0;
+}
+
+size_t kek_runtime_thread_count(const KekRuntime* runtime) {
+    if (!runtime) {
+        return 0;
+    }
+    return kek_thread_pool_worker_count(&runtime->thread_pool) + 1;
 }

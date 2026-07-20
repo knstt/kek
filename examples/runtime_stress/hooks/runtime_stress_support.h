@@ -1,6 +1,7 @@
 #ifndef RUNTIME_STRESS_SUPPORT_H
 #define RUNTIME_STRESS_SUPPORT_H
 
+#include <stdatomic.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -12,6 +13,10 @@ typedef struct RuntimeStressApp {
     uint64_t hook_calls;
     uint64_t hook_failures;
     uint64_t forbidden_write_checks;
+    atomic_uint_least64_t readonly_hook_calls;
+    atomic_uint_least64_t readonly_digest;
+    atomic_uint_least64_t readonly_active;
+    atomic_uint_least64_t readonly_max_active;
     Runtime_stress_stateRuntime* generated;
     KekStandardTextBridge* input_bridge;
     int force_clock_phase_failure;
@@ -26,5 +31,6 @@ int runtime_stress_note_audit(KekHookContext* context, uint64_t deleted_delta,
                               uint64_t error_delta);
 int runtime_stress_fail_clock_phase(KekHookContext* context);
 int runtime_stress_check_forbidden_audit_write(KekHookContext* context);
+int runtime_stress_readonly_probe(KekHookContext* context, uint64_t salt);
 
 #endif

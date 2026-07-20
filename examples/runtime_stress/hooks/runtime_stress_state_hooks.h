@@ -7,6 +7,10 @@
 int OnClockTick(KekHookContext* context);
 int OnClockPhase(KekHookContext* context);
 int OnAgentMoved(KekHookContext* context);
+int OnAgentReadOnlyProbeA(KekHookContext* context);
+int OnAgentReadOnlyProbeB(KekHookContext* context);
+int OnAgentReadOnlyProbeC(KekHookContext* context);
+int OnAgentReadOnlyProbeD(KekHookContext* context);
 int OnAgentEnergy(KekHookContext* context);
 int OnAgentActive(KekHookContext* context);
 int OnAgentCreated(KekHookContext* context);

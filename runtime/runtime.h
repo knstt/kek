@@ -7,6 +7,7 @@
 
 #include "event.h"
 #include "state.h"
+#include "thread_pool.h"
 #include "trace.h"
 
 #define KEK_RUNTIME_MAX_STATES 64
@@ -20,6 +21,7 @@ typedef struct KekRuntime {
     int raw_mode_fd;
     struct termios original_termios;
     KekRuntimeTrace trace;
+    KekThreadPool thread_pool;
 } KekRuntime;
 
 void kek_runtime_init(KekRuntime* runtime);
@@ -40,6 +42,7 @@ int kek_runtime_publish_state_slot_fields_changed(KekRuntime* runtime, void* sou
                                                   uint64_t changed_fields);
 int kek_runtime_run(KekRuntime* runtime);
 int kek_runtime_drain(KekRuntime* runtime);
+size_t kek_runtime_thread_count(const KekRuntime* runtime);
 int kek_runtime_enable_raw_mode(KekRuntime* runtime, int fd);
 void kek_runtime_disable_raw_mode(KekRuntime* runtime, int fd);
 
