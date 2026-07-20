@@ -51,6 +51,19 @@ static int state_store_type_write_allowed(const KekStateStore* store,
     if (!hook) {
         return 1;
     }
+    if (hook->access_count > 0 && hook->accesses) {
+        for (size_t i = 0; i < hook->access_count; i++) {
+            const KekHookAccess* access = &hook->accesses[i];
+            if ((access->mode == KEK_HOOK_ACCESS_WRITE ||
+                 access->mode == KEK_HOOK_ACCESS_CREATE ||
+                 access->mode == KEK_HOOK_ACCESS_DELETE) &&
+                access->state_type_id == state_type_id &&
+                access->scope != KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT) {
+                return 1;
+            }
+        }
+        return 0;
+    }
     for (size_t i = 0; i < hook->write_count; i++) {
         if (hook->writes[i] == state_type_id) {
             return 1;
@@ -63,6 +76,21 @@ static int state_store_write_allowed(const KekStateStore* store,
                                      const KekStateSlot* slot) {
     if (!slot || !slot->descriptor) {
         return 1;
+    }
+    const KekHookDescriptor* hook = store ? store->active_hook.descriptor : NULL;
+    if (hook && hook->access_count > 0 && hook->accesses) {
+        size_t slot_id = (size_t)(slot - store->slots);
+        for (size_t i = 0; i < hook->access_count; i++) {
+            const KekHookAccess* access = &hook->accesses[i];
+            if ((access->mode == KEK_HOOK_ACCESS_WRITE ||
+                 access->mode == KEK_HOOK_ACCESS_DELETE) &&
+                access->state_type_id == slot->descriptor->type_id &&
+                (access->scope != KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT ||
+                 access->state_slot_id == slot_id)) {
+                return 1;
+            }
+        }
+        return 0;
     }
     return state_store_type_write_allowed(store, slot->descriptor->type_id);
 }

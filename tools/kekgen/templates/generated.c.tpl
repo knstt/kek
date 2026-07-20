@@ -26,6 +26,8 @@ const KekStateDescriptor* kek_generated_state_descriptor(size_t type_id) {
     return &KekGeneratedStateDescriptors[type_id];
 }
 
+$hook_access_arrays
+
 $instance_definitions
 
 int kek_generated_state_store_add_defaults(KekStateStore* store,

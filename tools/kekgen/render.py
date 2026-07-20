@@ -2,7 +2,7 @@ import json
 from importlib import resources
 from string import Template
 
-from .model import Enum, Field, Hook, Instance, State
+from .model import Enum, Field, Hook, HookAccess, Instance, State
 from .naming import c_identifier_from_type, generated_guard, state_type_macro
 
 
@@ -61,6 +61,7 @@ def emit_source(
         descriptor_entries=render_descriptor_entries(states),
         instance_definitions=render_instance_definitions(states, hooks, instances, name, enums),
         hook_dependency_arrays=render_hook_dependency_arrays(hooks),
+        hook_access_arrays=render_hook_access_arrays(hooks),
         hook_descriptor_table=render_hook_descriptor_table(hooks),
     )
 
@@ -181,6 +182,7 @@ def render_state_declarations(states: list[State]) -> str:
         lines.append(f"int {state.name}_check_void(const void* state);")
         lines.append(f"int {state.name}_reset({state.name}* state);")
         lines.append(f"int {state.name}_reset_void(void* state);")
+        lines.append(f"int {state.name}_merge_fields(void* target, const void* source, uint64_t fields);")
         lines.append("")
     return "\n".join(lines).rstrip()
 
@@ -221,6 +223,10 @@ def runtime_buffer_fields(states: list[State], instances: list[Instance]) -> lis
     return fields
 
 
+def hook_access_count(hooks: list[Hook]) -> int:
+    return sum(len(hook.accesses) for hook in hooks)
+
+
 def render_instance_declarations(states: list[State], hooks: list[Hook], instances: list[Instance], name: str) -> str:
     prefix = generated_prefix(name)
     slots_name = instance_slots_name(name)
@@ -258,6 +264,9 @@ def render_instance_declarations(states: list[State], hooks: list[Hook], instanc
     lines.append("    KekHookRegistry hook_registry;")
     if hooks:
         lines.append(f"    KekHookDescriptor hook_descriptors[{len(hooks)}];")
+    access_count = hook_access_count(hooks)
+    if access_count:
+        lines.append(f"    KekHookAccess hook_accesses[{access_count}];")
     lines.append(f"    {buffers_name} buffers;")
     lines.append(f"    {slots_name} slots;")
     lines.append("};")
@@ -270,6 +279,8 @@ def render_instance_declarations(states: list[State], hooks: list[Hook], instanc
     lines.append("    KekRuntimeApp app;")
     if hooks:
         lines.append(f"    KekHookDescriptor hook_descriptors[{len(hooks)}];")
+    if access_count:
+        lines.append(f"    KekHookAccess hook_accesses[{access_count}];")
     lines.append(f"    {buffers_name} buffers;")
     lines.append(f"    {slots_name} slots;")
     lines.append(f"}} {runtime_name};")
@@ -409,8 +420,27 @@ def render_single_state_definitions(state: State, enums: dict[str, Enum]) -> str
             f"int {state.name}_reset_void(void* state) {{",
             f"    return {state.name}_reset(({state.name}*)state);",
             "}",
+            "",
+            f"int {state.name}_merge_fields(void* target, const void* source, uint64_t fields) {{",
+            "    if (target == 0 || source == 0) {",
+            "        return 0;",
+            "    }",
+            f"    {state.name}* target_state = ({state.name}*)target;",
+            f"    const {state.name}* source_state = (const {state.name}*)source;",
+            "    if (fields == KEK_EVENT_CHANGED_FIELDS_UNKNOWN) {",
+            "        *target_state = *source_state;",
+            "        return 1;",
+            "    }",
         ]
     )
+    for item in state.fields:
+        lines.append(f"    if ((fields & {state_type_macro(state.name)}_FIELD_{item.name.upper()}) != 0) {{")
+        if item.array_length is None:
+            lines.append(f"        target_state->{item.name} = source_state->{item.name};")
+        else:
+            lines.append(f"        memcpy(target_state->{item.name}, source_state->{item.name}, sizeof(target_state->{item.name}));")
+        lines.append("    }")
+    lines.extend(["    return 1;", "}"])
     return "\n".join(lines)
 
 
@@ -478,6 +508,7 @@ def render_descriptor_entries(states: list[State]) -> str:
         lines.append(f"        .set_default = {state.name}_default_into,")
         lines.append(f"        .check = {state.name}_check_void,")
         lines.append(f"        .reset = {state.name}_reset_void,")
+        lines.append(f"        .merge_fields = {state.name}_merge_fields,")
         lines.append("    },")
     return "\n".join(lines)
 
@@ -491,6 +522,7 @@ def render_instance_definitions(states: list[State], hooks: list[Hook], instance
     item_name = update_item_name(name)
     state_by_name = {state.name: state for state in states}
     enum_by_name = enum_map(enums or [])
+    access_count = hook_access_count(hooks)
     lines: list[str] = [
         f"void {prefix}_state_slots_init_invalid({slots_name}* slots) {{",
         "    if (slots == 0) {",
@@ -615,9 +647,19 @@ def render_instance_definitions(states: list[State], hooks: list[Hook], instance
     )
     if hooks:
         lines.append("    memcpy(binding->hook_descriptors, KekGeneratedHookDescriptors, sizeof(binding->hook_descriptors));")
+        if access_count:
+            lines.append("    memcpy(binding->hook_accesses, KekGeneratedHookAccessData, sizeof(binding->hook_accesses));")
+            for index, offset in hook_access_offsets(hooks).items():
+                hook = hooks[index]
+                if hook.accesses:
+                    lines.append(f"    binding->hook_descriptors[{index}].accesses = &binding->hook_accesses[{offset}];")
         for index, hook in enumerate(hooks):
             if hook.instance_name is not None:
                 lines.append(f"    binding->hook_descriptors[{index}].state_slot_id = binding->slots.{hook.instance_name};")
+            for access_index, access in enumerate(hook.accesses):
+                if access.instance_name is not None:
+                    access_offset = hook_access_offset(hooks, index, access_index)
+                    lines.append(f"    binding->hook_accesses[{access_offset}].state_slot_id = binding->slots.{access.instance_name};")
         lines.append("    if (!kek_hook_registry_add_many(&binding->hook_registry, binding->hook_descriptors, KEK_GENERATED_HOOK_COUNT)) {")
     else:
         lines.append("    if (!kek_hook_registry_add_many(&binding->hook_registry, KekGeneratedHookDescriptors, KEK_GENERATED_HOOK_COUNT)) {")
@@ -666,9 +708,19 @@ def render_instance_definitions(states: list[State], hooks: list[Hook], instance
     )
     if hooks:
         lines.append("    memcpy(runtime->hook_descriptors, KekGeneratedHookDescriptors, sizeof(runtime->hook_descriptors));")
+        if access_count:
+            lines.append("    memcpy(runtime->hook_accesses, KekGeneratedHookAccessData, sizeof(runtime->hook_accesses));")
+            for index, offset in hook_access_offsets(hooks).items():
+                hook = hooks[index]
+                if hook.accesses:
+                    lines.append(f"    runtime->hook_descriptors[{index}].accesses = &runtime->hook_accesses[{offset}];")
         for index, hook in enumerate(hooks):
             if hook.instance_name is not None:
                 lines.append(f"    runtime->hook_descriptors[{index}].state_slot_id = runtime->slots.{hook.instance_name};")
+            for access_index, access in enumerate(hook.accesses):
+                if access.instance_name is not None:
+                    access_offset = hook_access_offset(hooks, index, access_index)
+                    lines.append(f"    runtime->hook_accesses[{access_offset}].state_slot_id = runtime->slots.{access.instance_name};")
         lines.append("    if (!kek_runtime_app_bind_hooks(&runtime->app, runtime->hook_descriptors, KEK_GENERATED_HOOK_COUNT)) {")
     else:
         lines.append("    if (!kek_runtime_app_bind_hooks(&runtime->app, KekGeneratedHookDescriptors, KEK_GENERATED_HOOK_COUNT)) {")
@@ -994,14 +1046,60 @@ def render_hook_dependency_arrays(hooks: list[Hook]) -> str:
     return "\n".join(lines).rstrip()
 
 
+def hook_access_offsets(hooks: list[Hook]) -> dict[int, int]:
+    offsets: dict[int, int] = {}
+    cursor = 0
+    for index, hook in enumerate(hooks):
+        offsets[index] = cursor
+        cursor += len(hook.accesses)
+    return offsets
+
+
+def hook_access_offset(hooks: list[Hook], hook_index: int, access_index: int) -> int:
+    return hook_access_offsets(hooks)[hook_index] + access_index
+
+
+def render_hook_access_arrays(hooks: list[Hook]) -> str:
+    access_count = hook_access_count(hooks)
+    if access_count == 0:
+        return "static const KekHookAccess* KekGeneratedHookAccessData = 0;"
+
+    lines = ["static const KekHookAccess KekGeneratedHookAccessData[] = {"]
+    for hook in hooks:
+        for access in hook.accesses:
+            lines.append("    {")
+            lines.append(f"        .mode = {access.mode},")
+            lines.append(f"        .state_type_id = {state_type_macro(access.state_name)},")
+            if access.instance_name is None:
+                lines.append("        .state_slot_id = KEK_HOOK_ANY_SLOT,")
+            else:
+                lines.append("        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,")
+            lines.append(f"        .scope = {access.scope},")
+            lines.append(f"        .fields = {render_hook_access_fields(access)},")
+            lines.append("    },")
+    lines.append("};")
+    return "\n".join(lines)
+
+
+def render_hook_access_fields(access: HookAccess) -> str:
+    if not access.fields:
+        return "KEK_EVENT_CHANGED_FIELDS_UNKNOWN"
+    return " | ".join(
+        f"{state_type_macro(access.state_name)}_FIELD_{field_name.upper()}"
+        for field_name in access.fields
+    )
+
+
 def render_hook_descriptor_table(hooks: list[Hook]) -> str:
     if not hooks:
         return "const KekHookDescriptor* KekGeneratedHookDescriptors = 0;"
 
+    offsets = hook_access_offsets(hooks)
     lines = ["static const KekHookDescriptor KekGeneratedHookDescriptorData[KEK_GENERATED_HOOK_COUNT] = {"]
-    for hook in hooks:
+    for index, hook in enumerate(hooks):
         reads_name = f"{hook.name}_reads" if hook.reads else "0"
         writes_name = f"{hook.name}_writes" if hook.writes else "0"
+        access_name = f"&KekGeneratedHookAccessData[{offsets[index]}]" if hook.accesses else "0"
         lines.append("    {")
         lines.append(f"        .name = \"{hook.name}\",")
         lines.append(f"        .event_type = {hook.event_type},")
@@ -1015,6 +1113,9 @@ def render_hook_descriptor_table(hooks: list[Hook]) -> str:
         lines.append(f"        .read_count = {len(hook.reads)},")
         lines.append(f"        .writes = {writes_name},")
         lines.append(f"        .write_count = {len(hook.writes)},")
+        lines.append(f"        .accesses = {access_name},")
+        lines.append(f"        .access_count = {len(hook.accesses)},")
+        lines.append(f"        .scheduling_flags = {render_hook_scheduling_flags(hook)},")
         lines.append("#ifdef KEK_HOOK_DYNAMIC")
         lines.append("        .run = 0,")
         lines.append("#else")
@@ -1024,6 +1125,17 @@ def render_hook_descriptor_table(hooks: list[Hook]) -> str:
     lines.append("};")
     lines.append("const KekHookDescriptor* KekGeneratedHookDescriptors = KekGeneratedHookDescriptorData;")
     return "\n".join(lines)
+
+
+def render_hook_scheduling_flags(hook: Hook) -> str:
+    flags: list[str] = []
+    if hook.scheduling_opaque:
+        flags.append("KEK_HOOK_SCHEDULING_OPAQUE")
+    if hook.access_declared and any(access.mode == "KEK_HOOK_ACCESS_WRITE" for access in hook.accesses):
+        flags.append("KEK_HOOK_SCHEDULING_ALLOW_PARALLEL_WRITES")
+    if hook.field_merge_safe:
+        flags.append("KEK_HOOK_SCHEDULING_FIELD_MERGE_SAFE")
+    return " | ".join(flags) if flags else "0"
 
 
 def render_hook_trigger_fields(hook: Hook) -> str:
@@ -1050,8 +1162,17 @@ def render_graph_body(states: list[State], hooks: list[Hook], instances: list[In
             lines.append(f"    S_{hook.state_name} -->|{event_name}| H_{hook.name}")
         else:
             lines.append(f"    I_{hook.instance_name} -->|{event_name}| H_{hook.name}")
-        for state_name in hook.reads:
-            lines.append(f"    S_{state_name} -. reads .-> H_{hook.name}")
-        for state_name in hook.writes:
-            lines.append(f"    H_{hook.name} -->|writes| S_{state_name}")
+        if hook.accesses:
+            for access in hook.accesses:
+                access_label = access.mode.removeprefix("KEK_HOOK_ACCESS_").lower()
+                target = f"I_{access.instance_name}" if access.instance_name is not None else f"S_{access.state_name}"
+                if access.mode == "KEK_HOOK_ACCESS_READ":
+                    lines.append(f"    {target} -. reads .-> H_{hook.name}")
+                else:
+                    lines.append(f"    H_{hook.name} -->|{access_label}| {target}")
+        else:
+            for state_name in hook.reads:
+                lines.append(f"    S_{state_name} -. reads .-> H_{hook.name}")
+            for state_name in hook.writes:
+                lines.append(f"    H_{hook.name} -->|writes| S_{state_name}")
     return "\n".join(lines)

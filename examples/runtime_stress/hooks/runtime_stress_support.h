@@ -17,6 +17,11 @@ typedef struct RuntimeStressApp {
     atomic_uint_least64_t readonly_digest;
     atomic_uint_least64_t readonly_active;
     atomic_uint_least64_t readonly_max_active;
+    atomic_uint_least64_t write_benchmark_exact_hooks;
+    atomic_uint_least64_t write_benchmark_merge_hooks;
+    atomic_uint_least64_t write_benchmark_active;
+    atomic_uint_least64_t write_benchmark_max_active;
+    atomic_uint_least64_t write_benchmark_digest;
     Runtime_stress_stateRuntime* generated;
     KekStandardTextBridge* input_bridge;
     int force_clock_phase_failure;
@@ -32,5 +37,7 @@ int runtime_stress_note_audit(KekHookContext* context, uint64_t deleted_delta,
 int runtime_stress_fail_clock_phase(KekHookContext* context);
 int runtime_stress_check_forbidden_audit_write(KekHookContext* context);
 int runtime_stress_readonly_probe(KekHookContext* context, uint64_t salt);
+void runtime_stress_note_write_benchmark(KekHookContext* context, int merge,
+                                         uint64_t salt);
 
 #endif

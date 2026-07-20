@@ -12,6 +12,10 @@
 #define KEK_HOOK_ANY_SLOT ((size_t)-1)
 #define KEK_HOOK_UNRESOLVED_SLOT ((size_t)-2)
 
+#define KEK_HOOK_SCHEDULING_OPAQUE (1u << 0)
+#define KEK_HOOK_SCHEDULING_ALLOW_PARALLEL_WRITES (1u << 1)
+#define KEK_HOOK_SCHEDULING_FIELD_MERGE_SAFE (1u << 2)
+
 struct KekRuntime;
 struct KekStateStore;
 
@@ -24,6 +28,28 @@ typedef struct KekHookContext {
 
 typedef int (*KekHookFn)(KekHookContext* context);
 
+typedef enum KekHookAccessScope {
+    KEK_HOOK_ACCESS_SCOPE_ANY = 0,
+    KEK_HOOK_ACCESS_SCOPE_DECLARED = 1,
+    KEK_HOOK_ACCESS_SCOPE_DYNAMIC = 2,
+    KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT = 3
+} KekHookAccessScope;
+
+typedef enum KekHookAccessMode {
+    KEK_HOOK_ACCESS_READ = 0,
+    KEK_HOOK_ACCESS_WRITE = 1,
+    KEK_HOOK_ACCESS_CREATE = 2,
+    KEK_HOOK_ACCESS_DELETE = 3
+} KekHookAccessMode;
+
+typedef struct KekHookAccess {
+    KekHookAccessMode mode;
+    size_t state_type_id;
+    size_t state_slot_id;
+    KekHookAccessScope scope;
+    uint64_t fields;
+} KekHookAccess;
+
 typedef struct KekHookDescriptor {
     const char* name;
     KekEventType event_type;
@@ -35,6 +61,9 @@ typedef struct KekHookDescriptor {
     const size_t* writes;
     size_t write_count;
     KekHookFn run;
+    const KekHookAccess* accesses;
+    size_t access_count;
+    uint32_t scheduling_flags;
 } KekHookDescriptor;
 
 typedef struct KekHookBucket {

@@ -78,6 +78,7 @@ int FrameClock_check(const FrameClock* state);
 int FrameClock_check_void(const void* state);
 int FrameClock_reset(FrameClock* state);
 int FrameClock_reset_void(void* state);
+int FrameClock_merge_fields(void* target, const void* source, uint64_t fields);
 
 typedef struct GameSession {
     GameMode mode;
@@ -106,6 +107,7 @@ int GameSession_check(const GameSession* state);
 int GameSession_check_void(const void* state);
 int GameSession_reset(GameSession* state);
 int GameSession_reset_void(void* state);
+int GameSession_merge_fields(void* target, const void* source, uint64_t fields);
 
 typedef struct InputIntent {
     float move_x;
@@ -133,6 +135,7 @@ int InputIntent_check(const InputIntent* state);
 int InputIntent_check_void(const void* state);
 int InputIntent_reset(InputIntent* state);
 int InputIntent_reset_void(void* state);
+int InputIntent_merge_fields(void* target, const void* source, uint64_t fields);
 
 typedef struct Player {
     float x;
@@ -171,6 +174,7 @@ int Player_check(const Player* state);
 int Player_check_void(const void* state);
 int Player_reset(Player* state);
 int Player_reset_void(void* state);
+int Player_merge_fields(void* target, const void* source, uint64_t fields);
 
 typedef struct WaveDirector {
     int32_t wave;
@@ -192,6 +196,7 @@ int WaveDirector_check(const WaveDirector* state);
 int WaveDirector_check_void(const void* state);
 int WaveDirector_reset(WaveDirector* state);
 int WaveDirector_reset_void(void* state);
+int WaveDirector_merge_fields(void* target, const void* source, uint64_t fields);
 
 typedef struct CameraRig {
     float x;
@@ -209,6 +214,7 @@ int CameraRig_check(const CameraRig* state);
 int CameraRig_check_void(const void* state);
 int CameraRig_reset(CameraRig* state);
 int CameraRig_reset_void(void* state);
+int CameraRig_merge_fields(void* target, const void* source, uint64_t fields);
 
 typedef struct Enemy {
     EnemyKind kind;
@@ -243,6 +249,7 @@ int Enemy_check(const Enemy* state);
 int Enemy_check_void(const void* state);
 int Enemy_reset(Enemy* state);
 int Enemy_reset_void(void* state);
+int Enemy_merge_fields(void* target, const void* source, uint64_t fields);
 
 typedef struct Projectile {
     float x;
@@ -268,6 +275,7 @@ int Projectile_check(const Projectile* state);
 int Projectile_check_void(const void* state);
 int Projectile_reset(Projectile* state);
 int Projectile_reset_void(void* state);
+int Projectile_merge_fields(void* target, const void* source, uint64_t fields);
 
 typedef struct Pickup {
     PickupKind kind;
@@ -291,6 +299,7 @@ int Pickup_check(const Pickup* state);
 int Pickup_check_void(const void* state);
 int Pickup_reset(Pickup* state);
 int Pickup_reset_void(void* state);
+int Pickup_merge_fields(void* target, const void* source, uint64_t fields);
 
 typedef struct HudMessage {
     HudMessageKind kind;
@@ -312,6 +321,7 @@ int HudMessage_check(const HudMessage* state);
 int HudMessage_check_void(const void* state);
 int HudMessage_reset(HudMessage* state);
 int HudMessage_reset_void(void* state);
+int HudMessage_merge_fields(void* target, const void* source, uint64_t fields);
 
 typedef struct Game_stateStateSlots {
     size_t frame;
@@ -343,6 +353,7 @@ struct Game_stateRuntimeBinding {
     KekStateStore state_store;
     KekHookRegistry hook_registry;
     KekHookDescriptor hook_descriptors[8];
+    KekHookAccess hook_accesses[33];
     Game_stateRuntimeBuffers buffers;
     Game_stateStateSlots slots;
 };
@@ -353,6 +364,7 @@ void game_state_runtime_binding_destroy(Game_stateRuntimeBinding* binding);
 typedef struct Game_stateRuntime {
     KekRuntimeApp app;
     KekHookDescriptor hook_descriptors[8];
+    KekHookAccess hook_accesses[33];
     Game_stateRuntimeBuffers buffers;
     Game_stateStateSlots slots;
 } Game_stateRuntime;

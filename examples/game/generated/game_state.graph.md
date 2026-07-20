@@ -42,43 +42,44 @@ flowchart LR
     I_boss_enemy(["boss_enemy: Enemy"])
     S_Enemy -. instance .-> I_boss_enemy
     I_frame -->|changed| H_OnFrameClock
-    S_FrameClock -. reads .-> H_OnFrameClock
-    S_GameSession -. reads .-> H_OnFrameClock
-    S_WaveDirector -. reads .-> H_OnFrameClock
-    H_OnFrameClock -->|writes| S_WaveDirector
+    I_frame -. reads .-> H_OnFrameClock
+    I_session -. reads .-> H_OnFrameClock
+    I_wave -. reads .-> H_OnFrameClock
+    S_Enemy -. reads .-> H_OnFrameClock
+    H_OnFrameClock -->|write| I_wave
     I_frame -->|changed| H_MoveGruntEnemy
-    S_FrameClock -. reads .-> H_MoveGruntEnemy
-    S_GameSession -. reads .-> H_MoveGruntEnemy
-    S_Player -. reads .-> H_MoveGruntEnemy
-    S_Enemy -. reads .-> H_MoveGruntEnemy
-    H_MoveGruntEnemy -->|writes| S_Enemy
+    I_frame -. reads .-> H_MoveGruntEnemy
+    I_session -. reads .-> H_MoveGruntEnemy
+    I_player -. reads .-> H_MoveGruntEnemy
+    I_grunt_enemy -. reads .-> H_MoveGruntEnemy
+    H_MoveGruntEnemy -->|write| I_grunt_enemy
     I_frame -->|changed| H_MoveRunnerEnemy
-    S_FrameClock -. reads .-> H_MoveRunnerEnemy
-    S_GameSession -. reads .-> H_MoveRunnerEnemy
-    S_Player -. reads .-> H_MoveRunnerEnemy
-    S_Enemy -. reads .-> H_MoveRunnerEnemy
-    H_MoveRunnerEnemy -->|writes| S_Enemy
+    I_frame -. reads .-> H_MoveRunnerEnemy
+    I_session -. reads .-> H_MoveRunnerEnemy
+    I_player -. reads .-> H_MoveRunnerEnemy
+    I_runner_enemy -. reads .-> H_MoveRunnerEnemy
+    H_MoveRunnerEnemy -->|write| I_runner_enemy
     I_frame -->|changed| H_MoveTankEnemy
-    S_FrameClock -. reads .-> H_MoveTankEnemy
-    S_GameSession -. reads .-> H_MoveTankEnemy
-    S_Player -. reads .-> H_MoveTankEnemy
-    S_Enemy -. reads .-> H_MoveTankEnemy
-    H_MoveTankEnemy -->|writes| S_Enemy
+    I_frame -. reads .-> H_MoveTankEnemy
+    I_session -. reads .-> H_MoveTankEnemy
+    I_player -. reads .-> H_MoveTankEnemy
+    I_tank_enemy -. reads .-> H_MoveTankEnemy
+    H_MoveTankEnemy -->|write| I_tank_enemy
     I_frame -->|changed| H_MoveBossEnemy
-    S_FrameClock -. reads .-> H_MoveBossEnemy
-    S_GameSession -. reads .-> H_MoveBossEnemy
-    S_Player -. reads .-> H_MoveBossEnemy
-    S_Enemy -. reads .-> H_MoveBossEnemy
-    H_MoveBossEnemy -->|writes| S_Enemy
+    I_frame -. reads .-> H_MoveBossEnemy
+    I_session -. reads .-> H_MoveBossEnemy
+    I_player -. reads .-> H_MoveBossEnemy
+    I_boss_enemy -. reads .-> H_MoveBossEnemy
+    H_MoveBossEnemy -->|write| I_boss_enemy
     I_player -->|changed| H_OnPlayerHealthChanged
-    S_Player -. reads .-> H_OnPlayerHealthChanged
-    S_GameSession -. reads .-> H_OnPlayerHealthChanged
-    H_OnPlayerHealthChanged -->|writes| S_GameSession
+    I_player -. reads .-> H_OnPlayerHealthChanged
+    I_session -. reads .-> H_OnPlayerHealthChanged
+    H_OnPlayerHealthChanged -->|write| I_session
     I_wave -->|changed| H_OnWaveChanged
-    S_WaveDirector -. reads .-> H_OnWaveChanged
-    S_GameSession -. reads .-> H_OnWaveChanged
-    H_OnWaveChanged -->|writes| S_GameSession
+    I_wave -. reads .-> H_OnWaveChanged
+    I_session -. reads .-> H_OnWaveChanged
+    H_OnWaveChanged -->|write| I_session
     I_session -->|changed| H_OnScoreChanged
-    S_GameSession -. reads .-> H_OnScoreChanged
-    H_OnScoreChanged -->|writes| S_GameSession
+    I_session -. reads .-> H_OnScoreChanged
+    H_OnScoreChanged -->|write| I_session
 ```

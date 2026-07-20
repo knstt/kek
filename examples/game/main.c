@@ -55,7 +55,7 @@ int main(void) {
 #endif
 
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Kek generated-state raylib game");
-    SetTargetFPS(60);
+    SetTargetFPS(240);
 
     while (!app.should_quit) {
 #ifdef KEK_HOOK_DYNAMIC

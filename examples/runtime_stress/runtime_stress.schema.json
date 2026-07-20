@@ -123,6 +123,22 @@
         {"name": "eof_count", "type": "u64", "default": 0},
         {"name": "error_count", "type": "u64", "default": 0}
       ]
+    },
+    {
+      "name": "WriteBenchmarkTrigger",
+      "fields": [
+        {"name": "exact_tick", "type": "u64", "default": 0},
+        {"name": "merge_tick", "type": "u64", "default": 0}
+      ]
+    },
+    {
+      "name": "WriteBenchmarkTarget",
+      "fields": [
+        {"name": "exact_hits", "type": "u64", "default": 0},
+        {"name": "left_value", "type": "u64", "default": 0},
+        {"name": "right_value", "type": "u64", "default": 0},
+        {"name": "checksum", "type": "u64", "default": 0}
+      ]
     }
   ],
   "instances": [
@@ -132,11 +148,15 @@
     {"name": "secondary_agent", "state": "Agent", "constructor": "guard", "values": {"id": 2, "x": 10, "y": -5}},
     {"name": "main_packet", "state": "Packet", "constructor": "telemetry", "values": {"seq": 1, "bytes": 16}},
     {"name": "telemetry", "state": "Telemetry"},
-    {"name": "audit", "state": "AuditLog"}
+    {"name": "audit", "state": "AuditLog"},
+    {"name": "benchmark_trigger", "state": "WriteBenchmarkTrigger"},
+    {"name": "benchmark_left", "state": "WriteBenchmarkTarget"},
+    {"name": "benchmark_right", "state": "WriteBenchmarkTarget"},
+    {"name": "benchmark_merge", "state": "WriteBenchmarkTarget"}
   ],
   "hooks": [
-    {"name": "OnClockTick", "on": {"instance": "clock", "event": "changed", "fields": ["tick"]}, "reads": ["SimulationClock", "ControlPanel"], "writes": ["Telemetry"]},
-    {"name": "OnClockPhase", "on": {"instance": "clock", "event": "changed", "fields": ["phase"]}, "reads": ["SimulationClock"], "writes": ["AuditLog"]},
+    {"name": "OnClockTick", "on": {"instance": "clock", "event": "changed", "fields": ["tick"]}, "reads": ["SimulationClock", "ControlPanel"], "writes": ["Telemetry"], "access": {"reads": [{"instance": "clock", "fields": ["tick"]}], "writes": [{"instance": "telemetry", "fields": ["total_events", "hook_hits", "load"]}]}},
+    {"name": "OnClockPhase", "on": {"instance": "clock", "event": "changed", "fields": ["phase"]}, "reads": ["SimulationClock"], "writes": ["AuditLog"], "access": {"reads": [{"instance": "clock", "fields": ["phase"]}], "writes": [{"instance": "audit", "fields": ["last_event"]}]}},
     {"name": "OnAgentMoved", "on": {"state": "Agent", "event": "changed", "fields": ["x", "y"]}, "reads": ["Agent", "SimulationClock"], "writes": ["Telemetry"]},
     {"name": "OnAgentReadOnlyProbeA", "on": {"state": "Agent", "event": "changed", "fields": ["x", "y"]}, "reads": ["Agent", "SimulationClock"], "writes": []},
     {"name": "OnAgentReadOnlyProbeB", "on": {"state": "Agent", "event": "changed", "fields": ["x", "y"]}, "reads": ["Agent", "SimulationClock"], "writes": []},
@@ -150,12 +170,16 @@
     {"name": "OnPacketPayload", "on": {"state": "Packet", "event": "changed", "fields": ["payload"]}, "reads": ["Packet"], "writes": ["Telemetry"]},
     {"name": "OnPacketCreated", "on": {"state": "Packet", "event": "created"}, "reads": ["Packet"], "writes": ["Telemetry"]},
     {"name": "OnPacketDeleted", "on": {"state": "Packet", "event": "deleted"}, "reads": ["Packet"], "writes": ["AuditLog"]},
-    {"name": "OnControlMode", "on": {"instance": "control", "event": "changed", "fields": ["mode"]}, "reads": ["ControlPanel"], "writes": ["Telemetry"]},
-    {"name": "OnControlLabel", "on": {"instance": "control", "event": "changed", "fields": ["label"]}, "reads": ["ControlPanel"], "writes": ["Telemetry"]},
-    {"name": "OnTelemetryChanged", "on": {"instance": "telemetry", "event": "changed", "fields": ["total_events", "hook_hits", "stream_bytes", "timer_ticks", "active_agents"]}, "reads": ["Telemetry"], "writes": ["AuditLog"]},
-    {"name": "OnAuditChanged", "on": {"instance": "audit", "event": "changed", "fields": ["batch_count"]}, "reads": ["AuditLog"], "writes": ["Telemetry"]},
-    {"name": "OnStandardInput", "on": {"instance": "standard_input", "event": "changed", "fields": ["input"]}, "reads": ["StandardInput"], "writes": ["Telemetry"]},
-    {"name": "OnFastTimer", "on": {"instance": "fast_timer", "event": "changed", "fields": ["tick"]}, "reads": ["Timer"], "writes": ["Telemetry"]},
-    {"name": "OnSlowTimer", "on": {"instance": "slow_timer", "event": "changed", "fields": ["tick"]}, "reads": ["Timer"], "writes": ["AuditLog"]}
+    {"name": "OnControlMode", "on": {"instance": "control", "event": "changed", "fields": ["mode"]}, "reads": ["ControlPanel"], "writes": ["Telemetry"], "access": {"reads": [{"instance": "control", "fields": ["mode"]}], "writes": [{"instance": "telemetry", "fields": ["total_events", "hook_hits", "load"]}]}},
+    {"name": "OnControlLabel", "on": {"instance": "control", "event": "changed", "fields": ["label"]}, "reads": ["ControlPanel"], "writes": ["Telemetry"], "access": {"reads": [{"instance": "control", "fields": ["label"]}], "writes": [{"instance": "telemetry", "fields": ["total_events", "hook_hits", "load"]}]}},
+    {"name": "OnTelemetryChanged", "on": {"instance": "telemetry", "event": "changed", "fields": ["total_events", "hook_hits", "stream_bytes", "timer_ticks", "active_agents"]}, "reads": ["Telemetry"], "writes": ["AuditLog"], "access": {"reads": [{"instance": "telemetry", "fields": ["total_events", "hook_hits", "stream_bytes", "timer_ticks", "active_agents"]}], "writes": [{"instance": "audit", "fields": ["last_event"]}]}},
+    {"name": "OnAuditChanged", "on": {"instance": "audit", "event": "changed", "fields": ["batch_count"]}, "reads": ["AuditLog"], "writes": ["Telemetry"], "access": {"reads": [{"instance": "audit", "fields": ["batch_count"]}], "writes": [{"instance": "telemetry", "fields": ["total_events", "hook_hits", "load"]}]}},
+    {"name": "OnStandardInput", "on": {"instance": "standard_input", "event": "changed", "fields": ["input"]}, "reads": ["StandardInput"], "writes": ["Telemetry"], "access": {"reads": [{"instance": "standard_input", "fields": ["input"]}], "writes": [{"instance": "telemetry", "fields": ["total_events", "hook_hits", "stream_bytes"]}]}},
+    {"name": "OnFastTimer", "on": {"instance": "fast_timer", "event": "changed", "fields": ["tick"]}, "reads": ["Timer"], "writes": ["Telemetry"], "access": {"reads": [{"instance": "fast_timer", "fields": ["tick"]}], "writes": [{"instance": "telemetry", "fields": ["total_events", "hook_hits", "timer_ticks"]}]}},
+    {"name": "OnSlowTimer", "on": {"instance": "slow_timer", "event": "changed", "fields": ["tick"]}, "reads": ["Timer"], "writes": ["AuditLog"], "access": {"reads": [{"instance": "slow_timer", "fields": ["tick"]}], "writes": [{"instance": "audit", "fields": ["last_event"]}]}},
+    {"name": "OnBenchmarkExactLeft", "on": {"instance": "benchmark_trigger", "event": "changed", "fields": ["exact_tick"]}, "reads": ["WriteBenchmarkTrigger"], "writes": ["WriteBenchmarkTarget"], "access": {"reads": [{"instance": "benchmark_trigger", "fields": ["exact_tick"]}], "writes": [{"instance": "benchmark_left", "fields": ["exact_hits", "checksum"]}]}},
+    {"name": "OnBenchmarkExactRight", "on": {"instance": "benchmark_trigger", "event": "changed", "fields": ["exact_tick"]}, "reads": ["WriteBenchmarkTrigger"], "writes": ["WriteBenchmarkTarget"], "access": {"reads": [{"instance": "benchmark_trigger", "fields": ["exact_tick"]}], "writes": [{"instance": "benchmark_right", "fields": ["exact_hits", "checksum"]}]}},
+    {"name": "OnBenchmarkMergeLeft", "on": {"instance": "benchmark_trigger", "event": "changed", "fields": ["merge_tick"]}, "reads": ["WriteBenchmarkTrigger"], "writes": ["WriteBenchmarkTarget"], "access": {"field_merge_safe": true, "reads": [{"instance": "benchmark_trigger", "fields": ["merge_tick"]}], "writes": [{"instance": "benchmark_merge", "fields": ["left_value"]}]}},
+    {"name": "OnBenchmarkMergeRight", "on": {"instance": "benchmark_trigger", "event": "changed", "fields": ["merge_tick"]}, "reads": ["WriteBenchmarkTrigger"], "writes": ["WriteBenchmarkTarget"], "access": {"field_merge_safe": true, "reads": [{"instance": "benchmark_trigger", "fields": ["merge_tick"]}], "writes": [{"instance": "benchmark_merge", "fields": ["right_value"]}]}}
   ]
 }

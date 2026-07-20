@@ -3,15 +3,17 @@
 
 int OnWaveChanged(KekHookContext* context) {
     GameApp* app = (GameApp*)context->app_context;
-    const WaveDirector* wave = game_state_wave_current_const(&app->state);
-    const GameSession* session = game_state_session_current_const(&app->state);
+    OnWaveChangedAccess access =
+        on_wave_changed_access(context, game_state_get_slots_const(&app->state));
+    const WaveDirector* wave = on_wave_changed_read_wave(&access);
+    const GameSession* session = on_wave_changed_read_session(&access);
     if (!wave || !session) {
         return 1;
     }
     if (wave->wave >= 6 && wave->spawn_budget == 0 && wave->active_enemies == 0 &&
         session->mode == GameMode_Playing) {
         GameMode victory = GameMode_Victory;
-        return game_state_set_session_mode(&app->state, victory);
+        return on_wave_changed_set_session_mode(&access, victory);
     }
     return 1;
 }

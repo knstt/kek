@@ -171,49 +171,131 @@
       "name": "OnFrameClock",
       "on": {"instance": "frame", "event": "changed", "fields": ["tick"]},
       "reads": ["FrameClock", "GameSession", "WaveDirector"],
-      "writes": ["WaveDirector"]
+      "writes": ["WaveDirector"],
+      "access": {
+        "mode": "opaque",
+        "reads": [
+          {"instance": "frame", "fields": ["tick"]},
+          {"instance": "session", "fields": ["mode"]},
+          {"instance": "wave"},
+          {"state": "Enemy", "scope": "any", "fields": ["active"]}
+        ],
+        "writes": [
+          {"instance": "wave"}
+        ]
+      }
     },
     {
       "name": "MoveGruntEnemy",
       "on": {"instance": "frame", "event": "changed", "fields": ["tick"]},
       "reads": ["FrameClock", "GameSession", "Player", "Enemy"],
-      "writes": ["Enemy"]
+      "writes": ["Enemy"],
+      "access": {
+        "reads": [
+          {"instance": "frame", "fields": ["dt"]},
+          {"instance": "session", "fields": ["mode"]},
+          {"instance": "player", "fields": ["x", "y"]},
+          {"instance": "grunt_enemy", "fields": ["active", "x", "y"]}
+        ],
+        "writes": [
+          {"instance": "grunt_enemy", "fields": ["x", "y", "vx", "vy", "flash"]}
+        ]
+      }
     },
     {
       "name": "MoveRunnerEnemy",
       "on": {"instance": "frame", "event": "changed", "fields": ["tick"]},
       "reads": ["FrameClock", "GameSession", "Player", "Enemy"],
-      "writes": ["Enemy"]
+      "writes": ["Enemy"],
+      "access": {
+        "reads": [
+          {"instance": "frame", "fields": ["dt"]},
+          {"instance": "session", "fields": ["mode"]},
+          {"instance": "player", "fields": ["x", "y"]},
+          {"instance": "runner_enemy", "fields": ["active", "x", "y"]}
+        ],
+        "writes": [
+          {"instance": "runner_enemy", "fields": ["x", "y", "vx", "vy", "flash"]}
+        ]
+      }
     },
     {
       "name": "MoveTankEnemy",
       "on": {"instance": "frame", "event": "changed", "fields": ["tick"]},
       "reads": ["FrameClock", "GameSession", "Player", "Enemy"],
-      "writes": ["Enemy"]
+      "writes": ["Enemy"],
+      "access": {
+        "reads": [
+          {"instance": "frame", "fields": ["dt"]},
+          {"instance": "session", "fields": ["mode"]},
+          {"instance": "player", "fields": ["x", "y"]},
+          {"instance": "tank_enemy", "fields": ["active", "x", "y"]}
+        ],
+        "writes": [
+          {"instance": "tank_enemy", "fields": ["x", "y", "vx", "vy", "flash"]}
+        ]
+      }
     },
     {
       "name": "MoveBossEnemy",
       "on": {"instance": "frame", "event": "changed", "fields": ["tick"]},
       "reads": ["FrameClock", "GameSession", "Player", "Enemy"],
-      "writes": ["Enemy"]
+      "writes": ["Enemy"],
+      "access": {
+        "reads": [
+          {"instance": "frame", "fields": ["dt"]},
+          {"instance": "session", "fields": ["mode"]},
+          {"instance": "player", "fields": ["x", "y"]},
+          {"instance": "boss_enemy", "fields": ["active", "x", "y"]}
+        ],
+        "writes": [
+          {"instance": "boss_enemy", "fields": ["x", "y", "vx", "vy", "flash"]}
+        ]
+      }
     },
     {
       "name": "OnPlayerHealthChanged",
       "on": {"instance": "player", "event": "changed", "fields": ["health"]},
       "reads": ["Player", "GameSession"],
-      "writes": ["GameSession"]
+      "writes": ["GameSession"],
+      "access": {
+        "reads": [
+          {"instance": "player", "fields": ["health"]},
+          {"instance": "session", "fields": ["mode"]}
+        ],
+        "writes": [
+          {"instance": "session", "fields": ["mode"]}
+        ]
+      }
     },
     {
       "name": "OnWaveChanged",
       "on": {"instance": "wave", "event": "changed", "fields": ["wave"]},
       "reads": ["WaveDirector", "GameSession"],
-      "writes": ["GameSession"]
+      "writes": ["GameSession"],
+      "access": {
+        "reads": [
+          {"instance": "wave", "fields": ["wave", "spawn_budget", "active_enemies"]},
+          {"instance": "session", "fields": ["mode"]}
+        ],
+        "writes": [
+          {"instance": "session", "fields": ["mode"]}
+        ]
+      }
     },
     {
       "name": "OnScoreChanged",
       "on": {"instance": "session", "event": "changed", "fields": ["score", "combo"]},
       "reads": ["GameSession"],
-      "writes": ["GameSession"]
+      "writes": ["GameSession"],
+      "access": {
+        "reads": [
+          {"instance": "session", "fields": ["mode", "score", "next_upgrade_score"]}
+        ],
+        "writes": [
+          {"instance": "session", "fields": ["mode", "next_upgrade_score"]}
+        ]
+      }
     }
   ]
 }

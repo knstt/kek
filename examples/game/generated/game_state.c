@@ -56,6 +56,25 @@ int FrameClock_reset_void(void* state) {
     return FrameClock_reset((FrameClock*)state);
 }
 
+int FrameClock_merge_fields(void* target, const void* source, uint64_t fields) {
+    if (target == 0 || source == 0) {
+        return 0;
+    }
+    FrameClock* target_state = (FrameClock*)target;
+    const FrameClock* source_state = (const FrameClock*)source;
+    if (fields == KEK_EVENT_CHANGED_FIELDS_UNKNOWN) {
+        *target_state = *source_state;
+        return 1;
+    }
+    if ((fields & KEK_STATE_TYPE_FRAME_CLOCK_FIELD_TICK) != 0) {
+        target_state->tick = source_state->tick;
+    }
+    if ((fields & KEK_STATE_TYPE_FRAME_CLOCK_FIELD_DT) != 0) {
+        target_state->dt = source_state->dt;
+    }
+    return 1;
+}
+
 GameSession GameSession_default(void) {
     GameSession state = {0};
     state.mode = GameMode_Menu;
@@ -135,6 +154,43 @@ int GameSession_reset_void(void* state) {
     return GameSession_reset((GameSession*)state);
 }
 
+int GameSession_merge_fields(void* target, const void* source, uint64_t fields) {
+    if (target == 0 || source == 0) {
+        return 0;
+    }
+    GameSession* target_state = (GameSession*)target;
+    const GameSession* source_state = (const GameSession*)source;
+    if (fields == KEK_EVENT_CHANGED_FIELDS_UNKNOWN) {
+        *target_state = *source_state;
+        return 1;
+    }
+    if ((fields & KEK_STATE_TYPE_GAME_SESSION_FIELD_MODE) != 0) {
+        target_state->mode = source_state->mode;
+    }
+    if ((fields & KEK_STATE_TYPE_GAME_SESSION_FIELD_SCORE) != 0) {
+        target_state->score = source_state->score;
+    }
+    if ((fields & KEK_STATE_TYPE_GAME_SESSION_FIELD_COMBO) != 0) {
+        target_state->combo = source_state->combo;
+    }
+    if ((fields & KEK_STATE_TYPE_GAME_SESSION_FIELD_COMBO_TIMER) != 0) {
+        target_state->combo_timer = source_state->combo_timer;
+    }
+    if ((fields & KEK_STATE_TYPE_GAME_SESSION_FIELD_TIME_ALIVE) != 0) {
+        target_state->time_alive = source_state->time_alive;
+    }
+    if ((fields & KEK_STATE_TYPE_GAME_SESSION_FIELD_SHAKE) != 0) {
+        target_state->shake = source_state->shake;
+    }
+    if ((fields & KEK_STATE_TYPE_GAME_SESSION_FIELD_NEXT_UPGRADE_SCORE) != 0) {
+        target_state->next_upgrade_score = source_state->next_upgrade_score;
+    }
+    if ((fields & KEK_STATE_TYPE_GAME_SESSION_FIELD_DEBUG) != 0) {
+        target_state->debug = source_state->debug;
+    }
+    return 1;
+}
+
 InputIntent InputIntent_default(void) {
     InputIntent state = {0};
     state.move_x = 0;
@@ -200,6 +256,43 @@ int InputIntent_reset(InputIntent* state) {
 
 int InputIntent_reset_void(void* state) {
     return InputIntent_reset((InputIntent*)state);
+}
+
+int InputIntent_merge_fields(void* target, const void* source, uint64_t fields) {
+    if (target == 0 || source == 0) {
+        return 0;
+    }
+    InputIntent* target_state = (InputIntent*)target;
+    const InputIntent* source_state = (const InputIntent*)source;
+    if (fields == KEK_EVENT_CHANGED_FIELDS_UNKNOWN) {
+        *target_state = *source_state;
+        return 1;
+    }
+    if ((fields & KEK_STATE_TYPE_INPUT_INTENT_FIELD_MOVE_X) != 0) {
+        target_state->move_x = source_state->move_x;
+    }
+    if ((fields & KEK_STATE_TYPE_INPUT_INTENT_FIELD_MOVE_Y) != 0) {
+        target_state->move_y = source_state->move_y;
+    }
+    if ((fields & KEK_STATE_TYPE_INPUT_INTENT_FIELD_AIM_X) != 0) {
+        target_state->aim_x = source_state->aim_x;
+    }
+    if ((fields & KEK_STATE_TYPE_INPUT_INTENT_FIELD_AIM_Y) != 0) {
+        target_state->aim_y = source_state->aim_y;
+    }
+    if ((fields & KEK_STATE_TYPE_INPUT_INTENT_FIELD_SHOOT) != 0) {
+        target_state->shoot = source_state->shoot;
+    }
+    if ((fields & KEK_STATE_TYPE_INPUT_INTENT_FIELD_DASH) != 0) {
+        target_state->dash = source_state->dash;
+    }
+    if ((fields & KEK_STATE_TYPE_INPUT_INTENT_FIELD_PAUSE) != 0) {
+        target_state->pause = source_state->pause;
+    }
+    if ((fields & KEK_STATE_TYPE_INPUT_INTENT_FIELD_CONFIRM) != 0) {
+        target_state->confirm = source_state->confirm;
+    }
+    return 1;
 }
 
 Player Player_default(void) {
@@ -333,6 +426,58 @@ int Player_reset_void(void* state) {
     return Player_reset((Player*)state);
 }
 
+int Player_merge_fields(void* target, const void* source, uint64_t fields) {
+    if (target == 0 || source == 0) {
+        return 0;
+    }
+    Player* target_state = (Player*)target;
+    const Player* source_state = (const Player*)source;
+    if (fields == KEK_EVENT_CHANGED_FIELDS_UNKNOWN) {
+        *target_state = *source_state;
+        return 1;
+    }
+    if ((fields & KEK_STATE_TYPE_PLAYER_FIELD_X) != 0) {
+        target_state->x = source_state->x;
+    }
+    if ((fields & KEK_STATE_TYPE_PLAYER_FIELD_Y) != 0) {
+        target_state->y = source_state->y;
+    }
+    if ((fields & KEK_STATE_TYPE_PLAYER_FIELD_VX) != 0) {
+        target_state->vx = source_state->vx;
+    }
+    if ((fields & KEK_STATE_TYPE_PLAYER_FIELD_VY) != 0) {
+        target_state->vy = source_state->vy;
+    }
+    if ((fields & KEK_STATE_TYPE_PLAYER_FIELD_HEALTH) != 0) {
+        target_state->health = source_state->health;
+    }
+    if ((fields & KEK_STATE_TYPE_PLAYER_FIELD_MAX_HEALTH) != 0) {
+        target_state->max_health = source_state->max_health;
+    }
+    if ((fields & KEK_STATE_TYPE_PLAYER_FIELD_SHIELD) != 0) {
+        target_state->shield = source_state->shield;
+    }
+    if ((fields & KEK_STATE_TYPE_PLAYER_FIELD_XP) != 0) {
+        target_state->xp = source_state->xp;
+    }
+    if ((fields & KEK_STATE_TYPE_PLAYER_FIELD_LEVEL) != 0) {
+        target_state->level = source_state->level;
+    }
+    if ((fields & KEK_STATE_TYPE_PLAYER_FIELD_FIRE_COOLDOWN) != 0) {
+        target_state->fire_cooldown = source_state->fire_cooldown;
+    }
+    if ((fields & KEK_STATE_TYPE_PLAYER_FIELD_DASH_COOLDOWN) != 0) {
+        target_state->dash_cooldown = source_state->dash_cooldown;
+    }
+    if ((fields & KEK_STATE_TYPE_PLAYER_FIELD_RAPID_TIMER) != 0) {
+        target_state->rapid_timer = source_state->rapid_timer;
+    }
+    if ((fields & KEK_STATE_TYPE_PLAYER_FIELD_INVULNERABLE_TIMER) != 0) {
+        target_state->invulnerable_timer = source_state->invulnerable_timer;
+    }
+    return 1;
+}
+
 WaveDirector WaveDirector_default(void) {
     WaveDirector state = {0};
     state.wave = 0;
@@ -397,6 +542,34 @@ int WaveDirector_reset_void(void* state) {
     return WaveDirector_reset((WaveDirector*)state);
 }
 
+int WaveDirector_merge_fields(void* target, const void* source, uint64_t fields) {
+    if (target == 0 || source == 0) {
+        return 0;
+    }
+    WaveDirector* target_state = (WaveDirector*)target;
+    const WaveDirector* source_state = (const WaveDirector*)source;
+    if (fields == KEK_EVENT_CHANGED_FIELDS_UNKNOWN) {
+        *target_state = *source_state;
+        return 1;
+    }
+    if ((fields & KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_WAVE) != 0) {
+        target_state->wave = source_state->wave;
+    }
+    if ((fields & KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_SPAWN_BUDGET) != 0) {
+        target_state->spawn_budget = source_state->spawn_budget;
+    }
+    if ((fields & KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_SPAWN_TIMER) != 0) {
+        target_state->spawn_timer = source_state->spawn_timer;
+    }
+    if ((fields & KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_ACTIVE_ENEMIES) != 0) {
+        target_state->active_enemies = source_state->active_enemies;
+    }
+    if ((fields & KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_BOSS_SPAWNED) != 0) {
+        target_state->boss_spawned = source_state->boss_spawned;
+    }
+    return 1;
+}
+
 CameraRig CameraRig_default(void) {
     CameraRig state = {0};
     state.x = 0;
@@ -451,6 +624,28 @@ int CameraRig_reset(CameraRig* state) {
 
 int CameraRig_reset_void(void* state) {
     return CameraRig_reset((CameraRig*)state);
+}
+
+int CameraRig_merge_fields(void* target, const void* source, uint64_t fields) {
+    if (target == 0 || source == 0) {
+        return 0;
+    }
+    CameraRig* target_state = (CameraRig*)target;
+    const CameraRig* source_state = (const CameraRig*)source;
+    if (fields == KEK_EVENT_CHANGED_FIELDS_UNKNOWN) {
+        *target_state = *source_state;
+        return 1;
+    }
+    if ((fields & KEK_STATE_TYPE_CAMERA_RIG_FIELD_X) != 0) {
+        target_state->x = source_state->x;
+    }
+    if ((fields & KEK_STATE_TYPE_CAMERA_RIG_FIELD_Y) != 0) {
+        target_state->y = source_state->y;
+    }
+    if ((fields & KEK_STATE_TYPE_CAMERA_RIG_FIELD_ZOOM) != 0) {
+        target_state->zoom = source_state->zoom;
+    }
+    return 1;
 }
 
 Enemy Enemy_default(void) {
@@ -573,6 +768,49 @@ int Enemy_reset_void(void* state) {
     return Enemy_reset((Enemy*)state);
 }
 
+int Enemy_merge_fields(void* target, const void* source, uint64_t fields) {
+    if (target == 0 || source == 0) {
+        return 0;
+    }
+    Enemy* target_state = (Enemy*)target;
+    const Enemy* source_state = (const Enemy*)source;
+    if (fields == KEK_EVENT_CHANGED_FIELDS_UNKNOWN) {
+        *target_state = *source_state;
+        return 1;
+    }
+    if ((fields & KEK_STATE_TYPE_ENEMY_FIELD_KIND) != 0) {
+        target_state->kind = source_state->kind;
+    }
+    if ((fields & KEK_STATE_TYPE_ENEMY_FIELD_X) != 0) {
+        target_state->x = source_state->x;
+    }
+    if ((fields & KEK_STATE_TYPE_ENEMY_FIELD_Y) != 0) {
+        target_state->y = source_state->y;
+    }
+    if ((fields & KEK_STATE_TYPE_ENEMY_FIELD_VX) != 0) {
+        target_state->vx = source_state->vx;
+    }
+    if ((fields & KEK_STATE_TYPE_ENEMY_FIELD_VY) != 0) {
+        target_state->vy = source_state->vy;
+    }
+    if ((fields & KEK_STATE_TYPE_ENEMY_FIELD_HEALTH) != 0) {
+        target_state->health = source_state->health;
+    }
+    if ((fields & KEK_STATE_TYPE_ENEMY_FIELD_DAMAGE) != 0) {
+        target_state->damage = source_state->damage;
+    }
+    if ((fields & KEK_STATE_TYPE_ENEMY_FIELD_RADIUS) != 0) {
+        target_state->radius = source_state->radius;
+    }
+    if ((fields & KEK_STATE_TYPE_ENEMY_FIELD_FLASH) != 0) {
+        target_state->flash = source_state->flash;
+    }
+    if ((fields & KEK_STATE_TYPE_ENEMY_FIELD_ACTIVE) != 0) {
+        target_state->active = source_state->active;
+    }
+    return 1;
+}
+
 Projectile Projectile_default(void) {
     Projectile state = {0};
     state.x = 0;
@@ -657,6 +895,40 @@ int Projectile_reset_void(void* state) {
     return Projectile_reset((Projectile*)state);
 }
 
+int Projectile_merge_fields(void* target, const void* source, uint64_t fields) {
+    if (target == 0 || source == 0) {
+        return 0;
+    }
+    Projectile* target_state = (Projectile*)target;
+    const Projectile* source_state = (const Projectile*)source;
+    if (fields == KEK_EVENT_CHANGED_FIELDS_UNKNOWN) {
+        *target_state = *source_state;
+        return 1;
+    }
+    if ((fields & KEK_STATE_TYPE_PROJECTILE_FIELD_X) != 0) {
+        target_state->x = source_state->x;
+    }
+    if ((fields & KEK_STATE_TYPE_PROJECTILE_FIELD_Y) != 0) {
+        target_state->y = source_state->y;
+    }
+    if ((fields & KEK_STATE_TYPE_PROJECTILE_FIELD_VX) != 0) {
+        target_state->vx = source_state->vx;
+    }
+    if ((fields & KEK_STATE_TYPE_PROJECTILE_FIELD_VY) != 0) {
+        target_state->vy = source_state->vy;
+    }
+    if ((fields & KEK_STATE_TYPE_PROJECTILE_FIELD_LIFE) != 0) {
+        target_state->life = source_state->life;
+    }
+    if ((fields & KEK_STATE_TYPE_PROJECTILE_FIELD_DAMAGE) != 0) {
+        target_state->damage = source_state->damage;
+    }
+    if ((fields & KEK_STATE_TYPE_PROJECTILE_FIELD_PIERCE) != 0) {
+        target_state->pierce = source_state->pierce;
+    }
+    return 1;
+}
+
 Pickup Pickup_default(void) {
     Pickup state = {0};
     state.kind = PickupKind_Health;
@@ -728,6 +1000,37 @@ int Pickup_reset_void(void* state) {
     return Pickup_reset((Pickup*)state);
 }
 
+int Pickup_merge_fields(void* target, const void* source, uint64_t fields) {
+    if (target == 0 || source == 0) {
+        return 0;
+    }
+    Pickup* target_state = (Pickup*)target;
+    const Pickup* source_state = (const Pickup*)source;
+    if (fields == KEK_EVENT_CHANGED_FIELDS_UNKNOWN) {
+        *target_state = *source_state;
+        return 1;
+    }
+    if ((fields & KEK_STATE_TYPE_PICKUP_FIELD_KIND) != 0) {
+        target_state->kind = source_state->kind;
+    }
+    if ((fields & KEK_STATE_TYPE_PICKUP_FIELD_X) != 0) {
+        target_state->x = source_state->x;
+    }
+    if ((fields & KEK_STATE_TYPE_PICKUP_FIELD_Y) != 0) {
+        target_state->y = source_state->y;
+    }
+    if ((fields & KEK_STATE_TYPE_PICKUP_FIELD_VALUE) != 0) {
+        target_state->value = source_state->value;
+    }
+    if ((fields & KEK_STATE_TYPE_PICKUP_FIELD_LIFE) != 0) {
+        target_state->life = source_state->life;
+    }
+    if ((fields & KEK_STATE_TYPE_PICKUP_FIELD_PULSE) != 0) {
+        target_state->pulse = source_state->pulse;
+    }
+    return 1;
+}
+
 HudMessage HudMessage_default(void) {
     HudMessage state = {0};
     state.kind = HudMessageKind_Info;
@@ -792,6 +1095,34 @@ int HudMessage_reset_void(void* state) {
     return HudMessage_reset((HudMessage*)state);
 }
 
+int HudMessage_merge_fields(void* target, const void* source, uint64_t fields) {
+    if (target == 0 || source == 0) {
+        return 0;
+    }
+    HudMessage* target_state = (HudMessage*)target;
+    const HudMessage* source_state = (const HudMessage*)source;
+    if (fields == KEK_EVENT_CHANGED_FIELDS_UNKNOWN) {
+        *target_state = *source_state;
+        return 1;
+    }
+    if ((fields & KEK_STATE_TYPE_HUD_MESSAGE_FIELD_KIND) != 0) {
+        target_state->kind = source_state->kind;
+    }
+    if ((fields & KEK_STATE_TYPE_HUD_MESSAGE_FIELD_X) != 0) {
+        target_state->x = source_state->x;
+    }
+    if ((fields & KEK_STATE_TYPE_HUD_MESSAGE_FIELD_Y) != 0) {
+        target_state->y = source_state->y;
+    }
+    if ((fields & KEK_STATE_TYPE_HUD_MESSAGE_FIELD_VALUE) != 0) {
+        target_state->value = source_state->value;
+    }
+    if ((fields & KEK_STATE_TYPE_HUD_MESSAGE_FIELD_LIFE) != 0) {
+        target_state->life = source_state->life;
+    }
+    return 1;
+}
+
 const KekStateDescriptor KekGeneratedStateDescriptors[KEK_STATE_TYPE_COUNT] = {
     {
         .type_id = KEK_STATE_TYPE_FRAME_CLOCK,
@@ -800,6 +1131,7 @@ const KekStateDescriptor KekGeneratedStateDescriptors[KEK_STATE_TYPE_COUNT] = {
         .set_default = FrameClock_default_into,
         .check = FrameClock_check_void,
         .reset = FrameClock_reset_void,
+        .merge_fields = FrameClock_merge_fields,
     },
     {
         .type_id = KEK_STATE_TYPE_GAME_SESSION,
@@ -808,6 +1140,7 @@ const KekStateDescriptor KekGeneratedStateDescriptors[KEK_STATE_TYPE_COUNT] = {
         .set_default = GameSession_default_into,
         .check = GameSession_check_void,
         .reset = GameSession_reset_void,
+        .merge_fields = GameSession_merge_fields,
     },
     {
         .type_id = KEK_STATE_TYPE_INPUT_INTENT,
@@ -816,6 +1149,7 @@ const KekStateDescriptor KekGeneratedStateDescriptors[KEK_STATE_TYPE_COUNT] = {
         .set_default = InputIntent_default_into,
         .check = InputIntent_check_void,
         .reset = InputIntent_reset_void,
+        .merge_fields = InputIntent_merge_fields,
     },
     {
         .type_id = KEK_STATE_TYPE_PLAYER,
@@ -824,6 +1158,7 @@ const KekStateDescriptor KekGeneratedStateDescriptors[KEK_STATE_TYPE_COUNT] = {
         .set_default = Player_default_into,
         .check = Player_check_void,
         .reset = Player_reset_void,
+        .merge_fields = Player_merge_fields,
     },
     {
         .type_id = KEK_STATE_TYPE_WAVE_DIRECTOR,
@@ -832,6 +1167,7 @@ const KekStateDescriptor KekGeneratedStateDescriptors[KEK_STATE_TYPE_COUNT] = {
         .set_default = WaveDirector_default_into,
         .check = WaveDirector_check_void,
         .reset = WaveDirector_reset_void,
+        .merge_fields = WaveDirector_merge_fields,
     },
     {
         .type_id = KEK_STATE_TYPE_CAMERA_RIG,
@@ -840,6 +1176,7 @@ const KekStateDescriptor KekGeneratedStateDescriptors[KEK_STATE_TYPE_COUNT] = {
         .set_default = CameraRig_default_into,
         .check = CameraRig_check_void,
         .reset = CameraRig_reset_void,
+        .merge_fields = CameraRig_merge_fields,
     },
     {
         .type_id = KEK_STATE_TYPE_ENEMY,
@@ -848,6 +1185,7 @@ const KekStateDescriptor KekGeneratedStateDescriptors[KEK_STATE_TYPE_COUNT] = {
         .set_default = Enemy_default_into,
         .check = Enemy_check_void,
         .reset = Enemy_reset_void,
+        .merge_fields = Enemy_merge_fields,
     },
     {
         .type_id = KEK_STATE_TYPE_PROJECTILE,
@@ -856,6 +1194,7 @@ const KekStateDescriptor KekGeneratedStateDescriptors[KEK_STATE_TYPE_COUNT] = {
         .set_default = Projectile_default_into,
         .check = Projectile_check_void,
         .reset = Projectile_reset_void,
+        .merge_fields = Projectile_merge_fields,
     },
     {
         .type_id = KEK_STATE_TYPE_PICKUP,
@@ -864,6 +1203,7 @@ const KekStateDescriptor KekGeneratedStateDescriptors[KEK_STATE_TYPE_COUNT] = {
         .set_default = Pickup_default_into,
         .check = Pickup_check_void,
         .reset = Pickup_reset_void,
+        .merge_fields = Pickup_merge_fields,
     },
     {
         .type_id = KEK_STATE_TYPE_HUD_MESSAGE,
@@ -872,6 +1212,7 @@ const KekStateDescriptor KekGeneratedStateDescriptors[KEK_STATE_TYPE_COUNT] = {
         .set_default = HudMessage_default_into,
         .check = HudMessage_check_void,
         .reset = HudMessage_reset_void,
+        .merge_fields = HudMessage_merge_fields,
     },
 };
 
@@ -881,6 +1222,240 @@ const KekStateDescriptor* kek_generated_state_descriptor(size_t type_id) {
     }
     return &KekGeneratedStateDescriptors[type_id];
 }
+
+static const KekHookAccess KekGeneratedHookAccessData[] = {
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_FRAME_CLOCK,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_FRAME_CLOCK_FIELD_TICK,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_GAME_SESSION,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_GAME_SESSION_FIELD_MODE,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_WAVE_DIRECTOR,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_EVENT_CHANGED_FIELDS_UNKNOWN,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_ENEMY,
+        .state_slot_id = KEK_HOOK_ANY_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_ANY,
+        .fields = KEK_STATE_TYPE_ENEMY_FIELD_ACTIVE,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_WRITE,
+        .state_type_id = KEK_STATE_TYPE_WAVE_DIRECTOR,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_EVENT_CHANGED_FIELDS_UNKNOWN,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_FRAME_CLOCK,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_FRAME_CLOCK_FIELD_DT,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_GAME_SESSION,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_GAME_SESSION_FIELD_MODE,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_PLAYER,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_PLAYER_FIELD_X | KEK_STATE_TYPE_PLAYER_FIELD_Y,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_ENEMY,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_ENEMY_FIELD_ACTIVE | KEK_STATE_TYPE_ENEMY_FIELD_X | KEK_STATE_TYPE_ENEMY_FIELD_Y,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_WRITE,
+        .state_type_id = KEK_STATE_TYPE_ENEMY,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_ENEMY_FIELD_X | KEK_STATE_TYPE_ENEMY_FIELD_Y | KEK_STATE_TYPE_ENEMY_FIELD_VX | KEK_STATE_TYPE_ENEMY_FIELD_VY | KEK_STATE_TYPE_ENEMY_FIELD_FLASH,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_FRAME_CLOCK,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_FRAME_CLOCK_FIELD_DT,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_GAME_SESSION,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_GAME_SESSION_FIELD_MODE,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_PLAYER,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_PLAYER_FIELD_X | KEK_STATE_TYPE_PLAYER_FIELD_Y,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_ENEMY,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_ENEMY_FIELD_ACTIVE | KEK_STATE_TYPE_ENEMY_FIELD_X | KEK_STATE_TYPE_ENEMY_FIELD_Y,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_WRITE,
+        .state_type_id = KEK_STATE_TYPE_ENEMY,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_ENEMY_FIELD_X | KEK_STATE_TYPE_ENEMY_FIELD_Y | KEK_STATE_TYPE_ENEMY_FIELD_VX | KEK_STATE_TYPE_ENEMY_FIELD_VY | KEK_STATE_TYPE_ENEMY_FIELD_FLASH,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_FRAME_CLOCK,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_FRAME_CLOCK_FIELD_DT,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_GAME_SESSION,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_GAME_SESSION_FIELD_MODE,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_PLAYER,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_PLAYER_FIELD_X | KEK_STATE_TYPE_PLAYER_FIELD_Y,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_ENEMY,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_ENEMY_FIELD_ACTIVE | KEK_STATE_TYPE_ENEMY_FIELD_X | KEK_STATE_TYPE_ENEMY_FIELD_Y,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_WRITE,
+        .state_type_id = KEK_STATE_TYPE_ENEMY,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_ENEMY_FIELD_X | KEK_STATE_TYPE_ENEMY_FIELD_Y | KEK_STATE_TYPE_ENEMY_FIELD_VX | KEK_STATE_TYPE_ENEMY_FIELD_VY | KEK_STATE_TYPE_ENEMY_FIELD_FLASH,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_FRAME_CLOCK,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_FRAME_CLOCK_FIELD_DT,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_GAME_SESSION,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_GAME_SESSION_FIELD_MODE,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_PLAYER,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_PLAYER_FIELD_X | KEK_STATE_TYPE_PLAYER_FIELD_Y,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_ENEMY,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_ENEMY_FIELD_ACTIVE | KEK_STATE_TYPE_ENEMY_FIELD_X | KEK_STATE_TYPE_ENEMY_FIELD_Y,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_WRITE,
+        .state_type_id = KEK_STATE_TYPE_ENEMY,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_ENEMY_FIELD_X | KEK_STATE_TYPE_ENEMY_FIELD_Y | KEK_STATE_TYPE_ENEMY_FIELD_VX | KEK_STATE_TYPE_ENEMY_FIELD_VY | KEK_STATE_TYPE_ENEMY_FIELD_FLASH,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_PLAYER,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_PLAYER_FIELD_HEALTH,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_GAME_SESSION,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_GAME_SESSION_FIELD_MODE,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_WRITE,
+        .state_type_id = KEK_STATE_TYPE_GAME_SESSION,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_GAME_SESSION_FIELD_MODE,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_WAVE_DIRECTOR,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_WAVE | KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_SPAWN_BUDGET | KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_ACTIVE_ENEMIES,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_GAME_SESSION,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_GAME_SESSION_FIELD_MODE,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_WRITE,
+        .state_type_id = KEK_STATE_TYPE_GAME_SESSION,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_GAME_SESSION_FIELD_MODE,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_READ,
+        .state_type_id = KEK_STATE_TYPE_GAME_SESSION,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_GAME_SESSION_FIELD_MODE | KEK_STATE_TYPE_GAME_SESSION_FIELD_SCORE | KEK_STATE_TYPE_GAME_SESSION_FIELD_NEXT_UPGRADE_SCORE,
+    },
+    {
+        .mode = KEK_HOOK_ACCESS_WRITE,
+        .state_type_id = KEK_STATE_TYPE_GAME_SESSION,
+        .state_slot_id = KEK_HOOK_UNRESOLVED_SLOT,
+        .scope = KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT,
+        .fields = KEK_STATE_TYPE_GAME_SESSION_FIELD_MODE | KEK_STATE_TYPE_GAME_SESSION_FIELD_NEXT_UPGRADE_SCORE,
+    },
+};
 
 void game_state_state_slots_init_invalid(Game_stateStateSlots* slots) {
     if (slots == 0) {
@@ -1135,14 +1710,55 @@ int game_state_runtime_binding_init(Game_stateRuntimeBinding* binding, KekRuntim
     }
     kek_hook_registry_init(&binding->hook_registry, runtime, &binding->state_store, app_context);
     memcpy(binding->hook_descriptors, KekGeneratedHookDescriptors, sizeof(binding->hook_descriptors));
+    memcpy(binding->hook_accesses, KekGeneratedHookAccessData, sizeof(binding->hook_accesses));
+    binding->hook_descriptors[0].accesses = &binding->hook_accesses[0];
+    binding->hook_descriptors[1].accesses = &binding->hook_accesses[5];
+    binding->hook_descriptors[2].accesses = &binding->hook_accesses[10];
+    binding->hook_descriptors[3].accesses = &binding->hook_accesses[15];
+    binding->hook_descriptors[4].accesses = &binding->hook_accesses[20];
+    binding->hook_descriptors[5].accesses = &binding->hook_accesses[25];
+    binding->hook_descriptors[6].accesses = &binding->hook_accesses[28];
+    binding->hook_descriptors[7].accesses = &binding->hook_accesses[31];
     binding->hook_descriptors[0].state_slot_id = binding->slots.frame;
+    binding->hook_accesses[0].state_slot_id = binding->slots.frame;
+    binding->hook_accesses[1].state_slot_id = binding->slots.session;
+    binding->hook_accesses[2].state_slot_id = binding->slots.wave;
+    binding->hook_accesses[4].state_slot_id = binding->slots.wave;
     binding->hook_descriptors[1].state_slot_id = binding->slots.frame;
+    binding->hook_accesses[5].state_slot_id = binding->slots.frame;
+    binding->hook_accesses[6].state_slot_id = binding->slots.session;
+    binding->hook_accesses[7].state_slot_id = binding->slots.player;
+    binding->hook_accesses[8].state_slot_id = binding->slots.grunt_enemy;
+    binding->hook_accesses[9].state_slot_id = binding->slots.grunt_enemy;
     binding->hook_descriptors[2].state_slot_id = binding->slots.frame;
+    binding->hook_accesses[10].state_slot_id = binding->slots.frame;
+    binding->hook_accesses[11].state_slot_id = binding->slots.session;
+    binding->hook_accesses[12].state_slot_id = binding->slots.player;
+    binding->hook_accesses[13].state_slot_id = binding->slots.runner_enemy;
+    binding->hook_accesses[14].state_slot_id = binding->slots.runner_enemy;
     binding->hook_descriptors[3].state_slot_id = binding->slots.frame;
+    binding->hook_accesses[15].state_slot_id = binding->slots.frame;
+    binding->hook_accesses[16].state_slot_id = binding->slots.session;
+    binding->hook_accesses[17].state_slot_id = binding->slots.player;
+    binding->hook_accesses[18].state_slot_id = binding->slots.tank_enemy;
+    binding->hook_accesses[19].state_slot_id = binding->slots.tank_enemy;
     binding->hook_descriptors[4].state_slot_id = binding->slots.frame;
+    binding->hook_accesses[20].state_slot_id = binding->slots.frame;
+    binding->hook_accesses[21].state_slot_id = binding->slots.session;
+    binding->hook_accesses[22].state_slot_id = binding->slots.player;
+    binding->hook_accesses[23].state_slot_id = binding->slots.boss_enemy;
+    binding->hook_accesses[24].state_slot_id = binding->slots.boss_enemy;
     binding->hook_descriptors[5].state_slot_id = binding->slots.player;
+    binding->hook_accesses[25].state_slot_id = binding->slots.player;
+    binding->hook_accesses[26].state_slot_id = binding->slots.session;
+    binding->hook_accesses[27].state_slot_id = binding->slots.session;
     binding->hook_descriptors[6].state_slot_id = binding->slots.wave;
+    binding->hook_accesses[28].state_slot_id = binding->slots.wave;
+    binding->hook_accesses[29].state_slot_id = binding->slots.session;
+    binding->hook_accesses[30].state_slot_id = binding->slots.session;
     binding->hook_descriptors[7].state_slot_id = binding->slots.session;
+    binding->hook_accesses[31].state_slot_id = binding->slots.session;
+    binding->hook_accesses[32].state_slot_id = binding->slots.session;
     if (!kek_hook_registry_add_many(&binding->hook_registry, binding->hook_descriptors, KEK_GENERATED_HOOK_COUNT)) {
         kek_state_store_destroy(&binding->state_store);
         memset(binding, 0, sizeof(*binding));
@@ -1179,14 +1795,55 @@ int game_state_runtime_init(Game_stateRuntime* runtime, void* app_context) {
         return 0;
     }
     memcpy(runtime->hook_descriptors, KekGeneratedHookDescriptors, sizeof(runtime->hook_descriptors));
+    memcpy(runtime->hook_accesses, KekGeneratedHookAccessData, sizeof(runtime->hook_accesses));
+    runtime->hook_descriptors[0].accesses = &runtime->hook_accesses[0];
+    runtime->hook_descriptors[1].accesses = &runtime->hook_accesses[5];
+    runtime->hook_descriptors[2].accesses = &runtime->hook_accesses[10];
+    runtime->hook_descriptors[3].accesses = &runtime->hook_accesses[15];
+    runtime->hook_descriptors[4].accesses = &runtime->hook_accesses[20];
+    runtime->hook_descriptors[5].accesses = &runtime->hook_accesses[25];
+    runtime->hook_descriptors[6].accesses = &runtime->hook_accesses[28];
+    runtime->hook_descriptors[7].accesses = &runtime->hook_accesses[31];
     runtime->hook_descriptors[0].state_slot_id = runtime->slots.frame;
+    runtime->hook_accesses[0].state_slot_id = runtime->slots.frame;
+    runtime->hook_accesses[1].state_slot_id = runtime->slots.session;
+    runtime->hook_accesses[2].state_slot_id = runtime->slots.wave;
+    runtime->hook_accesses[4].state_slot_id = runtime->slots.wave;
     runtime->hook_descriptors[1].state_slot_id = runtime->slots.frame;
+    runtime->hook_accesses[5].state_slot_id = runtime->slots.frame;
+    runtime->hook_accesses[6].state_slot_id = runtime->slots.session;
+    runtime->hook_accesses[7].state_slot_id = runtime->slots.player;
+    runtime->hook_accesses[8].state_slot_id = runtime->slots.grunt_enemy;
+    runtime->hook_accesses[9].state_slot_id = runtime->slots.grunt_enemy;
     runtime->hook_descriptors[2].state_slot_id = runtime->slots.frame;
+    runtime->hook_accesses[10].state_slot_id = runtime->slots.frame;
+    runtime->hook_accesses[11].state_slot_id = runtime->slots.session;
+    runtime->hook_accesses[12].state_slot_id = runtime->slots.player;
+    runtime->hook_accesses[13].state_slot_id = runtime->slots.runner_enemy;
+    runtime->hook_accesses[14].state_slot_id = runtime->slots.runner_enemy;
     runtime->hook_descriptors[3].state_slot_id = runtime->slots.frame;
+    runtime->hook_accesses[15].state_slot_id = runtime->slots.frame;
+    runtime->hook_accesses[16].state_slot_id = runtime->slots.session;
+    runtime->hook_accesses[17].state_slot_id = runtime->slots.player;
+    runtime->hook_accesses[18].state_slot_id = runtime->slots.tank_enemy;
+    runtime->hook_accesses[19].state_slot_id = runtime->slots.tank_enemy;
     runtime->hook_descriptors[4].state_slot_id = runtime->slots.frame;
+    runtime->hook_accesses[20].state_slot_id = runtime->slots.frame;
+    runtime->hook_accesses[21].state_slot_id = runtime->slots.session;
+    runtime->hook_accesses[22].state_slot_id = runtime->slots.player;
+    runtime->hook_accesses[23].state_slot_id = runtime->slots.boss_enemy;
+    runtime->hook_accesses[24].state_slot_id = runtime->slots.boss_enemy;
     runtime->hook_descriptors[5].state_slot_id = runtime->slots.player;
+    runtime->hook_accesses[25].state_slot_id = runtime->slots.player;
+    runtime->hook_accesses[26].state_slot_id = runtime->slots.session;
+    runtime->hook_accesses[27].state_slot_id = runtime->slots.session;
     runtime->hook_descriptors[6].state_slot_id = runtime->slots.wave;
+    runtime->hook_accesses[28].state_slot_id = runtime->slots.wave;
+    runtime->hook_accesses[29].state_slot_id = runtime->slots.session;
+    runtime->hook_accesses[30].state_slot_id = runtime->slots.session;
     runtime->hook_descriptors[7].state_slot_id = runtime->slots.session;
+    runtime->hook_accesses[31].state_slot_id = runtime->slots.session;
+    runtime->hook_accesses[32].state_slot_id = runtime->slots.session;
     if (!kek_runtime_app_bind_hooks(&runtime->app, runtime->hook_descriptors, KEK_GENERATED_HOOK_COUNT)) {
         game_state_state_slots_remove_declared(kek_runtime_app_store(&runtime->app), &runtime->slots);
         kek_runtime_app_destroy(&runtime->app);
@@ -4396,6 +5053,9 @@ static const KekHookDescriptor KekGeneratedHookDescriptorData[KEK_GENERATED_HOOK
         .read_count = 3,
         .writes = OnFrameClock_writes,
         .write_count = 1,
+        .accesses = &KekGeneratedHookAccessData[0],
+        .access_count = 5,
+        .scheduling_flags = KEK_HOOK_SCHEDULING_OPAQUE | KEK_HOOK_SCHEDULING_ALLOW_PARALLEL_WRITES,
 #ifdef KEK_HOOK_DYNAMIC
         .run = 0,
 #else
@@ -4412,6 +5072,9 @@ static const KekHookDescriptor KekGeneratedHookDescriptorData[KEK_GENERATED_HOOK
         .read_count = 4,
         .writes = MoveGruntEnemy_writes,
         .write_count = 1,
+        .accesses = &KekGeneratedHookAccessData[5],
+        .access_count = 5,
+        .scheduling_flags = KEK_HOOK_SCHEDULING_ALLOW_PARALLEL_WRITES,
 #ifdef KEK_HOOK_DYNAMIC
         .run = 0,
 #else
@@ -4428,6 +5091,9 @@ static const KekHookDescriptor KekGeneratedHookDescriptorData[KEK_GENERATED_HOOK
         .read_count = 4,
         .writes = MoveRunnerEnemy_writes,
         .write_count = 1,
+        .accesses = &KekGeneratedHookAccessData[10],
+        .access_count = 5,
+        .scheduling_flags = KEK_HOOK_SCHEDULING_ALLOW_PARALLEL_WRITES,
 #ifdef KEK_HOOK_DYNAMIC
         .run = 0,
 #else
@@ -4444,6 +5110,9 @@ static const KekHookDescriptor KekGeneratedHookDescriptorData[KEK_GENERATED_HOOK
         .read_count = 4,
         .writes = MoveTankEnemy_writes,
         .write_count = 1,
+        .accesses = &KekGeneratedHookAccessData[15],
+        .access_count = 5,
+        .scheduling_flags = KEK_HOOK_SCHEDULING_ALLOW_PARALLEL_WRITES,
 #ifdef KEK_HOOK_DYNAMIC
         .run = 0,
 #else
@@ -4460,6 +5129,9 @@ static const KekHookDescriptor KekGeneratedHookDescriptorData[KEK_GENERATED_HOOK
         .read_count = 4,
         .writes = MoveBossEnemy_writes,
         .write_count = 1,
+        .accesses = &KekGeneratedHookAccessData[20],
+        .access_count = 5,
+        .scheduling_flags = KEK_HOOK_SCHEDULING_ALLOW_PARALLEL_WRITES,
 #ifdef KEK_HOOK_DYNAMIC
         .run = 0,
 #else
@@ -4476,6 +5148,9 @@ static const KekHookDescriptor KekGeneratedHookDescriptorData[KEK_GENERATED_HOOK
         .read_count = 2,
         .writes = OnPlayerHealthChanged_writes,
         .write_count = 1,
+        .accesses = &KekGeneratedHookAccessData[25],
+        .access_count = 3,
+        .scheduling_flags = KEK_HOOK_SCHEDULING_ALLOW_PARALLEL_WRITES,
 #ifdef KEK_HOOK_DYNAMIC
         .run = 0,
 #else
@@ -4492,6 +5167,9 @@ static const KekHookDescriptor KekGeneratedHookDescriptorData[KEK_GENERATED_HOOK
         .read_count = 2,
         .writes = OnWaveChanged_writes,
         .write_count = 1,
+        .accesses = &KekGeneratedHookAccessData[28],
+        .access_count = 3,
+        .scheduling_flags = KEK_HOOK_SCHEDULING_ALLOW_PARALLEL_WRITES,
 #ifdef KEK_HOOK_DYNAMIC
         .run = 0,
 #else
@@ -4508,6 +5186,9 @@ static const KekHookDescriptor KekGeneratedHookDescriptorData[KEK_GENERATED_HOOK
         .read_count = 1,
         .writes = OnScoreChanged_writes,
         .write_count = 1,
+        .accesses = &KekGeneratedHookAccessData[31],
+        .access_count = 2,
+        .scheduling_flags = KEK_HOOK_SCHEDULING_ALLOW_PARALLEL_WRITES,
 #ifdef KEK_HOOK_DYNAMIC
         .run = 0,
 #else

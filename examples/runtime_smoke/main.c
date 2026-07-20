@@ -40,6 +40,7 @@ typedef struct SmokeApp {
     KekRuntime* runtime;
     KekStateStore* store;
     size_t counter_slot;
+    size_t second_counter_slot;
     size_t input_slot;
     size_t output_slot;
     size_t timer_slot;
@@ -96,15 +97,30 @@ static void default_timer(void* state) {
     timer->enabled = false;
 }
 
+static int merge_text_fields(void* target, const void* source, uint64_t fields) {
+    SmokeTextState* target_text = (SmokeTextState*)target;
+    const SmokeTextState* source_text = (const SmokeTextState*)source;
+    if (!target_text || !source_text) {
+        return 0;
+    }
+    if ((fields & (1ull << 0)) != 0) {
+        memcpy(target_text->text, source_text->text, sizeof(target_text->text));
+    }
+    if ((fields & (1ull << 1)) != 0) {
+        target_text->len = source_text->len;
+    }
+    return 1;
+}
+
 static const KekStateDescriptor counter_descriptor = {
     SMOKE_STATE_COUNTER, "SmokeCounter", sizeof(SmokeCounterState),
-    default_counter, check_counter, NULL};
+    default_counter, check_counter, NULL, NULL};
 static const KekStateDescriptor text_descriptor = {
     SMOKE_STATE_TEXT, "SmokeText", sizeof(SmokeTextState),
-    default_text, check_text, NULL};
+    default_text, check_text, NULL, merge_text_fields};
 static const KekStateDescriptor timer_descriptor = {
     SMOKE_STATE_TIMER, "SmokeTimer", sizeof(SmokeTimerState),
-    default_timer, check_timer, NULL};
+    default_timer, check_timer, NULL, NULL};
 
 static void update_text(void* draft, void* context) {
     SmokeTextState* text = (SmokeTextState*)draft;
@@ -134,6 +150,19 @@ static void set_counter_value(void* draft, void* context) {
     SmokeCounterState* counter = (SmokeCounterState*)draft;
     int* value = (int*)context;
     counter->value = *value;
+}
+
+static void set_text_bytes_only(void* draft, void* context) {
+    SmokeTextState* text = (SmokeTextState*)draft;
+    const char* value = (const char*)context;
+    memset(text->text, 0, sizeof(text->text));
+    memcpy(text->text, value, strlen(value));
+}
+
+static void set_text_len_only(void* draft, void* context) {
+    SmokeTextState* text = (SmokeTextState*)draft;
+    size_t* value = (size_t*)context;
+    text->len = *value;
 }
 
 static int stream_event_handler(const KekEvent* event, void* context) {
@@ -329,6 +358,58 @@ static int readonly_parallel_hook(KekHookContext* context) {
     return 1;
 }
 
+static int parallel_write_counter_a_hook(KekHookContext* context) {
+    SmokeApp* app = (SmokeApp*)context->app_context;
+    int active = atomic_fetch_add(&app->parallel_active, 1) + 1;
+    note_parallel_active(app, active);
+    usleep(120000);
+    int value = 11;
+    int ok = kek_state_store_update_fields(context->state_store, app->counter_slot,
+                                           set_counter_value, &value, 1ull << 0);
+    atomic_fetch_add(&app->parallel_runs, 1);
+    atomic_fetch_sub(&app->parallel_active, 1);
+    return ok;
+}
+
+static int parallel_write_counter_b_hook(KekHookContext* context) {
+    SmokeApp* app = (SmokeApp*)context->app_context;
+    int active = atomic_fetch_add(&app->parallel_active, 1) + 1;
+    note_parallel_active(app, active);
+    usleep(120000);
+    int value = 22;
+    int ok = kek_state_store_update_fields(context->state_store,
+                                           app->second_counter_slot,
+                                           set_counter_value, &value, 1ull << 0);
+    atomic_fetch_add(&app->parallel_runs, 1);
+    atomic_fetch_sub(&app->parallel_active, 1);
+    return ok;
+}
+
+static int parallel_merge_text_hook(KekHookContext* context) {
+    SmokeApp* app = (SmokeApp*)context->app_context;
+    int active = atomic_fetch_add(&app->parallel_active, 1) + 1;
+    note_parallel_active(app, active);
+    usleep(120000);
+    int ok = kek_state_store_update_fields(context->state_store, app->input_slot,
+                                           set_text_bytes_only, "merge", 1ull << 0);
+    atomic_fetch_add(&app->parallel_runs, 1);
+    atomic_fetch_sub(&app->parallel_active, 1);
+    return ok;
+}
+
+static int parallel_merge_len_hook(KekHookContext* context) {
+    SmokeApp* app = (SmokeApp*)context->app_context;
+    int active = atomic_fetch_add(&app->parallel_active, 1) + 1;
+    note_parallel_active(app, active);
+    usleep(120000);
+    size_t len = 5;
+    int ok = kek_state_store_update_fields(context->state_store, app->input_slot,
+                                           set_text_len_only, &len, 1ull << 1);
+    atomic_fetch_add(&app->parallel_runs, 1);
+    atomic_fetch_sub(&app->parallel_active, 1);
+    return ok;
+}
+
 static size_t count_state_type(KekStateStore* store, size_t state_type_id) {
     size_t count = 0;
     size_t slot_id = KEK_STATE_INVALID_ID;
@@ -368,10 +449,10 @@ static int run_threading_mode_check(const char* thread_setting,
     KekHookDescriptor descriptors[] = {
         {"parallel readonly a", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
          app.counter_slot, 1ull << 0, counter_reads, 1, NULL, 0,
-         readonly_parallel_hook},
+         readonly_parallel_hook, NULL, 0, 0},
         {"parallel readonly b", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
          app.counter_slot, 1ull << 0, counter_reads, 1, NULL, 0,
-         readonly_parallel_hook},
+         readonly_parallel_hook, NULL, 0, 0},
     };
 
     kek_hook_registry_init(&hooks, &runtime, &store, &app);
@@ -400,11 +481,177 @@ static int run_threading_mode_check(const char* thread_setting,
     return ok ? 0 : 1;
 }
 
+static int run_parallel_write_check(void) {
+    if (setenv("KEK_RUNTIME_THREADS", "3", 1) != 0) {
+        return 1;
+    }
+
+    KekRuntime runtime;
+    KekStateStore store;
+    KekHookRegistry hooks;
+    SmokeApp app;
+
+    kek_runtime_init(&runtime);
+    kek_state_store_init(&store, &runtime);
+    memset(&app, 0, sizeof(app));
+    atomic_init(&app.parallel_active, 0);
+    atomic_init(&app.parallel_max_active, 0);
+    atomic_init(&app.parallel_runs, 0);
+    app.runtime = &runtime;
+    app.store = &store;
+    app.counter_slot = kek_state_store_add_default(&store, &counter_descriptor);
+    app.second_counter_slot =
+        kek_state_store_add_default(&store, &counter_descriptor);
+    app.input_slot = kek_state_store_add_default(&store, &text_descriptor);
+    if (app.counter_slot == KEK_STATE_INVALID_ID ||
+        app.second_counter_slot == KEK_STATE_INVALID_ID ||
+        app.input_slot == KEK_STATE_INVALID_ID ||
+        !kek_event_dispatch_pending(kek_runtime_events(&runtime))) {
+        return 1;
+    }
+
+    KekHookAccess write_a_accesses[] = {
+        {KEK_HOOK_ACCESS_READ, SMOKE_STATE_TEXT, app.input_slot,
+         KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT, 1ull << 0},
+        {KEK_HOOK_ACCESS_WRITE, SMOKE_STATE_COUNTER, app.counter_slot,
+         KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT, 1ull << 0},
+    };
+    KekHookAccess write_b_accesses[] = {
+        {KEK_HOOK_ACCESS_READ, SMOKE_STATE_TEXT, app.input_slot,
+         KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT, 1ull << 0},
+        {KEK_HOOK_ACCESS_WRITE, SMOKE_STATE_COUNTER, app.second_counter_slot,
+         KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT, 1ull << 0},
+    };
+    KekHookDescriptor descriptors[] = {
+        {"parallel write a", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_TEXT,
+         app.input_slot, 1ull << 0, NULL, 0, NULL, 0,
+         parallel_write_counter_a_hook, write_a_accesses, 2,
+         KEK_HOOK_SCHEDULING_ALLOW_PARALLEL_WRITES},
+        {"parallel write b", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_TEXT,
+         app.input_slot, 1ull << 0, NULL, 0, NULL, 0,
+         parallel_write_counter_b_hook, write_b_accesses, 2,
+         KEK_HOOK_SCHEDULING_ALLOW_PARALLEL_WRITES},
+    };
+
+    kek_hook_registry_init(&hooks, &runtime, &store, &app);
+    if (!kek_hook_registry_add_many(&hooks, descriptors, 2)) {
+        return 1;
+    }
+    kek_hook_registry_attach(&hooks);
+
+    if (!set_text_state(&store, app.input_slot, "parallel-write", 14) ||
+        !kek_event_dispatch_pending(kek_runtime_events(&runtime))) {
+        return 1;
+    }
+
+    const SmokeCounterState* first =
+        (const SmokeCounterState*)kek_state_store_current_const(&store,
+                                                                app.counter_slot);
+    const SmokeCounterState* second =
+        (const SmokeCounterState*)kek_state_store_current_const(
+            &store, app.second_counter_slot);
+    int ok = first && second && first->value == 11 && second->value == 22 &&
+             atomic_load(&app.parallel_runs) == 2 &&
+             atomic_load(&app.parallel_max_active) == 2;
+
+    kek_hook_registry_detach(&hooks);
+    kek_state_store_destroy(&store);
+    kek_runtime_destroy(&runtime);
+    unsetenv("KEK_RUNTIME_THREADS");
+    return ok ? 0 : 1;
+}
+
+static int run_parallel_field_merge_check(void) {
+    if (setenv("KEK_RUNTIME_THREADS", "3", 1) != 0) {
+        return 1;
+    }
+
+    KekRuntime runtime;
+    KekStateStore store;
+    KekHookRegistry hooks;
+    SmokeApp app;
+
+    kek_runtime_init(&runtime);
+    kek_state_store_init(&store, &runtime);
+    memset(&app, 0, sizeof(app));
+    atomic_init(&app.parallel_active, 0);
+    atomic_init(&app.parallel_max_active, 0);
+    atomic_init(&app.parallel_runs, 0);
+    app.runtime = &runtime;
+    app.store = &store;
+    app.counter_slot = kek_state_store_add_default(&store, &counter_descriptor);
+    app.input_slot = kek_state_store_add_default(&store, &text_descriptor);
+    if (app.counter_slot == KEK_STATE_INVALID_ID ||
+        app.input_slot == KEK_STATE_INVALID_ID ||
+        !kek_event_dispatch_pending(kek_runtime_events(&runtime))) {
+        return 1;
+    }
+    if (!set_text_state(&store, app.input_slot, "aaaaa", 5) ||
+        !kek_event_dispatch_pending(kek_runtime_events(&runtime))) {
+        return 1;
+    }
+
+    KekHookAccess text_accesses[] = {
+        {KEK_HOOK_ACCESS_READ, SMOKE_STATE_COUNTER, app.counter_slot,
+         KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT, 1ull << 0},
+        {KEK_HOOK_ACCESS_WRITE, SMOKE_STATE_TEXT, app.input_slot,
+         KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT, 1ull << 0},
+    };
+    KekHookAccess len_accesses[] = {
+        {KEK_HOOK_ACCESS_READ, SMOKE_STATE_COUNTER, app.counter_slot,
+         KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT, 1ull << 0},
+        {KEK_HOOK_ACCESS_WRITE, SMOKE_STATE_TEXT, app.input_slot,
+         KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT, 1ull << 1},
+    };
+    uint32_t flags = KEK_HOOK_SCHEDULING_ALLOW_PARALLEL_WRITES |
+                     KEK_HOOK_SCHEDULING_FIELD_MERGE_SAFE;
+    KekHookDescriptor descriptors[] = {
+        {"parallel merge text", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
+         app.counter_slot, 1ull << 0, NULL, 0, NULL, 0,
+         parallel_merge_text_hook, text_accesses, 2, flags},
+        {"parallel merge len", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
+         app.counter_slot, 1ull << 0, NULL, 0, NULL, 0,
+         parallel_merge_len_hook, len_accesses, 2, flags},
+    };
+
+    kek_hook_registry_init(&hooks, &runtime, &store, &app);
+    if (!kek_hook_registry_add_many(&hooks, descriptors, 2)) {
+        return 1;
+    }
+    kek_hook_registry_attach(&hooks);
+
+    int value = 1;
+    if (!kek_state_store_update_fields(&store, app.counter_slot,
+                                       set_counter_value, &value, 1ull << 0) ||
+        !kek_event_dispatch_pending(kek_runtime_events(&runtime))) {
+        return 1;
+    }
+
+    const SmokeTextState* text =
+        (const SmokeTextState*)kek_state_store_current_const(&store,
+                                                            app.input_slot);
+    int ok = text && strcmp(text->text, "merge") == 0 && text->len == 5 &&
+             atomic_load(&app.parallel_runs) == 2 &&
+             atomic_load(&app.parallel_max_active) == 2;
+
+    kek_hook_registry_detach(&hooks);
+    kek_state_store_destroy(&store);
+    kek_runtime_destroy(&runtime);
+    unsetenv("KEK_RUNTIME_THREADS");
+    return ok ? 0 : 1;
+}
+
 static int run_threading_checks(void) {
     if (run_threading_mode_check("1", 0) != 0) {
         return 1;
     }
-    return run_threading_mode_check("3", 1);
+    if (run_threading_mode_check("3", 1) != 0) {
+        return 1;
+    }
+    if (run_parallel_write_check() != 0) {
+        return 1;
+    }
+    return run_parallel_field_merge_check();
 }
 
 static int run_behavior_checks(void) {
@@ -462,32 +709,32 @@ static int run_behavior_checks(void) {
     KekHookDescriptor descriptors[] = {
         {"self counter", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
          app.counter_slot, 1ull << 0, NULL, 0, counter_writes, 1,
-         self_counter_hook},
+         self_counter_hook, NULL, 0, 0},
         {"text field", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_TEXT,
-         app.input_slot, 1ull << 1, NULL, 0, NULL, 0, text_field_hook},
+         app.input_slot, 1ull << 1, NULL, 0, NULL, 0, text_field_hook, NULL, 0, 0},
         {"failing counter", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
-         app.counter_slot, 1ull << 0, NULL, 0, NULL, 0, failing_counter_hook},
+         app.counter_slot, 1ull << 0, NULL, 0, NULL, 0, failing_counter_hook, NULL, 0, 0},
         {"failing create text", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
          app.counter_slot, 1ull << 0, NULL, 0, text_writes, 1,
-         failing_create_text_hook},
+         failing_create_text_hook, NULL, 0, 0},
         {"double text", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
          app.counter_slot, 1ull << 0, NULL, 0, text_writes, 1,
-         double_text_hook},
+         double_text_hook, NULL, 0, 0},
         {"failing double text", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
          app.counter_slot, 1ull << 0, NULL, 0, text_writes, 1,
-         failing_double_text_hook},
+         failing_double_text_hook, NULL, 0, 0},
         {"failing delete text", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
          app.counter_slot, 1ull << 0, NULL, 0, text_writes, 1,
-         failing_delete_text_hook},
+         failing_delete_text_hook, NULL, 0, 0},
         {"failing delete reuse text", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
          app.counter_slot, 1ull << 0, NULL, 0, text_writes, 1,
-         failing_delete_reuse_text_hook},
+         failing_delete_reuse_text_hook, NULL, 0, 0},
         {"nested parent text", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
          app.counter_slot, 1ull << 0, NULL, 0, text_writes, 1,
-         nested_parent_text_hook},
+         nested_parent_text_hook, NULL, 0, 0},
         {"nested failing text", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_TEXT,
          app.input_slot, 1ull << 0 | 1ull << 1, NULL, 0, text_writes, 1,
-         nested_failing_text_hook},
+         nested_failing_text_hook, NULL, 0, 0},
     };
     kek_hook_registry_init(&hooks, &runtime, &store, &app);
     if (!kek_hook_registry_add(&hooks, &descriptors[0]) ||
@@ -762,7 +1009,7 @@ static int run_smoke(void) {
     KekHookDescriptor timer_descriptor_hook = {
         "timer increments counter", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_TIMER,
         app.timer_slot, KEK_EVENT_CHANGED_FIELDS_UNKNOWN, NULL, 0,
-        timer_writes, 1, timer_hook};
+        timer_writes, 1, timer_hook, NULL, 0, 0};
     kek_hook_registry_init(&hooks, &runtime, &store, &app);
     if (!kek_hook_registry_add(&hooks, &timer_descriptor_hook)) {
         return 1;
@@ -852,10 +1099,10 @@ static int run_tracing_checks(void) {
     KekHookDescriptor descriptors[] = {
         {"trace counter hook a", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
          app.counter_slot, 1ull << 0, counter_reads, 1, NULL, 0,
-         readonly_parallel_hook},
+         readonly_parallel_hook, NULL, 0, 0},
         {"trace counter hook b", KEK_EVENT_STATE_CHANGED, SMOKE_STATE_COUNTER,
          app.counter_slot, 1ull << 0, counter_reads, 1, NULL, 0,
-         readonly_parallel_hook},
+         readonly_parallel_hook, NULL, 0, 0},
     };
     kek_hook_registry_init(&hooks, &runtime, &store, &app);
     if (!kek_hook_registry_add_many(&hooks, descriptors, 2)) {

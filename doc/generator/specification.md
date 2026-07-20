@@ -145,6 +145,8 @@ Parser rules:
 - Hook triggers support `{ "event": "changed" }`, `{ "event": "created" }`, and `{ "event": "deleted" }`.
 - Hook triggers must declare exactly one selector: `state` for all instances of a state type, or `instance` for one schema-declared named slot.
 - Hook triggers may include `fields`, an array of field names from the triggering state. When provided, the generated hook only runs for changed events whose field mask contains at least one listed field.
+- Hooks may include optional `access` metadata with `reads`, `writes`, `creates`, and `deletes` arrays. Each access entry declares exactly one of `instance` or `state`; state entries may set `scope` to `any`, `declared`, or `dynamic`; entries may set `fields` to a field-name array. When present, `access` is the runtime scheduler authority while legacy `reads` and `writes` remain generated for compatibility and broad write authorization fallback.
+- `access.mode: "opaque"` or `access.opaque: true` forces serial hook scheduling. `access.field_merge_safe: true` opts a hook into same-slot disjoint-field write merging when the runtime can prove field masks do not overlap.
 - Optional root-level `instances` declare named initial `KekStateStore` slots.
 - Instance names must match `[A-Za-z_][A-Za-z0-9_]*`.
 - Instance `state` values must reference a declared state type.
@@ -217,6 +219,7 @@ The generated source contains:
 - A generated default slot registration helper.
 - A generated declared-slot reset helper backed by `kek_state_store_update_many()`.
 - Generated hook read/write dependency arrays.
+- Generated hook access descriptor arrays for precise scheduling, with named-instance access slots patched during generated runtime binding initialization.
 - A generated hook descriptor table.
 
 Default constructors zero-initialize the state first and then assign every field default. Array fields are assigned element-by-element from the declared default array.
@@ -230,6 +233,8 @@ Reset functions return `0` when the state pointer is null. Otherwise, they assig
 Generated structs expose their fields directly. Callers that need rollback-safe validation should update through `KekStateStore` or `KekStateStorage`, which validate the complete draft before swapping it into place.
 
 Each generated state field has a bitmask macro named `<STATE_TYPE_MACRO>_FIELD_<FIELD_NAME>`, used in state-change events and generated hook field filters.
+
+Each generated state descriptor includes a generated field-merge helper. The runtime uses this helper only for opt-in same-slot parallel write merging, copying the fields identified by a generated field mask from a worker result into the live state draft.
 
 `kek_generated_state_store_add_defaults()` adds one default-initialized slot for each generated state type and writes the created slot ids into a caller-provided `size_t slot_ids[KEK_STATE_TYPE_COUNT]` array.
 

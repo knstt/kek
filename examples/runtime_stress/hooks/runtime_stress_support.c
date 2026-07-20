@@ -67,8 +67,31 @@ static void stress_note_readonly_active(RuntimeStressApp* app, uint64_t active) 
     }
 }
 
+static void stress_note_write_benchmark_active(RuntimeStressApp* app,
+                                               uint64_t active) {
+    uint64_t previous = atomic_load(&app->write_benchmark_max_active);
+    while (active > previous &&
+           !atomic_compare_exchange_weak(&app->write_benchmark_max_active,
+                                         &previous, active)) {
+    }
+}
+
 static uint64_t stress_readonly_work_iterations(void) {
     const char* value = getenv("KEK_STRESS_READONLY_WORK");
+    if (!value || value[0] == '\0') {
+        return 40000;
+    }
+
+    char* end = NULL;
+    unsigned long long parsed = strtoull(value, &end, 10);
+    if (end == value || (end && *end != '\0')) {
+        return 40000;
+    }
+    return (uint64_t)parsed;
+}
+
+static uint64_t stress_write_work_iterations(void) {
+    const char* value = getenv("KEK_STRESS_WRITE_WORK");
     if (!value || value[0] == '\0') {
         return 40000;
     }
@@ -226,4 +249,32 @@ int runtime_stress_readonly_probe(KekHookContext* context, uint64_t salt) {
     atomic_fetch_add(&app->readonly_hook_calls, 1);
     atomic_fetch_sub(&app->readonly_active, 1);
     return 1;
+}
+
+void runtime_stress_note_write_benchmark(KekHookContext* context, int merge,
+                                         uint64_t salt) {
+    RuntimeStressApp* app = stress_app(context);
+    if (!app) {
+        return;
+    }
+
+    uint64_t active = atomic_fetch_add(&app->write_benchmark_active, 1) + 1;
+    stress_note_write_benchmark_active(app, active);
+
+    uint64_t digest = salt ? salt : 0x9E3779B97F4A7C15ull;
+    uint64_t iterations = stress_write_work_iterations();
+    for (uint64_t i = 0; i < iterations; i++) {
+        digest ^= digest << 13;
+        digest ^= digest >> 7;
+        digest ^= digest << 17;
+        digest += i + (merge ? 0xD1B54A32D192ED03ull : 0x94D049BB133111EBull);
+    }
+
+    atomic_fetch_add(&app->write_benchmark_digest, digest);
+    if (merge) {
+        atomic_fetch_add(&app->write_benchmark_merge_hooks, 1);
+    } else {
+        atomic_fetch_add(&app->write_benchmark_exact_hooks, 1);
+    }
+    atomic_fetch_sub(&app->write_benchmark_active, 1);
 }

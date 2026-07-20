@@ -42,7 +42,11 @@ RUNTIME_STRESS_HOOK_SRCS := \
 	$(RUNTIME_STRESS_HOOK_DIR)/on_audit_changed.c \
 	$(RUNTIME_STRESS_HOOK_DIR)/on_standard_input.c \
 	$(RUNTIME_STRESS_HOOK_DIR)/on_fast_timer.c \
-	$(RUNTIME_STRESS_HOOK_DIR)/on_slow_timer.c
+	$(RUNTIME_STRESS_HOOK_DIR)/on_slow_timer.c \
+	$(RUNTIME_STRESS_HOOK_DIR)/on_benchmark_exact_left.c \
+	$(RUNTIME_STRESS_HOOK_DIR)/on_benchmark_exact_right.c \
+	$(RUNTIME_STRESS_HOOK_DIR)/on_benchmark_merge_left.c \
+	$(RUNTIME_STRESS_HOOK_DIR)/on_benchmark_merge_right.c
 RUNTIME_STRESS_BIN := $(BUILD_DIR)/runtime_stress
 RUNTIME_STRESS_RUNTIME_TRACE := $(BUILD_DIR)/runtime_stress_runtime.csv
 RUNTIME_STRESS_HOOKS_TRACE := $(BUILD_DIR)/runtime_stress_hooks.csv
@@ -132,6 +136,8 @@ runtime-stress-trace: $(RUNTIME_STRESS_BIN)
 	KEK_TRACE_RUNTIME_CSV=$(RUNTIME_STRESS_RUNTIME_TRACE) KEK_TRACE_HOOKS_CSV=$(RUNTIME_STRESS_HOOKS_TRACE) $(RUNTIME_STRESS_BIN)
 	@printf '\nTop runtime metrics by total_ns:\n'
 	@sort -t, -k3 -nr $(RUNTIME_STRESS_RUNTIME_TRACE) | head -8
+	@printf '\nHook scheduling metrics:\n'
+	@grep '^hook_' $(RUNTIME_STRESS_RUNTIME_TRACE) || true
 	@printf '\nTop hook metrics by total_run_ns:\n'
 	@sort -t, -k12 -nr $(RUNTIME_STRESS_HOOKS_TRACE) | head -8
 

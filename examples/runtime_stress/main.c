@@ -25,7 +25,7 @@
     } while (0)
 
 enum {
-    STRESS_AGENT_COUNT = 96,
+    STRESS_AGENT_COUNT = 92,
     STRESS_PACKET_COUNT = 20,
     STRESS_CYCLES_DEFAULT = 120,
     STRESS_BATCH_SIZE = 8
@@ -54,6 +54,17 @@ typedef struct AuditBump {
     uint64_t error_delta;
     uint64_t eof_delta;
 } AuditBump;
+
+typedef struct WriteBenchmarkResult {
+    size_t cycles;
+    size_t thread_count;
+    uint64_t exact_elapsed_ns;
+    uint64_t merge_elapsed_ns;
+    uint64_t exact_hooks;
+    uint64_t merge_hooks;
+    uint64_t max_active;
+    uint64_t digest;
+} WriteBenchmarkResult;
 
 static void update_agent_step(void* draft, void* context) {
     Agent* agent = (Agent*)draft;
@@ -353,6 +364,72 @@ static int exercise_delete_and_reuse(Runtime_stress_stateRuntime* stress,
            runtime_stress_state_dispatch(stress);
 }
 
+static size_t stress_write_benchmark_cycle_count(void) {
+    const char* value = getenv("KEK_STRESS_WRITE_CYCLES");
+    if (!value || value[0] == '\0') {
+        return 80;
+    }
+
+    char* end = NULL;
+    unsigned long long parsed = strtoull(value, &end, 10);
+    if (end == value || (end && *end != '\0') || parsed == 0) {
+        return 80;
+    }
+    return (size_t)parsed;
+}
+
+static int run_write_parallel_benchmark(Runtime_stress_stateRuntime* stress,
+                                        RuntimeStressApp* app,
+                                        WriteBenchmarkResult* result) {
+    if (!stress || !app || !result) {
+        return 0;
+    }
+
+    result->cycles = stress_write_benchmark_cycle_count();
+    result->thread_count =
+        kek_runtime_thread_count(runtime_stress_state_get_runtime(stress));
+
+    uint64_t exact_start_ns = kek_trace_now_ns();
+    for (size_t cycle = 0; cycle < result->cycles; cycle++) {
+        if (!runtime_stress_state_set_benchmark_trigger_exact_tick(
+                stress, (uint64_t)cycle + 1u) ||
+            !runtime_stress_state_dispatch(stress)) {
+            return 0;
+        }
+    }
+    result->exact_elapsed_ns = kek_trace_now_ns() - exact_start_ns;
+
+    uint64_t merge_start_ns = kek_trace_now_ns();
+    for (size_t cycle = 0; cycle < result->cycles; cycle++) {
+        if (!runtime_stress_state_set_benchmark_trigger_merge_tick(
+                stress, (uint64_t)cycle + 1u) ||
+            !runtime_stress_state_dispatch(stress)) {
+            return 0;
+        }
+    }
+    result->merge_elapsed_ns = kek_trace_now_ns() - merge_start_ns;
+
+    const WriteBenchmarkTarget* left =
+        runtime_stress_state_benchmark_left_current_const(stress);
+    const WriteBenchmarkTarget* right =
+        runtime_stress_state_benchmark_right_current_const(stress);
+    const WriteBenchmarkTarget* merge =
+        runtime_stress_state_benchmark_merge_current_const(stress);
+    result->exact_hooks = atomic_load(&app->write_benchmark_exact_hooks);
+    result->merge_hooks = atomic_load(&app->write_benchmark_merge_hooks);
+    result->max_active = atomic_load(&app->write_benchmark_max_active);
+    result->digest = atomic_load(&app->write_benchmark_digest);
+
+    uint64_t expected_hooks = (uint64_t)result->cycles * 2u;
+    return left && right && merge && left->exact_hits == result->cycles &&
+           right->exact_hits == result->cycles && left->checksum != 0 &&
+           right->checksum != 0 &&
+           merge->left_value == (uint64_t)result->cycles * 3u + 1u &&
+           merge->right_value == (uint64_t)result->cycles * 5u + 2u &&
+           result->exact_hooks == expected_hooks &&
+           result->merge_hooks == expected_hooks && result->digest != 0;
+}
+
 static int exercise_streams_and_timers(Runtime_stress_stateRuntime* stress,
                                        RuntimeStressApp* app) {
     int input_pipe[2];
@@ -486,6 +563,7 @@ static size_t stress_cycle_count(void) {
 int main(void) {
     Runtime_stress_stateRuntime stress;
     RuntimeStressApp app;
+    WriteBenchmarkResult write_benchmark;
     size_t agents[STRESS_AGENT_COUNT];
     size_t packets[STRESS_PACKET_COUNT];
     size_t cycles = stress_cycle_count();
@@ -497,6 +575,12 @@ int main(void) {
     atomic_init(&app.readonly_digest, 0);
     atomic_init(&app.readonly_active, 0);
     atomic_init(&app.readonly_max_active, 0);
+    atomic_init(&app.write_benchmark_exact_hooks, 0);
+    atomic_init(&app.write_benchmark_merge_hooks, 0);
+    atomic_init(&app.write_benchmark_active, 0);
+    atomic_init(&app.write_benchmark_max_active, 0);
+    atomic_init(&app.write_benchmark_digest, 0);
+    memset(&write_benchmark, 0, sizeof(write_benchmark));
     memset(agents, 0xff, sizeof(agents));
     memset(packets, 0xff, sizeof(packets));
 
@@ -518,6 +602,8 @@ int main(void) {
     STRESS_CHECK("rollback paths", exercise_rollbacks(&stress, &app));
     STRESS_CHECK("batched cycles", run_batched_cycles(&stress, agents, packets,
                                                       cycles));
+    STRESS_CHECK("write parallel benchmark",
+                 run_write_parallel_benchmark(&stress, &app, &write_benchmark));
     STRESS_CHECK("delete and slot reuse",
                  exercise_delete_and_reuse(&stress, agents, packets));
     STRESS_CHECK("streams and timers", exercise_streams_and_timers(&stress, &app));
@@ -530,14 +616,25 @@ done:
         uint64_t stress_end_ns = kek_trace_now_ns();
         printf("runtime stress passed: cycles=%zu elapsed_ns=%llu hooks=%llu "
                "readonly_hooks=%llu readonly_max_active=%llu "
-               "state_changed=%llu batches=%llu\n",
+               "state_changed=%llu batches=%llu "
+               "write_benchmark_cycles=%zu write_benchmark_threads=%zu "
+               "write_exact_elapsed_ns=%llu write_merge_elapsed_ns=%llu "
+               "write_exact_hooks=%llu write_merge_hooks=%llu "
+               "write_max_active=%llu write_digest=%llu\n",
                cycles,
                (unsigned long long)(stress_end_ns - stress_start_ns),
                (unsigned long long)app.hook_calls,
                (unsigned long long)atomic_load(&app.readonly_hook_calls),
                (unsigned long long)atomic_load(&app.readonly_max_active),
                (unsigned long long)app.subscriber_events[KEK_EVENT_STATE_CHANGED],
-               (unsigned long long)app.subscriber_events[KEK_EVENT_STATE_BATCH_CHANGED]);
+               (unsigned long long)app.subscriber_events[KEK_EVENT_STATE_BATCH_CHANGED],
+               write_benchmark.cycles, write_benchmark.thread_count,
+               (unsigned long long)write_benchmark.exact_elapsed_ns,
+               (unsigned long long)write_benchmark.merge_elapsed_ns,
+               (unsigned long long)write_benchmark.exact_hooks,
+               (unsigned long long)write_benchmark.merge_hooks,
+               (unsigned long long)write_benchmark.max_active,
+               (unsigned long long)write_benchmark.digest);
     }
     return ok ? 0 : 1;
 }

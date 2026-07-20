@@ -53,6 +53,7 @@ int main(int argc, char** argv) {
         dynamic_smoke_default,
         dynamic_smoke_check,
         NULL,
+        NULL,
     };
     size_t slot_id = kek_state_store_add_default(&store, &state_descriptor);
     if (slot_id == KEK_STATE_INVALID_ID) {
@@ -70,6 +71,9 @@ int main(int argc, char** argv) {
         NULL,
         0,
         NULL,
+        0,
+        0,
+        0,
     };
     if (!kek_hook_registry_add(&registry, &hook_descriptor)) {
         return 1;

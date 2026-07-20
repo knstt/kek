@@ -34,6 +34,17 @@ static const char* const trace_runtime_metric_names[] = {
     [KEK_TRACE_METRIC_STATE_STORE_TRANSACTION_COPY] =
         "state_store_transaction_copy",
     [KEK_TRACE_METRIC_STATE_STORE_ROLLBACK_COPY] = "state_store_rollback_copy",
+    [KEK_TRACE_METRIC_HOOK_PARALLEL_WAVE] = "hook_parallel_wave",
+    [KEK_TRACE_METRIC_HOOK_PARALLEL_READONLY_WAVE] =
+        "hook_parallel_readonly_wave",
+    [KEK_TRACE_METRIC_HOOK_PARALLEL_WRITE_WAVE] = "hook_parallel_write_wave",
+    [KEK_TRACE_METRIC_HOOK_FIELD_MERGE_WAVE] = "hook_field_merge_wave",
+    [KEK_TRACE_METRIC_HOOK_SERIAL_DESCRIPTOR] = "hook_serial_descriptor",
+    [KEK_TRACE_METRIC_HOOK_SERIAL_FALLBACK] = "hook_serial_fallback",
+    [KEK_TRACE_METRIC_HOOK_WORKER_CLONE] = "hook_worker_clone",
+    [KEK_TRACE_METRIC_HOOK_WORKER_CLONE_BYTES] = "hook_worker_clone_bytes",
+    [KEK_TRACE_METRIC_HOOK_WORKER_APPLY] = "hook_worker_apply",
+    [KEK_TRACE_METRIC_HOOK_WORKER_EVENT_REPLAY] = "hook_worker_event_replay",
 };
 
 uint64_t kek_trace_now_ns(void) {

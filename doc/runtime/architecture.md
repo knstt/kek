@@ -121,13 +121,15 @@ Several slots may share one descriptor, enabling multiple instances of one state
 
 ## Hook Architecture
 
-Hook descriptors declare their trigger plus read/write state type dependencies. The runtime hook registry indexes descriptors into fixed per-event-type buckets for wildcard-state hooks and fixed per-event/per-state buckets for exact-state hooks. Dispatch visits the wildcard event bucket and the exact state bucket for the incoming event before applying slot and changed-field filters. While a hook body runs, the state store checks writes against the active hook descriptor. Hooks may write the triggering slot when the triggering state type is declared writable.
+Hook descriptors declare their trigger plus legacy read/write state type dependencies and optional precise access metadata. The runtime hook registry indexes descriptors into fixed per-event-type buckets for wildcard-state hooks and fixed per-event/per-state buckets for exact-state hooks. Dispatch visits the wildcard event bucket and the exact state bucket for the incoming event before applying slot and changed-field filters. While a hook body runs, the state store checks writes against precise access metadata when available, falling back to legacy writable state types for older descriptors. Exact-slot access authorizes only that slot.
 
 The bucket index is stored inside `KekHookRegistry`, rebuilt at attach time, and uses descriptor indices rather than extra descriptor copies. Registration and dynamic hook loading remain explicit safe-point operations, which keeps the dispatch path read-only over registry indexing data and leaves room for future lock or copy-and-swap synchronization.
 
 Hook bodies normally read committed state through `KekStateStore`. Transactional writes made earlier in the same hook are chained internally through the transaction draft rather than exposed as public draft pointers. When hooks need the exact triggering version, they can read the copied snapshot from the triggering event through `kek_hook_event_state()`.
 
-The registry can run adjacent read-only hooks concurrently when descriptors declare concrete read dependencies and no write dependencies. Each worker receives a cloned runtime, event queue, and committed state-store snapshot; the main runtime remains the only owner of the real event queue and committed store. After a parallel wave completes successfully, buffered worker events are replayed in descriptor order. Hooks with writes, unknown dependencies, wildcard dependencies, or dynamic hook uncertainty continue through the serial transaction path.
+The registry can run adjacent read-only hooks concurrently when descriptors declare concrete read dependencies and no write dependencies. With precise access metadata, it can also run adjacent write hooks concurrently when every write is exact-slot, access sets do not conflict, and the descriptor explicitly allows parallel writes. Same-slot writes are only considered independent when both descriptors opt into field merging and their field masks are known and disjoint.
+
+Each worker receives a cloned runtime, event queue, and committed state-store snapshot; the main runtime remains the only owner of the real event queue and committed store. After a parallel wave completes successfully, the main thread applies each worker result in descriptor order. Exact-slot writes copy or merge the worker's committed slot value into the live store, validate the live draft, refresh state-event snapshots from the committed live slot, and replay buffered worker events in descriptor order. Hooks with opaque access, create/delete access, unknown dependencies, broad write conflicts, or dynamic hook uncertainty continue through the serial transaction path.
 
 In debug builds compiled with `KEK_HOOK_DYNAMIC`, the registry owns mutable descriptor copies and can replace their `run` pointers from a dynamic library. The loader resolves every registered hook by descriptor name before swapping any functions, so a failed reload keeps the previous implementation active. Reloading is manual and should be called by the host at a known safe point, such as before dispatch in a frame loop.
 
@@ -195,6 +197,7 @@ flowchart LR
 - Single-threaded runtime state prepare/ready execution.
 - FIFO event dispatch from the caller's perspective.
 - Hook transaction commit is the state visibility boundary.
+- Parallel hook worker results are committed only on the main runtime thread and in descriptor order.
 - Optional tracing is stored per runtime; built-in runtime metrics use fixed metric slots instead of mutable global state or per-record string lookups. High-volume subscriber dispatch timing is opt-in so normal trace runs can count subscriber calls without paying a clock call around every subscriber.
 - Fixed maximum number of runtime states.
 - Fixed event queue capacity.

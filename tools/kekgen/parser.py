@@ -1,7 +1,7 @@
 import json
 import copy
 
-from .model import Constructor, Enum, Field, Hook, Instance, State
+from .model import Constructor, Enum, Field, Hook, HookAccess, Instance, State
 from .naming import require_identifier
 from .standard_states import standard_states_by_type
 
@@ -275,6 +275,9 @@ def parse_hooks(hook_items: object, instances: list[Instance] | None = None) -> 
                 raise ValueError(f"{hook_name}: hook references unknown instance {instance_name}")
         else:
             state_name = require_identifier(on_item.get("state"), f"{hook_name}.on.state")
+        accesses, access_declared, scheduling_opaque, field_merge_safe = parse_hook_access(
+            hook_name, hook_item.get("access"), instance_state_by_name
+        )
         hook_names.add(hook_name)
         hooks.append(
             Hook(
@@ -285,9 +288,81 @@ def parse_hooks(hook_items: object, instances: list[Instance] | None = None) -> 
                 parse_json_name_list(on_item.get("fields", []), f"{hook_name}.on.fields"),
                 parse_json_name_list(hook_item.get("reads", []), f"{hook_name}.reads"),
                 parse_json_name_list(hook_item.get("writes", []), f"{hook_name}.writes"),
+                accesses,
+                access_declared,
+                scheduling_opaque,
+                field_merge_safe,
             )
         )
     return hooks
+
+
+def parse_hook_access(
+    hook_name: str,
+    access_item: object,
+    instance_state_by_name: dict[str, str],
+) -> tuple[list[HookAccess], bool, bool, bool]:
+    if access_item is None:
+        return [], False, False, False
+    if not isinstance(access_item, dict):
+        raise ValueError(f"{hook_name}.access must be an object")
+
+    mode_value = access_item.get("mode")
+    scheduling_opaque = mode_value == "opaque" or access_item.get("opaque") is True
+    if mode_value is not None and mode_value != "opaque":
+        raise ValueError(f"{hook_name}.access.mode must be opaque when provided")
+    field_merge_safe = access_item.get("field_merge_safe") is True
+    accesses: list[HookAccess] = []
+    for key, mode in (
+        ("reads", "KEK_HOOK_ACCESS_READ"),
+        ("writes", "KEK_HOOK_ACCESS_WRITE"),
+        ("creates", "KEK_HOOK_ACCESS_CREATE"),
+        ("deletes", "KEK_HOOK_ACCESS_DELETE"),
+    ):
+        items = access_item.get(key, [])
+        if not isinstance(items, list):
+            raise ValueError(f"{hook_name}.access.{key} must be an array")
+        for index, item in enumerate(items):
+            accesses.append(parse_hook_access_entry(hook_name, key, index, mode, item, instance_state_by_name))
+    return accesses, True, scheduling_opaque, field_merge_safe
+
+
+def parse_hook_access_entry(
+    hook_name: str,
+    key: str,
+    index: int,
+    mode: str,
+    item: object,
+    instance_state_by_name: dict[str, str],
+) -> HookAccess:
+    label = f"{hook_name}.access.{key}[{index}]"
+    if not isinstance(item, dict):
+        raise ValueError(f"{label} must be an object")
+    has_instance = "instance" in item
+    has_state = "state" in item
+    if has_instance == has_state:
+        raise ValueError(f"{label} must declare exactly one of instance or state")
+
+    instance_name = None
+    if has_instance:
+        instance_name = require_identifier(item.get("instance"), f"{label}.instance")
+        state_name = instance_state_by_name.get(instance_name)
+        if state_name is None:
+            raise ValueError(f"{label} references unknown instance {instance_name}")
+        scope = "KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT"
+    else:
+        state_name = require_identifier(item.get("state"), f"{label}.state")
+        scope_value = item.get("scope", "any")
+        scopes = {
+            "any": "KEK_HOOK_ACCESS_SCOPE_ANY",
+            "declared": "KEK_HOOK_ACCESS_SCOPE_DECLARED",
+            "dynamic": "KEK_HOOK_ACCESS_SCOPE_DYNAMIC",
+        }
+        scope = scopes.get(scope_value)
+        if scope is None:
+            raise ValueError(f"{label}.scope must be declared, dynamic, or any")
+    fields = parse_json_name_list(item.get("fields", []), f"{label}.fields")
+    return HookAccess(mode, state_name, instance_name, scope, fields)
 
 
 def parse_hook_event(value: object, hook_name: str) -> str:
@@ -360,6 +435,13 @@ def validate_hooks(states: list[State], hooks: list[Hook]) -> None:
         for name in hook.reads + hook.writes:
             if name not in state_names:
                 raise ValueError(f"{hook.name}: hook references unknown state {name}")
+        for access in hook.accesses:
+            if access.state_name not in state_names:
+                raise ValueError(f"{hook.name}: hook access references unknown state {access.state_name}")
+            access_fields = field_map(state_by_name[access.state_name])
+            for field_name in access.fields:
+                if field_name not in access_fields:
+                    raise ValueError(f"{hook.name}: hook access references unknown field {access.state_name}.{field_name}")
 
 
 def validate_field_values(enums: list[Enum], states: list[State]) -> None:

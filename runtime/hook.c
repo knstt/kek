@@ -230,6 +230,7 @@ typedef struct KekHookDispatchJob {
     int quit_requested;
     uint64_t wait_ns;
     uint64_t run_ns;
+    uint64_t base_versions[KEK_STATE_STORE_MAX_SLOTS];
     KekRuntime runtime;
     KekStateStore state_store;
 } KekHookDispatchJob;
@@ -250,8 +251,32 @@ static int hook_descriptor_has_dependency(const size_t* dependencies,
 }
 
 static int hook_descriptor_can_run_parallel(const KekHookDescriptor* descriptor) {
-    if (!descriptor || !descriptor->run || descriptor->write_count != 0 ||
-        descriptor->read_count == 0 || !descriptor->reads) {
+    if (!descriptor || !descriptor->run ||
+        (descriptor->scheduling_flags & KEK_HOOK_SCHEDULING_OPAQUE)) {
+        return 0;
+    }
+    if (descriptor->access_count > 0 && descriptor->accesses) {
+        int has_access = 0;
+        for (size_t i = 0; i < descriptor->access_count; i++) {
+            const KekHookAccess* access = &descriptor->accesses[i];
+            has_access = 1;
+            if (access->mode == KEK_HOOK_ACCESS_CREATE ||
+                access->mode == KEK_HOOK_ACCESS_DELETE) {
+                return 0;
+            }
+            if (access->mode == KEK_HOOK_ACCESS_WRITE &&
+                (!(descriptor->scheduling_flags &
+                   KEK_HOOK_SCHEDULING_ALLOW_PARALLEL_WRITES) ||
+                 access->scope != KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT ||
+                 access->state_slot_id == KEK_HOOK_ANY_SLOT ||
+                 access->state_slot_id == KEK_HOOK_UNRESOLVED_SLOT)) {
+                return 0;
+            }
+        }
+        return has_access;
+    }
+    if (descriptor->write_count != 0 || descriptor->read_count == 0 ||
+        !descriptor->reads) {
         return 0;
     }
     for (size_t i = 0; i < descriptor->read_count; i++) {
@@ -262,6 +287,104 @@ static int hook_descriptor_can_run_parallel(const KekHookDescriptor* descriptor)
     return 1;
 }
 
+static int hook_descriptor_has_precise_write(const KekHookDescriptor* descriptor) {
+    if (!descriptor || !descriptor->accesses) {
+        return 0;
+    }
+    for (size_t i = 0; i < descriptor->access_count; i++) {
+        if (descriptor->accesses[i].mode == KEK_HOOK_ACCESS_WRITE) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int hook_descriptor_has_field_merge_write(const KekHookDescriptor* descriptor) {
+    return hook_descriptor_has_precise_write(descriptor) &&
+           descriptor &&
+           (descriptor->scheduling_flags & KEK_HOOK_SCHEDULING_FIELD_MERGE_SAFE);
+}
+
+static int hook_access_is_write_like(const KekHookAccess* access) {
+    return access && (access->mode == KEK_HOOK_ACCESS_WRITE ||
+                      access->mode == KEK_HOOK_ACCESS_CREATE ||
+                      access->mode == KEK_HOOK_ACCESS_DELETE);
+}
+
+static int hook_access_fields_known(uint64_t fields) {
+    return fields != KEK_EVENT_CHANGED_FIELDS_UNKNOWN;
+}
+
+static int hook_access_scopes_overlap(const KekHookAccess* left,
+                                      const KekHookAccess* right) {
+    if (!left || !right || left->state_type_id != right->state_type_id) {
+        return 0;
+    }
+    if (left->scope == KEK_HOOK_ACCESS_SCOPE_ANY ||
+        right->scope == KEK_HOOK_ACCESS_SCOPE_ANY) {
+        return 1;
+    }
+    if (left->scope == KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT &&
+        right->scope == KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT) {
+        return left->state_slot_id == right->state_slot_id;
+    }
+    if (left->scope == KEK_HOOK_ACCESS_SCOPE_DYNAMIC ||
+        right->scope == KEK_HOOK_ACCESS_SCOPE_DYNAMIC) {
+        return left->scope == right->scope;
+    }
+    return 1;
+}
+
+static int hook_access_pair_conflicts(const KekHookDescriptor* left_descriptor,
+                                      const KekHookAccess* left,
+                                      const KekHookDescriptor* right_descriptor,
+                                      const KekHookAccess* right) {
+    if (!left || !right || !hook_access_scopes_overlap(left, right)) {
+        return 0;
+    }
+    int left_writes = hook_access_is_write_like(left);
+    int right_writes = hook_access_is_write_like(right);
+    if (!left_writes && !right_writes) {
+        return 0;
+    }
+    if (left->mode == KEK_HOOK_ACCESS_DELETE ||
+        right->mode == KEK_HOOK_ACCESS_DELETE ||
+        left->mode == KEK_HOOK_ACCESS_CREATE ||
+        right->mode == KEK_HOOK_ACCESS_CREATE) {
+        return 1;
+    }
+    if (left_writes && right_writes &&
+        left->scope == KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT &&
+        right->scope == KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT &&
+        left->state_slot_id == right->state_slot_id &&
+        hook_access_fields_known(left->fields) &&
+        hook_access_fields_known(right->fields) &&
+        (left->fields & right->fields) == 0 &&
+        (left_descriptor->scheduling_flags &
+         KEK_HOOK_SCHEDULING_FIELD_MERGE_SAFE) &&
+        (right_descriptor->scheduling_flags &
+         KEK_HOOK_SCHEDULING_FIELD_MERGE_SAFE)) {
+        return 0;
+    }
+    return 1;
+}
+
+static int hook_descriptors_access_conflict(const KekHookDescriptor* left,
+                                            const KekHookDescriptor* right) {
+    if (!left || !right || !left->accesses || !right->accesses) {
+        return 1;
+    }
+    for (size_t i = 0; i < left->access_count; i++) {
+        for (size_t j = 0; j < right->access_count; j++) {
+            if (hook_access_pair_conflicts(left, &left->accesses[i], right,
+                                           &right->accesses[j])) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 static int hook_descriptors_conflict(const KekHookDescriptor* left,
                                      const KekHookDescriptor* right) {
     if (!left || !right) {
@@ -270,6 +393,14 @@ static int hook_descriptors_conflict(const KekHookDescriptor* left,
     if (!hook_descriptor_can_run_parallel(left) ||
         !hook_descriptor_can_run_parallel(right)) {
         return 1;
+    }
+    if ((left->access_count > 0 || right->access_count > 0) &&
+        !(left->access_count > 0 && right->access_count > 0 &&
+          left->accesses && right->accesses)) {
+        return 1;
+    }
+    if (left->access_count > 0 && right->access_count > 0) {
+        return hook_descriptors_access_conflict(left, right);
     }
     for (size_t i = 0; i < left->write_count; i++) {
         if (hook_descriptor_has_dependency(right->reads, right->read_count,
@@ -320,9 +451,12 @@ static int hook_job_init(KekHookDispatchJob* job, KekHookRegistry* registry,
     job->state_store.slot_count = registry->state_store->slot_count;
     job->state_store.active_hook.trigger_state_slot = KEK_STATE_INVALID_ID;
 
+    uint64_t clone_start = kek_trace_enabled(registry->runtime) ? kek_trace_now_ns() : 0;
+    uint64_t clone_bytes = 0;
     for (size_t i = 0; i < registry->state_store->slot_count; i++) {
         const KekStateSlot* source = &registry->state_store->slots[i];
         KekStateSlot* target = &job->state_store.slots[i];
+        job->base_versions[i] = source->version;
         target->descriptor = source->descriptor;
         target->active_index = 0;
         target->version = source->version;
@@ -332,6 +466,7 @@ static int hook_job_init(KekHookDispatchJob* job, KekHookRegistry* registry,
         }
 
         size_t size = source->descriptor->size;
+        clone_bytes += size * 2u;
         target->buffers[0] = (unsigned char*)malloc(size);
         target->buffers[1] = (unsigned char*)malloc(size);
         if (!target->buffers[0] || !target->buffers[1]) {
@@ -341,6 +476,14 @@ static int hook_job_init(KekHookDispatchJob* job, KekHookRegistry* registry,
         const void* current = source->buffers[source->active_index];
         memcpy(target->buffers[0], current, size);
         memcpy(target->buffers[1], current, size);
+    }
+    if (clone_start != 0) {
+        kek_trace_record_runtime_metric(registry->runtime,
+                                        KEK_TRACE_METRIC_HOOK_WORKER_CLONE,
+                                        kek_trace_now_ns() - clone_start);
+        kek_trace_record_runtime_metric(
+            registry->runtime, KEK_TRACE_METRIC_HOOK_WORKER_CLONE_BYTES,
+            clone_bytes);
     }
     return 1;
 }
@@ -355,15 +498,43 @@ static void hook_job_publish_events(KekHookDispatchJob* job) {
         job->ok = 0;
         return;
     }
+    uint64_t replay_start =
+        kek_trace_enabled(job->registry->runtime) ? kek_trace_now_ns() : 0;
     while (dispatcher->queue_size > 0) {
         KekEvent event = dispatcher->queue[dispatcher->queue_start];
         dispatcher->queue_start =
             (dispatcher->queue_start + 1) % KEK_EVENT_QUEUE_CAPACITY;
         dispatcher->queue_size--;
+        if (event.type == KEK_EVENT_STATE_CHANGED ||
+            event.type == KEK_EVENT_STATE_CREATED ||
+            event.type == KEK_EVENT_STATE_DELETED) {
+            if (event.state_slot_id < job->registry->state_store->slot_count) {
+                KekStateSlot* live_slot =
+                    &job->registry->state_store->slots[event.state_slot_id];
+                if (live_slot->in_use && live_slot->descriptor) {
+                    const void* source =
+                        live_slot->buffers[live_slot->active_index];
+                    event.source = (void*)source;
+                    event.state_version = live_slot->version;
+                    if (live_slot->descriptor->size <=
+                        KEK_EVENT_STATE_SNAPSHOT_CAPACITY) {
+                        memcpy(event.state_snapshot.data, source,
+                               live_slot->descriptor->size);
+                        event.state_snapshot_size = live_slot->descriptor->size;
+                        event.has_state_snapshot = 1;
+                    }
+                }
+            }
+        }
         if (!kek_event_publish(kek_runtime_events(job->registry->runtime), &event)) {
             job->ok = 0;
             return;
         }
+    }
+    if (replay_start != 0) {
+        kek_trace_record_runtime_metric(job->registry->runtime,
+                                        KEK_TRACE_METRIC_HOOK_WORKER_EVENT_REPLAY,
+                                        kek_trace_now_ns() - replay_start);
     }
 }
 
@@ -413,6 +584,115 @@ static void hook_job_run(void* context) {
     kek_state_store_transaction_commit(&state_transaction);
 }
 
+static KekStateSlot* hook_store_live_slot(KekStateStore* store, size_t slot_id) {
+    if (!store || slot_id >= store->slot_count || !store->slots[slot_id].in_use) {
+        return NULL;
+    }
+    return &store->slots[slot_id];
+}
+
+static int hook_job_apply_slot(KekHookDispatchJob* job, const KekHookAccess* access) {
+    if (!job || !job->registry || !job->registry->state_store || !access ||
+        access->scope != KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT ||
+        access->state_slot_id >= KEK_STATE_STORE_MAX_SLOTS) {
+        return 0;
+    }
+
+    size_t slot_id = access->state_slot_id;
+    KekStateSlot* target =
+        hook_store_live_slot(job->registry->state_store, slot_id);
+    KekStateSlot* source = hook_store_live_slot(&job->state_store, slot_id);
+    if (!target || !source || !target->descriptor || !source->descriptor ||
+        target->descriptor->type_id != source->descriptor->type_id) {
+        return 0;
+    }
+
+    uint64_t base_version = job->base_versions[slot_id];
+    if (source->version == base_version) {
+        return 1;
+    }
+    uint64_t version_delta = source->version > base_version
+                                 ? source->version - base_version
+                                 : 1;
+    int field_merge =
+        (job->descriptor->scheduling_flags &
+         KEK_HOOK_SCHEDULING_FIELD_MERGE_SAFE) &&
+        access->fields != KEK_EVENT_CHANGED_FIELDS_UNKNOWN &&
+        target->descriptor->merge_fields;
+    if (!field_merge && target->version != base_version) {
+        return 0;
+    }
+
+    size_t inactive_index = target->active_index == 0 ? 1u : 0u;
+    const void* source_current = source->buffers[source->active_index];
+    void* target_current = target->buffers[target->active_index];
+    void* target_draft = target->buffers[inactive_index];
+    memcpy(target_draft, target_current, target->descriptor->size);
+    if (field_merge) {
+        if (!target->descriptor->merge_fields(target_draft, source_current,
+                                             access->fields)) {
+            return 0;
+        }
+    } else {
+        memcpy(target_draft, source_current, target->descriptor->size);
+    }
+    if (target->descriptor->check &&
+        !target->descriptor->check(target_draft)) {
+        memcpy(target_draft, target_current, target->descriptor->size);
+        return 0;
+    }
+
+    target->active_index = inactive_index;
+    target->version = field_merge ? target->version + version_delta
+                                  : source->version;
+    return 1;
+}
+
+static int hook_job_apply_state_changes(KekHookDispatchJob* job) {
+    if (!job || !job->descriptor) {
+        return 0;
+    }
+    if (job->descriptor->access_count == 0 || !job->descriptor->accesses) {
+        return 1;
+    }
+
+    uint64_t apply_start =
+        kek_trace_enabled(job->registry->runtime) ? kek_trace_now_ns() : 0;
+    int ok = 1;
+    size_t applied_slots[KEK_HOOK_MAX_DESCRIPTORS];
+    size_t applied_count = 0;
+    for (size_t i = 0; i < job->descriptor->access_count; i++) {
+        const KekHookAccess* access = &job->descriptor->accesses[i];
+        if (access->mode != KEK_HOOK_ACCESS_WRITE ||
+            access->scope != KEK_HOOK_ACCESS_SCOPE_EXACT_SLOT) {
+            continue;
+        }
+        int already_applied = 0;
+        for (size_t j = 0; j < applied_count; j++) {
+            if (applied_slots[j] == access->state_slot_id) {
+                already_applied = 1;
+                break;
+            }
+        }
+        if (already_applied) {
+            continue;
+        }
+        if (!hook_job_apply_slot(job, access)) {
+            ok = 0;
+            break;
+        }
+        if (applied_count < KEK_HOOK_MAX_DESCRIPTORS) {
+            applied_slots[applied_count++] = access->state_slot_id;
+        }
+    }
+    if (apply_start != 0) {
+        kek_trace_record_runtime_metric(job->registry->runtime,
+                                        KEK_TRACE_METRIC_HOOK_WORKER_APPLY,
+                                        kek_trace_now_ns() - apply_start);
+    }
+    return ok;
+}
+
 static int hook_registry_dispatch_descriptor(KekHookRegistry* registry,
                                              const KekEvent* event,
                                              size_t descriptor_index) {
@@ -428,6 +708,8 @@ static int hook_registry_dispatch_descriptor(KekHookRegistry* registry,
     if (!hook_matches_changed_fields(descriptor, event)) {
         return 1;
     }
+    kek_trace_count_runtime_metric(registry->runtime,
+                                   KEK_TRACE_METRIC_HOOK_SERIAL_DESCRIPTOR);
 
     KekHookContext context;
     context.runtime = registry->runtime;
@@ -485,6 +767,8 @@ static int hook_registry_dispatch_parallel_wave(KekHookRegistry* registry,
         return 0;
     }
     if (descriptor_count == 1 || kek_runtime_thread_count(registry->runtime) <= 1) {
+        kek_trace_count_runtime_metric(registry->runtime,
+                                       KEK_TRACE_METRIC_HOOK_SERIAL_FALLBACK);
         for (size_t i = 0; i < descriptor_count; i++) {
             if (!hook_registry_dispatch_descriptor(registry, event,
                                                    descriptor_indices[i])) {
@@ -492,6 +776,30 @@ static int hook_registry_dispatch_parallel_wave(KekHookRegistry* registry,
             }
         }
         return 1;
+    }
+
+    int has_write = 0;
+    int has_field_merge = 0;
+    for (size_t i = 0; i < descriptor_count; i++) {
+        const KekHookDescriptor* descriptor =
+            &registry->descriptors[descriptor_indices[i]];
+        has_write = has_write || hook_descriptor_has_precise_write(descriptor);
+        has_field_merge =
+            has_field_merge || hook_descriptor_has_field_merge_write(descriptor);
+    }
+    kek_trace_record_runtime_metric(registry->runtime,
+                                    KEK_TRACE_METRIC_HOOK_PARALLEL_WAVE,
+                                    descriptor_count);
+    if (has_write) {
+        kek_trace_count_runtime_metric(registry->runtime,
+                                       KEK_TRACE_METRIC_HOOK_PARALLEL_WRITE_WAVE);
+    } else {
+        kek_trace_count_runtime_metric(
+            registry->runtime, KEK_TRACE_METRIC_HOOK_PARALLEL_READONLY_WAVE);
+    }
+    if (has_field_merge) {
+        kek_trace_count_runtime_metric(registry->runtime,
+                                       KEK_TRACE_METRIC_HOOK_FIELD_MERGE_WAVE);
     }
 
     KekHookDispatchJob* dispatch_jobs =
@@ -537,6 +845,10 @@ static int hook_registry_dispatch_parallel_wave(KekHookRegistry* registry,
                                   job->wait_ns, job->run_ns, job->ok);
         }
         if (!job->ok) {
+            ok = 0;
+            break;
+        }
+        if (!hook_job_apply_state_changes(job)) {
             ok = 0;
             break;
         }

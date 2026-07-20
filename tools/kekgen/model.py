@@ -40,6 +40,15 @@ class Instance:
 
 
 @dataclass
+class HookAccess:
+    mode: str
+    state_name: str
+    instance_name: str | None = None
+    scope: str = "any"
+    fields: list[str] = field(default_factory=list)
+
+
+@dataclass
 class Hook:
     name: str
     event_type: str = ""
@@ -48,3 +57,7 @@ class Hook:
     trigger_fields: list[str] = field(default_factory=list)
     reads: list[str] = field(default_factory=list)
     writes: list[str] = field(default_factory=list)
+    accesses: list[HookAccess] = field(default_factory=list)
+    access_declared: bool = False
+    scheduling_opaque: bool = False
+    field_merge_safe: bool = False

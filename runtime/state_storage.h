@@ -22,6 +22,8 @@ typedef struct KekStateStoreUpdateItem {
 
 typedef void (*KekStateDefaultIntoFn)(void* state);
 typedef int (*KekStateResetFn)(void* state);
+typedef int (*KekStateMergeFieldsFn)(void* target, const void* source,
+                                     uint64_t fields);
 
 typedef struct KekStateDescriptor {
     size_t type_id;
@@ -30,6 +32,7 @@ typedef struct KekStateDescriptor {
     KekStateDefaultIntoFn set_default;
     KekStateStorageCheckFn check;
     KekStateResetFn reset;
+    KekStateMergeFieldsFn merge_fields;
 } KekStateDescriptor;
 
 typedef struct KekStateSlot {
