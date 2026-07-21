@@ -42,32 +42,40 @@ static inline OnClockTickAccess on_clock_tick_access(KekHookContext* context, co
     return access;
 }
 
-static inline size_t on_clock_tick_clock_slot_id(const OnClockTickAccess* access) {
+static inline KekStateHandle on_clock_tick_clock_handle(const OnClockTickAccess* access) {
     return access && access->slots ? access->slots->clock : KEK_STATE_INVALID_ID;
 }
 
-static inline const SimulationClock* on_clock_tick_read_clock(const OnClockTickAccess* access) {
-    return access ? runtime_stress_state_simulation_clock_slot_const(access->context->state_store, on_clock_tick_clock_slot_id(access)) : 0;
+static inline KekStateHandle on_clock_tick_clock_slot_id(const OnClockTickAccess* access) {
+    return on_clock_tick_clock_handle(access);
 }
 
-static inline size_t on_clock_tick_telemetry_slot_id(const OnClockTickAccess* access) {
+static inline const SimulationClock* on_clock_tick_read_clock(const OnClockTickAccess* access) {
+    return access ? runtime_stress_state_simulation_clock_instance_const(access->context->state_store, on_clock_tick_clock_handle(access)) : 0;
+}
+
+static inline KekStateHandle on_clock_tick_telemetry_handle(const OnClockTickAccess* access) {
     return access && access->slots ? access->slots->telemetry : KEK_STATE_INVALID_ID;
 }
 
-static inline int on_clock_tick_update_telemetry(const OnClockTickAccess* access, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return access ? kek_state_store_update_fields(access->context->state_store, on_clock_tick_telemetry_slot_id(access), update, context, changed_fields) : 0;
+static inline KekStateHandle on_clock_tick_telemetry_slot_id(const OnClockTickAccess* access) {
+    return on_clock_tick_telemetry_handle(access);
+}
+
+static inline int on_clock_tick_update_telemetry(const OnClockTickAccess* access, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return access ? kek_state_store_update_fields(access->context->state_store, on_clock_tick_telemetry_handle(access), update, context, changed_fields) : 0;
 }
 
 static inline int on_clock_tick_set_telemetry_total_events(const OnClockTickAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_telemetry_set_total_events(access->context->state_store, on_clock_tick_telemetry_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_telemetry_set_total_events(access->context->state_store, on_clock_tick_telemetry_handle(access), value) : 0;
 }
 
 static inline int on_clock_tick_set_telemetry_hook_hits(const OnClockTickAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_telemetry_set_hook_hits(access->context->state_store, on_clock_tick_telemetry_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_telemetry_set_hook_hits(access->context->state_store, on_clock_tick_telemetry_handle(access), value) : 0;
 }
 
 static inline int on_clock_tick_set_telemetry_load(const OnClockTickAccess* access, double value) {
-    return access ? runtime_stress_state_telemetry_set_load(access->context->state_store, on_clock_tick_telemetry_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_telemetry_set_load(access->context->state_store, on_clock_tick_telemetry_handle(access), value) : 0;
 }
 
 
@@ -81,24 +89,32 @@ static inline OnClockPhaseAccess on_clock_phase_access(KekHookContext* context, 
     return access;
 }
 
-static inline size_t on_clock_phase_clock_slot_id(const OnClockPhaseAccess* access) {
+static inline KekStateHandle on_clock_phase_clock_handle(const OnClockPhaseAccess* access) {
     return access && access->slots ? access->slots->clock : KEK_STATE_INVALID_ID;
 }
 
-static inline const SimulationClock* on_clock_phase_read_clock(const OnClockPhaseAccess* access) {
-    return access ? runtime_stress_state_simulation_clock_slot_const(access->context->state_store, on_clock_phase_clock_slot_id(access)) : 0;
+static inline KekStateHandle on_clock_phase_clock_slot_id(const OnClockPhaseAccess* access) {
+    return on_clock_phase_clock_handle(access);
 }
 
-static inline size_t on_clock_phase_audit_slot_id(const OnClockPhaseAccess* access) {
+static inline const SimulationClock* on_clock_phase_read_clock(const OnClockPhaseAccess* access) {
+    return access ? runtime_stress_state_simulation_clock_instance_const(access->context->state_store, on_clock_phase_clock_handle(access)) : 0;
+}
+
+static inline KekStateHandle on_clock_phase_audit_handle(const OnClockPhaseAccess* access) {
     return access && access->slots ? access->slots->audit : KEK_STATE_INVALID_ID;
 }
 
-static inline int on_clock_phase_update_audit(const OnClockPhaseAccess* access, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return access ? kek_state_store_update_fields(access->context->state_store, on_clock_phase_audit_slot_id(access), update, context, changed_fields) : 0;
+static inline KekStateHandle on_clock_phase_audit_slot_id(const OnClockPhaseAccess* access) {
+    return on_clock_phase_audit_handle(access);
+}
+
+static inline int on_clock_phase_update_audit(const OnClockPhaseAccess* access, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return access ? kek_state_store_update_fields(access->context->state_store, on_clock_phase_audit_handle(access), update, context, changed_fields) : 0;
 }
 
 static inline int on_clock_phase_set_audit_last_event(const OnClockPhaseAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_audit_log_set_last_event(access->context->state_store, on_clock_phase_audit_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_audit_log_set_last_event(access->context->state_store, on_clock_phase_audit_handle(access), value) : 0;
 }
 
 
@@ -268,32 +284,40 @@ static inline OnControlModeAccess on_control_mode_access(KekHookContext* context
     return access;
 }
 
-static inline size_t on_control_mode_control_slot_id(const OnControlModeAccess* access) {
+static inline KekStateHandle on_control_mode_control_handle(const OnControlModeAccess* access) {
     return access && access->slots ? access->slots->control : KEK_STATE_INVALID_ID;
 }
 
-static inline const ControlPanel* on_control_mode_read_control(const OnControlModeAccess* access) {
-    return access ? runtime_stress_state_control_panel_slot_const(access->context->state_store, on_control_mode_control_slot_id(access)) : 0;
+static inline KekStateHandle on_control_mode_control_slot_id(const OnControlModeAccess* access) {
+    return on_control_mode_control_handle(access);
 }
 
-static inline size_t on_control_mode_telemetry_slot_id(const OnControlModeAccess* access) {
+static inline const ControlPanel* on_control_mode_read_control(const OnControlModeAccess* access) {
+    return access ? runtime_stress_state_control_panel_instance_const(access->context->state_store, on_control_mode_control_handle(access)) : 0;
+}
+
+static inline KekStateHandle on_control_mode_telemetry_handle(const OnControlModeAccess* access) {
     return access && access->slots ? access->slots->telemetry : KEK_STATE_INVALID_ID;
 }
 
-static inline int on_control_mode_update_telemetry(const OnControlModeAccess* access, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return access ? kek_state_store_update_fields(access->context->state_store, on_control_mode_telemetry_slot_id(access), update, context, changed_fields) : 0;
+static inline KekStateHandle on_control_mode_telemetry_slot_id(const OnControlModeAccess* access) {
+    return on_control_mode_telemetry_handle(access);
+}
+
+static inline int on_control_mode_update_telemetry(const OnControlModeAccess* access, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return access ? kek_state_store_update_fields(access->context->state_store, on_control_mode_telemetry_handle(access), update, context, changed_fields) : 0;
 }
 
 static inline int on_control_mode_set_telemetry_total_events(const OnControlModeAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_telemetry_set_total_events(access->context->state_store, on_control_mode_telemetry_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_telemetry_set_total_events(access->context->state_store, on_control_mode_telemetry_handle(access), value) : 0;
 }
 
 static inline int on_control_mode_set_telemetry_hook_hits(const OnControlModeAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_telemetry_set_hook_hits(access->context->state_store, on_control_mode_telemetry_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_telemetry_set_hook_hits(access->context->state_store, on_control_mode_telemetry_handle(access), value) : 0;
 }
 
 static inline int on_control_mode_set_telemetry_load(const OnControlModeAccess* access, double value) {
-    return access ? runtime_stress_state_telemetry_set_load(access->context->state_store, on_control_mode_telemetry_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_telemetry_set_load(access->context->state_store, on_control_mode_telemetry_handle(access), value) : 0;
 }
 
 
@@ -307,32 +331,40 @@ static inline OnControlLabelAccess on_control_label_access(KekHookContext* conte
     return access;
 }
 
-static inline size_t on_control_label_control_slot_id(const OnControlLabelAccess* access) {
+static inline KekStateHandle on_control_label_control_handle(const OnControlLabelAccess* access) {
     return access && access->slots ? access->slots->control : KEK_STATE_INVALID_ID;
 }
 
-static inline const ControlPanel* on_control_label_read_control(const OnControlLabelAccess* access) {
-    return access ? runtime_stress_state_control_panel_slot_const(access->context->state_store, on_control_label_control_slot_id(access)) : 0;
+static inline KekStateHandle on_control_label_control_slot_id(const OnControlLabelAccess* access) {
+    return on_control_label_control_handle(access);
 }
 
-static inline size_t on_control_label_telemetry_slot_id(const OnControlLabelAccess* access) {
+static inline const ControlPanel* on_control_label_read_control(const OnControlLabelAccess* access) {
+    return access ? runtime_stress_state_control_panel_instance_const(access->context->state_store, on_control_label_control_handle(access)) : 0;
+}
+
+static inline KekStateHandle on_control_label_telemetry_handle(const OnControlLabelAccess* access) {
     return access && access->slots ? access->slots->telemetry : KEK_STATE_INVALID_ID;
 }
 
-static inline int on_control_label_update_telemetry(const OnControlLabelAccess* access, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return access ? kek_state_store_update_fields(access->context->state_store, on_control_label_telemetry_slot_id(access), update, context, changed_fields) : 0;
+static inline KekStateHandle on_control_label_telemetry_slot_id(const OnControlLabelAccess* access) {
+    return on_control_label_telemetry_handle(access);
+}
+
+static inline int on_control_label_update_telemetry(const OnControlLabelAccess* access, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return access ? kek_state_store_update_fields(access->context->state_store, on_control_label_telemetry_handle(access), update, context, changed_fields) : 0;
 }
 
 static inline int on_control_label_set_telemetry_total_events(const OnControlLabelAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_telemetry_set_total_events(access->context->state_store, on_control_label_telemetry_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_telemetry_set_total_events(access->context->state_store, on_control_label_telemetry_handle(access), value) : 0;
 }
 
 static inline int on_control_label_set_telemetry_hook_hits(const OnControlLabelAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_telemetry_set_hook_hits(access->context->state_store, on_control_label_telemetry_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_telemetry_set_hook_hits(access->context->state_store, on_control_label_telemetry_handle(access), value) : 0;
 }
 
 static inline int on_control_label_set_telemetry_load(const OnControlLabelAccess* access, double value) {
-    return access ? runtime_stress_state_telemetry_set_load(access->context->state_store, on_control_label_telemetry_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_telemetry_set_load(access->context->state_store, on_control_label_telemetry_handle(access), value) : 0;
 }
 
 
@@ -346,24 +378,32 @@ static inline OnTelemetryChangedAccess on_telemetry_changed_access(KekHookContex
     return access;
 }
 
-static inline size_t on_telemetry_changed_telemetry_slot_id(const OnTelemetryChangedAccess* access) {
+static inline KekStateHandle on_telemetry_changed_telemetry_handle(const OnTelemetryChangedAccess* access) {
     return access && access->slots ? access->slots->telemetry : KEK_STATE_INVALID_ID;
 }
 
-static inline const Telemetry* on_telemetry_changed_read_telemetry(const OnTelemetryChangedAccess* access) {
-    return access ? runtime_stress_state_telemetry_slot_const(access->context->state_store, on_telemetry_changed_telemetry_slot_id(access)) : 0;
+static inline KekStateHandle on_telemetry_changed_telemetry_slot_id(const OnTelemetryChangedAccess* access) {
+    return on_telemetry_changed_telemetry_handle(access);
 }
 
-static inline size_t on_telemetry_changed_audit_slot_id(const OnTelemetryChangedAccess* access) {
+static inline const Telemetry* on_telemetry_changed_read_telemetry(const OnTelemetryChangedAccess* access) {
+    return access ? runtime_stress_state_telemetry_instance_const(access->context->state_store, on_telemetry_changed_telemetry_handle(access)) : 0;
+}
+
+static inline KekStateHandle on_telemetry_changed_audit_handle(const OnTelemetryChangedAccess* access) {
     return access && access->slots ? access->slots->audit : KEK_STATE_INVALID_ID;
 }
 
-static inline int on_telemetry_changed_update_audit(const OnTelemetryChangedAccess* access, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return access ? kek_state_store_update_fields(access->context->state_store, on_telemetry_changed_audit_slot_id(access), update, context, changed_fields) : 0;
+static inline KekStateHandle on_telemetry_changed_audit_slot_id(const OnTelemetryChangedAccess* access) {
+    return on_telemetry_changed_audit_handle(access);
+}
+
+static inline int on_telemetry_changed_update_audit(const OnTelemetryChangedAccess* access, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return access ? kek_state_store_update_fields(access->context->state_store, on_telemetry_changed_audit_handle(access), update, context, changed_fields) : 0;
 }
 
 static inline int on_telemetry_changed_set_audit_last_event(const OnTelemetryChangedAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_audit_log_set_last_event(access->context->state_store, on_telemetry_changed_audit_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_audit_log_set_last_event(access->context->state_store, on_telemetry_changed_audit_handle(access), value) : 0;
 }
 
 
@@ -377,32 +417,40 @@ static inline OnAuditChangedAccess on_audit_changed_access(KekHookContext* conte
     return access;
 }
 
-static inline size_t on_audit_changed_audit_slot_id(const OnAuditChangedAccess* access) {
+static inline KekStateHandle on_audit_changed_audit_handle(const OnAuditChangedAccess* access) {
     return access && access->slots ? access->slots->audit : KEK_STATE_INVALID_ID;
 }
 
-static inline const AuditLog* on_audit_changed_read_audit(const OnAuditChangedAccess* access) {
-    return access ? runtime_stress_state_audit_log_slot_const(access->context->state_store, on_audit_changed_audit_slot_id(access)) : 0;
+static inline KekStateHandle on_audit_changed_audit_slot_id(const OnAuditChangedAccess* access) {
+    return on_audit_changed_audit_handle(access);
 }
 
-static inline size_t on_audit_changed_telemetry_slot_id(const OnAuditChangedAccess* access) {
+static inline const AuditLog* on_audit_changed_read_audit(const OnAuditChangedAccess* access) {
+    return access ? runtime_stress_state_audit_log_instance_const(access->context->state_store, on_audit_changed_audit_handle(access)) : 0;
+}
+
+static inline KekStateHandle on_audit_changed_telemetry_handle(const OnAuditChangedAccess* access) {
     return access && access->slots ? access->slots->telemetry : KEK_STATE_INVALID_ID;
 }
 
-static inline int on_audit_changed_update_telemetry(const OnAuditChangedAccess* access, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return access ? kek_state_store_update_fields(access->context->state_store, on_audit_changed_telemetry_slot_id(access), update, context, changed_fields) : 0;
+static inline KekStateHandle on_audit_changed_telemetry_slot_id(const OnAuditChangedAccess* access) {
+    return on_audit_changed_telemetry_handle(access);
+}
+
+static inline int on_audit_changed_update_telemetry(const OnAuditChangedAccess* access, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return access ? kek_state_store_update_fields(access->context->state_store, on_audit_changed_telemetry_handle(access), update, context, changed_fields) : 0;
 }
 
 static inline int on_audit_changed_set_telemetry_total_events(const OnAuditChangedAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_telemetry_set_total_events(access->context->state_store, on_audit_changed_telemetry_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_telemetry_set_total_events(access->context->state_store, on_audit_changed_telemetry_handle(access), value) : 0;
 }
 
 static inline int on_audit_changed_set_telemetry_hook_hits(const OnAuditChangedAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_telemetry_set_hook_hits(access->context->state_store, on_audit_changed_telemetry_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_telemetry_set_hook_hits(access->context->state_store, on_audit_changed_telemetry_handle(access), value) : 0;
 }
 
 static inline int on_audit_changed_set_telemetry_load(const OnAuditChangedAccess* access, double value) {
-    return access ? runtime_stress_state_telemetry_set_load(access->context->state_store, on_audit_changed_telemetry_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_telemetry_set_load(access->context->state_store, on_audit_changed_telemetry_handle(access), value) : 0;
 }
 
 
@@ -416,32 +464,40 @@ static inline OnStandardInputAccess on_standard_input_access(KekHookContext* con
     return access;
 }
 
-static inline size_t on_standard_input_standard_input_slot_id(const OnStandardInputAccess* access) {
+static inline KekStateHandle on_standard_input_standard_input_handle(const OnStandardInputAccess* access) {
     return access && access->slots ? access->slots->standard_input : KEK_STATE_INVALID_ID;
 }
 
-static inline const StandardInput* on_standard_input_read_standard_input(const OnStandardInputAccess* access) {
-    return access ? runtime_stress_state_standard_input_slot_const(access->context->state_store, on_standard_input_standard_input_slot_id(access)) : 0;
+static inline KekStateHandle on_standard_input_standard_input_slot_id(const OnStandardInputAccess* access) {
+    return on_standard_input_standard_input_handle(access);
 }
 
-static inline size_t on_standard_input_telemetry_slot_id(const OnStandardInputAccess* access) {
+static inline const StandardInput* on_standard_input_read_standard_input(const OnStandardInputAccess* access) {
+    return access ? runtime_stress_state_standard_input_instance_const(access->context->state_store, on_standard_input_standard_input_handle(access)) : 0;
+}
+
+static inline KekStateHandle on_standard_input_telemetry_handle(const OnStandardInputAccess* access) {
     return access && access->slots ? access->slots->telemetry : KEK_STATE_INVALID_ID;
 }
 
-static inline int on_standard_input_update_telemetry(const OnStandardInputAccess* access, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return access ? kek_state_store_update_fields(access->context->state_store, on_standard_input_telemetry_slot_id(access), update, context, changed_fields) : 0;
+static inline KekStateHandle on_standard_input_telemetry_slot_id(const OnStandardInputAccess* access) {
+    return on_standard_input_telemetry_handle(access);
+}
+
+static inline int on_standard_input_update_telemetry(const OnStandardInputAccess* access, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return access ? kek_state_store_update_fields(access->context->state_store, on_standard_input_telemetry_handle(access), update, context, changed_fields) : 0;
 }
 
 static inline int on_standard_input_set_telemetry_total_events(const OnStandardInputAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_telemetry_set_total_events(access->context->state_store, on_standard_input_telemetry_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_telemetry_set_total_events(access->context->state_store, on_standard_input_telemetry_handle(access), value) : 0;
 }
 
 static inline int on_standard_input_set_telemetry_hook_hits(const OnStandardInputAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_telemetry_set_hook_hits(access->context->state_store, on_standard_input_telemetry_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_telemetry_set_hook_hits(access->context->state_store, on_standard_input_telemetry_handle(access), value) : 0;
 }
 
 static inline int on_standard_input_set_telemetry_stream_bytes(const OnStandardInputAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_telemetry_set_stream_bytes(access->context->state_store, on_standard_input_telemetry_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_telemetry_set_stream_bytes(access->context->state_store, on_standard_input_telemetry_handle(access), value) : 0;
 }
 
 
@@ -455,32 +511,40 @@ static inline OnFastTimerAccess on_fast_timer_access(KekHookContext* context, co
     return access;
 }
 
-static inline size_t on_fast_timer_fast_timer_slot_id(const OnFastTimerAccess* access) {
+static inline KekStateHandle on_fast_timer_fast_timer_handle(const OnFastTimerAccess* access) {
     return access && access->slots ? access->slots->fast_timer : KEK_STATE_INVALID_ID;
 }
 
-static inline const Timer* on_fast_timer_read_fast_timer(const OnFastTimerAccess* access) {
-    return access ? runtime_stress_state_timer_slot_const(access->context->state_store, on_fast_timer_fast_timer_slot_id(access)) : 0;
+static inline KekStateHandle on_fast_timer_fast_timer_slot_id(const OnFastTimerAccess* access) {
+    return on_fast_timer_fast_timer_handle(access);
 }
 
-static inline size_t on_fast_timer_telemetry_slot_id(const OnFastTimerAccess* access) {
+static inline const Timer* on_fast_timer_read_fast_timer(const OnFastTimerAccess* access) {
+    return access ? runtime_stress_state_timer_instance_const(access->context->state_store, on_fast_timer_fast_timer_handle(access)) : 0;
+}
+
+static inline KekStateHandle on_fast_timer_telemetry_handle(const OnFastTimerAccess* access) {
     return access && access->slots ? access->slots->telemetry : KEK_STATE_INVALID_ID;
 }
 
-static inline int on_fast_timer_update_telemetry(const OnFastTimerAccess* access, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return access ? kek_state_store_update_fields(access->context->state_store, on_fast_timer_telemetry_slot_id(access), update, context, changed_fields) : 0;
+static inline KekStateHandle on_fast_timer_telemetry_slot_id(const OnFastTimerAccess* access) {
+    return on_fast_timer_telemetry_handle(access);
+}
+
+static inline int on_fast_timer_update_telemetry(const OnFastTimerAccess* access, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return access ? kek_state_store_update_fields(access->context->state_store, on_fast_timer_telemetry_handle(access), update, context, changed_fields) : 0;
 }
 
 static inline int on_fast_timer_set_telemetry_total_events(const OnFastTimerAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_telemetry_set_total_events(access->context->state_store, on_fast_timer_telemetry_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_telemetry_set_total_events(access->context->state_store, on_fast_timer_telemetry_handle(access), value) : 0;
 }
 
 static inline int on_fast_timer_set_telemetry_hook_hits(const OnFastTimerAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_telemetry_set_hook_hits(access->context->state_store, on_fast_timer_telemetry_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_telemetry_set_hook_hits(access->context->state_store, on_fast_timer_telemetry_handle(access), value) : 0;
 }
 
 static inline int on_fast_timer_set_telemetry_timer_ticks(const OnFastTimerAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_telemetry_set_timer_ticks(access->context->state_store, on_fast_timer_telemetry_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_telemetry_set_timer_ticks(access->context->state_store, on_fast_timer_telemetry_handle(access), value) : 0;
 }
 
 
@@ -494,24 +558,32 @@ static inline OnSlowTimerAccess on_slow_timer_access(KekHookContext* context, co
     return access;
 }
 
-static inline size_t on_slow_timer_slow_timer_slot_id(const OnSlowTimerAccess* access) {
+static inline KekStateHandle on_slow_timer_slow_timer_handle(const OnSlowTimerAccess* access) {
     return access && access->slots ? access->slots->slow_timer : KEK_STATE_INVALID_ID;
 }
 
-static inline const Timer* on_slow_timer_read_slow_timer(const OnSlowTimerAccess* access) {
-    return access ? runtime_stress_state_timer_slot_const(access->context->state_store, on_slow_timer_slow_timer_slot_id(access)) : 0;
+static inline KekStateHandle on_slow_timer_slow_timer_slot_id(const OnSlowTimerAccess* access) {
+    return on_slow_timer_slow_timer_handle(access);
 }
 
-static inline size_t on_slow_timer_audit_slot_id(const OnSlowTimerAccess* access) {
+static inline const Timer* on_slow_timer_read_slow_timer(const OnSlowTimerAccess* access) {
+    return access ? runtime_stress_state_timer_instance_const(access->context->state_store, on_slow_timer_slow_timer_handle(access)) : 0;
+}
+
+static inline KekStateHandle on_slow_timer_audit_handle(const OnSlowTimerAccess* access) {
     return access && access->slots ? access->slots->audit : KEK_STATE_INVALID_ID;
 }
 
-static inline int on_slow_timer_update_audit(const OnSlowTimerAccess* access, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return access ? kek_state_store_update_fields(access->context->state_store, on_slow_timer_audit_slot_id(access), update, context, changed_fields) : 0;
+static inline KekStateHandle on_slow_timer_audit_slot_id(const OnSlowTimerAccess* access) {
+    return on_slow_timer_audit_handle(access);
+}
+
+static inline int on_slow_timer_update_audit(const OnSlowTimerAccess* access, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return access ? kek_state_store_update_fields(access->context->state_store, on_slow_timer_audit_handle(access), update, context, changed_fields) : 0;
 }
 
 static inline int on_slow_timer_set_audit_last_event(const OnSlowTimerAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_audit_log_set_last_event(access->context->state_store, on_slow_timer_audit_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_audit_log_set_last_event(access->context->state_store, on_slow_timer_audit_handle(access), value) : 0;
 }
 
 
@@ -525,28 +597,36 @@ static inline OnBenchmarkExactLeftAccess on_benchmark_exact_left_access(KekHookC
     return access;
 }
 
-static inline size_t on_benchmark_exact_left_benchmark_trigger_slot_id(const OnBenchmarkExactLeftAccess* access) {
+static inline KekStateHandle on_benchmark_exact_left_benchmark_trigger_handle(const OnBenchmarkExactLeftAccess* access) {
     return access && access->slots ? access->slots->benchmark_trigger : KEK_STATE_INVALID_ID;
 }
 
-static inline const WriteBenchmarkTrigger* on_benchmark_exact_left_read_benchmark_trigger(const OnBenchmarkExactLeftAccess* access) {
-    return access ? runtime_stress_state_write_benchmark_trigger_slot_const(access->context->state_store, on_benchmark_exact_left_benchmark_trigger_slot_id(access)) : 0;
+static inline KekStateHandle on_benchmark_exact_left_benchmark_trigger_slot_id(const OnBenchmarkExactLeftAccess* access) {
+    return on_benchmark_exact_left_benchmark_trigger_handle(access);
 }
 
-static inline size_t on_benchmark_exact_left_benchmark_left_slot_id(const OnBenchmarkExactLeftAccess* access) {
+static inline const WriteBenchmarkTrigger* on_benchmark_exact_left_read_benchmark_trigger(const OnBenchmarkExactLeftAccess* access) {
+    return access ? runtime_stress_state_write_benchmark_trigger_instance_const(access->context->state_store, on_benchmark_exact_left_benchmark_trigger_handle(access)) : 0;
+}
+
+static inline KekStateHandle on_benchmark_exact_left_benchmark_left_handle(const OnBenchmarkExactLeftAccess* access) {
     return access && access->slots ? access->slots->benchmark_left : KEK_STATE_INVALID_ID;
 }
 
-static inline int on_benchmark_exact_left_update_benchmark_left(const OnBenchmarkExactLeftAccess* access, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return access ? kek_state_store_update_fields(access->context->state_store, on_benchmark_exact_left_benchmark_left_slot_id(access), update, context, changed_fields) : 0;
+static inline KekStateHandle on_benchmark_exact_left_benchmark_left_slot_id(const OnBenchmarkExactLeftAccess* access) {
+    return on_benchmark_exact_left_benchmark_left_handle(access);
+}
+
+static inline int on_benchmark_exact_left_update_benchmark_left(const OnBenchmarkExactLeftAccess* access, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return access ? kek_state_store_update_fields(access->context->state_store, on_benchmark_exact_left_benchmark_left_handle(access), update, context, changed_fields) : 0;
 }
 
 static inline int on_benchmark_exact_left_set_benchmark_left_exact_hits(const OnBenchmarkExactLeftAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_write_benchmark_target_set_exact_hits(access->context->state_store, on_benchmark_exact_left_benchmark_left_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_write_benchmark_target_set_exact_hits(access->context->state_store, on_benchmark_exact_left_benchmark_left_handle(access), value) : 0;
 }
 
 static inline int on_benchmark_exact_left_set_benchmark_left_checksum(const OnBenchmarkExactLeftAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_write_benchmark_target_set_checksum(access->context->state_store, on_benchmark_exact_left_benchmark_left_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_write_benchmark_target_set_checksum(access->context->state_store, on_benchmark_exact_left_benchmark_left_handle(access), value) : 0;
 }
 
 
@@ -560,28 +640,36 @@ static inline OnBenchmarkExactRightAccess on_benchmark_exact_right_access(KekHoo
     return access;
 }
 
-static inline size_t on_benchmark_exact_right_benchmark_trigger_slot_id(const OnBenchmarkExactRightAccess* access) {
+static inline KekStateHandle on_benchmark_exact_right_benchmark_trigger_handle(const OnBenchmarkExactRightAccess* access) {
     return access && access->slots ? access->slots->benchmark_trigger : KEK_STATE_INVALID_ID;
 }
 
-static inline const WriteBenchmarkTrigger* on_benchmark_exact_right_read_benchmark_trigger(const OnBenchmarkExactRightAccess* access) {
-    return access ? runtime_stress_state_write_benchmark_trigger_slot_const(access->context->state_store, on_benchmark_exact_right_benchmark_trigger_slot_id(access)) : 0;
+static inline KekStateHandle on_benchmark_exact_right_benchmark_trigger_slot_id(const OnBenchmarkExactRightAccess* access) {
+    return on_benchmark_exact_right_benchmark_trigger_handle(access);
 }
 
-static inline size_t on_benchmark_exact_right_benchmark_right_slot_id(const OnBenchmarkExactRightAccess* access) {
+static inline const WriteBenchmarkTrigger* on_benchmark_exact_right_read_benchmark_trigger(const OnBenchmarkExactRightAccess* access) {
+    return access ? runtime_stress_state_write_benchmark_trigger_instance_const(access->context->state_store, on_benchmark_exact_right_benchmark_trigger_handle(access)) : 0;
+}
+
+static inline KekStateHandle on_benchmark_exact_right_benchmark_right_handle(const OnBenchmarkExactRightAccess* access) {
     return access && access->slots ? access->slots->benchmark_right : KEK_STATE_INVALID_ID;
 }
 
-static inline int on_benchmark_exact_right_update_benchmark_right(const OnBenchmarkExactRightAccess* access, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return access ? kek_state_store_update_fields(access->context->state_store, on_benchmark_exact_right_benchmark_right_slot_id(access), update, context, changed_fields) : 0;
+static inline KekStateHandle on_benchmark_exact_right_benchmark_right_slot_id(const OnBenchmarkExactRightAccess* access) {
+    return on_benchmark_exact_right_benchmark_right_handle(access);
+}
+
+static inline int on_benchmark_exact_right_update_benchmark_right(const OnBenchmarkExactRightAccess* access, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return access ? kek_state_store_update_fields(access->context->state_store, on_benchmark_exact_right_benchmark_right_handle(access), update, context, changed_fields) : 0;
 }
 
 static inline int on_benchmark_exact_right_set_benchmark_right_exact_hits(const OnBenchmarkExactRightAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_write_benchmark_target_set_exact_hits(access->context->state_store, on_benchmark_exact_right_benchmark_right_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_write_benchmark_target_set_exact_hits(access->context->state_store, on_benchmark_exact_right_benchmark_right_handle(access), value) : 0;
 }
 
 static inline int on_benchmark_exact_right_set_benchmark_right_checksum(const OnBenchmarkExactRightAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_write_benchmark_target_set_checksum(access->context->state_store, on_benchmark_exact_right_benchmark_right_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_write_benchmark_target_set_checksum(access->context->state_store, on_benchmark_exact_right_benchmark_right_handle(access), value) : 0;
 }
 
 
@@ -595,24 +683,32 @@ static inline OnBenchmarkMergeLeftAccess on_benchmark_merge_left_access(KekHookC
     return access;
 }
 
-static inline size_t on_benchmark_merge_left_benchmark_trigger_slot_id(const OnBenchmarkMergeLeftAccess* access) {
+static inline KekStateHandle on_benchmark_merge_left_benchmark_trigger_handle(const OnBenchmarkMergeLeftAccess* access) {
     return access && access->slots ? access->slots->benchmark_trigger : KEK_STATE_INVALID_ID;
 }
 
-static inline const WriteBenchmarkTrigger* on_benchmark_merge_left_read_benchmark_trigger(const OnBenchmarkMergeLeftAccess* access) {
-    return access ? runtime_stress_state_write_benchmark_trigger_slot_const(access->context->state_store, on_benchmark_merge_left_benchmark_trigger_slot_id(access)) : 0;
+static inline KekStateHandle on_benchmark_merge_left_benchmark_trigger_slot_id(const OnBenchmarkMergeLeftAccess* access) {
+    return on_benchmark_merge_left_benchmark_trigger_handle(access);
 }
 
-static inline size_t on_benchmark_merge_left_benchmark_merge_slot_id(const OnBenchmarkMergeLeftAccess* access) {
+static inline const WriteBenchmarkTrigger* on_benchmark_merge_left_read_benchmark_trigger(const OnBenchmarkMergeLeftAccess* access) {
+    return access ? runtime_stress_state_write_benchmark_trigger_instance_const(access->context->state_store, on_benchmark_merge_left_benchmark_trigger_handle(access)) : 0;
+}
+
+static inline KekStateHandle on_benchmark_merge_left_benchmark_merge_handle(const OnBenchmarkMergeLeftAccess* access) {
     return access && access->slots ? access->slots->benchmark_merge : KEK_STATE_INVALID_ID;
 }
 
-static inline int on_benchmark_merge_left_update_benchmark_merge(const OnBenchmarkMergeLeftAccess* access, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return access ? kek_state_store_update_fields(access->context->state_store, on_benchmark_merge_left_benchmark_merge_slot_id(access), update, context, changed_fields) : 0;
+static inline KekStateHandle on_benchmark_merge_left_benchmark_merge_slot_id(const OnBenchmarkMergeLeftAccess* access) {
+    return on_benchmark_merge_left_benchmark_merge_handle(access);
+}
+
+static inline int on_benchmark_merge_left_update_benchmark_merge(const OnBenchmarkMergeLeftAccess* access, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return access ? kek_state_store_update_fields(access->context->state_store, on_benchmark_merge_left_benchmark_merge_handle(access), update, context, changed_fields) : 0;
 }
 
 static inline int on_benchmark_merge_left_set_benchmark_merge_left_value(const OnBenchmarkMergeLeftAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_write_benchmark_target_set_left_value(access->context->state_store, on_benchmark_merge_left_benchmark_merge_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_write_benchmark_target_set_left_value(access->context->state_store, on_benchmark_merge_left_benchmark_merge_handle(access), value) : 0;
 }
 
 
@@ -626,24 +722,32 @@ static inline OnBenchmarkMergeRightAccess on_benchmark_merge_right_access(KekHoo
     return access;
 }
 
-static inline size_t on_benchmark_merge_right_benchmark_trigger_slot_id(const OnBenchmarkMergeRightAccess* access) {
+static inline KekStateHandle on_benchmark_merge_right_benchmark_trigger_handle(const OnBenchmarkMergeRightAccess* access) {
     return access && access->slots ? access->slots->benchmark_trigger : KEK_STATE_INVALID_ID;
 }
 
-static inline const WriteBenchmarkTrigger* on_benchmark_merge_right_read_benchmark_trigger(const OnBenchmarkMergeRightAccess* access) {
-    return access ? runtime_stress_state_write_benchmark_trigger_slot_const(access->context->state_store, on_benchmark_merge_right_benchmark_trigger_slot_id(access)) : 0;
+static inline KekStateHandle on_benchmark_merge_right_benchmark_trigger_slot_id(const OnBenchmarkMergeRightAccess* access) {
+    return on_benchmark_merge_right_benchmark_trigger_handle(access);
 }
 
-static inline size_t on_benchmark_merge_right_benchmark_merge_slot_id(const OnBenchmarkMergeRightAccess* access) {
+static inline const WriteBenchmarkTrigger* on_benchmark_merge_right_read_benchmark_trigger(const OnBenchmarkMergeRightAccess* access) {
+    return access ? runtime_stress_state_write_benchmark_trigger_instance_const(access->context->state_store, on_benchmark_merge_right_benchmark_trigger_handle(access)) : 0;
+}
+
+static inline KekStateHandle on_benchmark_merge_right_benchmark_merge_handle(const OnBenchmarkMergeRightAccess* access) {
     return access && access->slots ? access->slots->benchmark_merge : KEK_STATE_INVALID_ID;
 }
 
-static inline int on_benchmark_merge_right_update_benchmark_merge(const OnBenchmarkMergeRightAccess* access, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return access ? kek_state_store_update_fields(access->context->state_store, on_benchmark_merge_right_benchmark_merge_slot_id(access), update, context, changed_fields) : 0;
+static inline KekStateHandle on_benchmark_merge_right_benchmark_merge_slot_id(const OnBenchmarkMergeRightAccess* access) {
+    return on_benchmark_merge_right_benchmark_merge_handle(access);
+}
+
+static inline int on_benchmark_merge_right_update_benchmark_merge(const OnBenchmarkMergeRightAccess* access, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return access ? kek_state_store_update_fields(access->context->state_store, on_benchmark_merge_right_benchmark_merge_handle(access), update, context, changed_fields) : 0;
 }
 
 static inline int on_benchmark_merge_right_set_benchmark_merge_right_value(const OnBenchmarkMergeRightAccess* access, uint64_t value) {
-    return access ? runtime_stress_state_write_benchmark_target_set_right_value(access->context->state_store, on_benchmark_merge_right_benchmark_merge_slot_id(access), value) : 0;
+    return access ? runtime_stress_state_write_benchmark_target_set_right_value(access->context->state_store, on_benchmark_merge_right_benchmark_merge_handle(access), value) : 0;
 }
 
 

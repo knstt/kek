@@ -20,12 +20,6 @@ static const char* const trace_runtime_metric_names[] = {
     [KEK_TRACE_METRIC_RUNTIME_SELECT_WAIT] = "runtime_select_wait",
     [KEK_TRACE_METRIC_RUNTIME_MALLOC] = "runtime_malloc",
     [KEK_TRACE_METRIC_RUNTIME_FREE] = "runtime_free",
-    [KEK_TRACE_METRIC_STATE_STORAGE_INIT_COPY] = "state_storage_init_copy",
-    [KEK_TRACE_METRIC_STATE_STORAGE_DRAFT_COPY] = "state_storage_draft_copy",
-    [KEK_TRACE_METRIC_STATE_STORAGE_UPDATE_CALLBACK] =
-        "state_storage_update_callback",
-    [KEK_TRACE_METRIC_STATE_STORAGE_VALIDATION] = "state_storage_validation",
-    [KEK_TRACE_METRIC_STATE_STORAGE_ROLLBACK_COPY] = "state_storage_rollback_copy",
     [KEK_TRACE_METRIC_STATE_STORE_INIT_COPY] = "state_store_init_copy",
     [KEK_TRACE_METRIC_STATE_STORE_DRAFT_COPY] = "state_store_draft_copy",
     [KEK_TRACE_METRIC_STATE_STORE_UPDATE_CALLBACK] =
@@ -45,6 +39,10 @@ static const char* const trace_runtime_metric_names[] = {
     [KEK_TRACE_METRIC_HOOK_WORKER_CLONE_BYTES] = "hook_worker_clone_bytes",
     [KEK_TRACE_METRIC_HOOK_WORKER_APPLY] = "hook_worker_apply",
     [KEK_TRACE_METRIC_HOOK_WORKER_EVENT_REPLAY] = "hook_worker_event_replay",
+    [KEK_TRACE_METRIC_STATE_ARENA_HIGH_WATER] = "state_arena_high_water",
+    [KEK_TRACE_METRIC_STATE_ARENA_RESET] = "state_arena_reset",
+    [KEK_TRACE_METRIC_HOOK_OVERLAY_DRAFT_BYTES] = "hook_overlay_draft_bytes",
+    [KEK_TRACE_METRIC_HOOK_OVERLAY_ENTRY] = "hook_overlay_entry",
 };
 
 uint64_t kek_trace_now_ns(void) {

@@ -22,6 +22,7 @@ class State:
     name: str
     fields: list[Field] = field(default_factory=list)
     constructors: list["Constructor"] = field(default_factory=list)
+    pool_capacity: int = 0
 
 
 @dataclass
@@ -61,3 +62,4 @@ class Hook:
     access_declared: bool = False
     scheduling_opaque: bool = False
     field_merge_safe: bool = False
+    needs_event_state: bool = False

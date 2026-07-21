@@ -8,14 +8,14 @@ Related documents:
 
 ## Overview
 
-The runtime is a small C framework built around a bounded event queue, rollback-safe generated state storage, an instance-aware generated state store, a fixed-size runtime state registry, automatic read-only hook multithreading, and `select()`-based file descriptor readiness.
+The runtime is a small C framework built around a bounded event queue, rollback-safe generated state instances, an instance-aware generated state store, a fixed-size runtime state registry, automatic read-only hook multithreading, and `select()`-based file descriptor readiness.
 
 ```mermaid
 flowchart TB
     Runtime[KekRuntime]
     Dispatcher[KekEventDispatcher]
     StateRegistry[Runtime State Registry]
-    StateStorage[Generated State Storage]
+    StateStore[Generated State Store]
     StateInterface[KekRuntimeState callbacks]
     StreamState[KekStream]
     FD[File Descriptor]
@@ -23,7 +23,7 @@ flowchart TB
 
     Runtime --> Dispatcher
     Runtime --> StateRegistry
-    Runtime --> StateStorage
+    Runtime --> StateStore
     StateRegistry --> StateInterface
     StateInterface --> StreamState
     StreamState --> FD
@@ -48,9 +48,8 @@ flowchart TB
 | `runtime/trace.c` | Runtime and hook trace aggregation, runtime-owned memory counters, and CSV writing. |
 | `runtime/stream.h` | Stream state API and stream data structure. |
 | `runtime/stream.c` | Stream state implementation over file descriptors. |
-| `runtime/state_storage.h` | Rollback-safe generated state storage API. |
-| `runtime/state_storage.c` | Double-buffered single-object generated state storage. |
-| `runtime/state_store.c` | Instance-aware generated state store, slot updates, and state-store transactions. |
+| `runtime/state_store.h` | Unified generated state-store declarations, descriptors, handles, arena declarations, and update callback types. |
+| `runtime/state_store.c` | Arena-backed generated state store, instance updates, and state-store transactions. |
 
 ## Dependency Direction
 
@@ -73,9 +72,9 @@ The runtime does not depend on generated schema files. Generated code or applica
 
 ## Event Dispatch Architecture
 
-Events are published into a global ring buffer. Dispatch removes events from the ring buffer in FIFO order and invokes active subscribers for the event type. State-change events can identify the generated state type, concrete slot instance, and version. When the changed state fits in the fixed snapshot capacity, the event also carries copied state bytes for hooks that need the event-version value.
+Events are published into a global ring buffer. Dispatch removes events from the ring buffer in FIFO order and invokes active subscribers for the event type. State-change events can identify the generated state type, concrete instance handle, and version. When the changed state fits in the fixed snapshot capacity, the event also carries copied state bytes for hooks that need the event-version value.
 
-Generated hooks attach to the same dispatcher through `KekHookRegistry`. The registry keeps one idempotent event subscription per event type and invokes only descriptors whose trigger matches the event. Hook triggers may be state-wide across all slots of a generated state type, instance-specific to one resolved slot id, or filtered to specific changed field bits.
+Generated hooks attach to the same dispatcher through `KekHookRegistry`. The registry keeps one idempotent event subscription per event type and invokes only descriptors whose trigger matches the event. Hook triggers may be state-wide across all instances of a generated state type, instance-specific to one resolved handle, or filtered to specific changed field bits.
 
 ```mermaid
 flowchart LR
@@ -97,39 +96,41 @@ The runtime owns generic state slots. Each state implementation supplies callbac
 
 ## Generated State Store Architecture
 
-Generated state objects can be stored independently in `KekStateStore`. Each slot points to a generated descriptor and owns two buffers for validate-before-swap updates. Single-slot updates outside hook dispatch swap and publish immediately. Multi-slot updates prepare all drafts, validate all drafts, swap all active buffers, publish state-change events, and then publish one aggregate batch event only after the whole batch succeeds.
+Generated state objects are stored only in `KekStateStore`. A generated state descriptor describes the schema/type, including size, alignment, validation, merge behavior, and field metadata. Runtime instances are addressed through `KekStateHandle` values and backed by per-type arena-allocated AoS record pools. Each handle encodes the type id, a type-local pool index, and a generation; the per-type pool maps that index to the current internal backing slot and contiguous record position. Single-instance updates outside hook dispatch swap and publish immediately. Multi-instance updates prepare all drafts, validate all drafts, swap all active buffers, publish state-change events, and then publish one aggregate batch event only after the whole batch succeeds.
 
-Hook transactions use the same two buffers as a copy-on-write boundary. The store keeps a stack of active internal transactions. A transaction begins by recording the slot count only. Each touched slot gets a journal entry the first time it is updated, created, deleted, or reused. Existing-slot writes preserve the committed active buffer and mutate the inactive draft until the root hook transaction commits. That root commit is the state visibility boundary for hook execution.
+Hook transactions use per-instance drafts as a copy-on-write boundary. The store keeps a stack of active internal transactions. A transaction begins by recording the instance count only. Each touched instance gets a journal entry the first time it is updated, created, deleted, or reused. Existing-instance writes preserve the committed active buffer and mutate a draft until the root hook transaction commits. That root commit is the state visibility boundary for hook execution.
 
 ```mermaid
 flowchart LR
     Descriptor[KekStateDescriptor]
-    SlotA[State Slot 0]
-    SlotB[State Slot 1]
-    Active[Active Buffer]
-    Draft[Draft Buffer]
+    Pool[Per-Type Pool]
+    Active[Active AoS Records]
+    Draft[Draft AoS Records]
+    SlotA[Slot Metadata 0]
+    SlotB[Slot Metadata 1]
     Event[State Changed Event]
 
-    Descriptor --> SlotA
-    Descriptor --> SlotB
-    SlotA --> Active
-    SlotA --> Draft
+    Descriptor --> Pool
+    Pool --> Active
+    Pool --> Draft
+    Pool --> SlotA
+    Pool --> SlotB
     SlotA --> Event
 ```
 
-Several slots may share one descriptor, enabling multiple instances of one state type.
+Several instances may share one descriptor, enabling multiple runtime values of one generated state type.
 
 ## Hook Architecture
 
-Hook descriptors declare their trigger plus legacy read/write state type dependencies and optional precise access metadata. The runtime hook registry indexes descriptors into fixed per-event-type buckets for wildcard-state hooks and fixed per-event/per-state buckets for exact-state hooks. Dispatch visits the wildcard event bucket and the exact state bucket for the incoming event before applying slot and changed-field filters. While a hook body runs, the state store checks writes against precise access metadata when available, falling back to legacy writable state types for older descriptors. Exact-slot access authorizes only that slot.
+Hook descriptors declare their trigger plus legacy read/write state type dependencies and optional precise access metadata. The runtime hook registry indexes descriptors into fixed per-event-type buckets for wildcard-state hooks and fixed per-event/per-state buckets for exact-state hooks. Dispatch visits the wildcard event bucket and the exact state bucket for the incoming event before applying instance-handle and changed-field filters. While a hook body runs, the state store checks writes against precise access metadata when available, falling back to legacy writable state types for older descriptors. Exact-instance access authorizes only that handle.
 
 The bucket index is stored inside `KekHookRegistry`, rebuilt at attach time, and uses descriptor indices rather than extra descriptor copies. Registration and dynamic hook loading remain explicit safe-point operations, which keeps the dispatch path read-only over registry indexing data and leaves room for future lock or copy-and-swap synchronization.
 
 Hook bodies normally read committed state through `KekStateStore`. Transactional writes made earlier in the same hook are chained internally through the transaction draft rather than exposed as public draft pointers. When hooks need the exact triggering version, they can read the copied snapshot from the triggering event through `kek_hook_event_state()`.
 
-The registry can run adjacent read-only hooks concurrently when descriptors declare concrete read dependencies and no write dependencies. With precise access metadata, it can also run adjacent write hooks concurrently when every write is exact-slot, access sets do not conflict, and the descriptor explicitly allows parallel writes. Same-slot writes are only considered independent when both descriptors opt into field merging and their field masks are known and disjoint.
+The registry can run adjacent read-only hooks concurrently when descriptors declare concrete read dependencies and no write dependencies. With precise access metadata, it can also run adjacent write hooks concurrently when every write is exact-instance, access sets do not conflict, and the descriptor explicitly allows parallel writes. Same-instance writes are only considered independent when both descriptors opt into field merging and their field masks are known and disjoint.
 
-Each worker receives a cloned runtime, event queue, and committed state-store snapshot; the main runtime remains the only owner of the real event queue and committed store. After a parallel wave completes successfully, the main thread applies each worker result in descriptor order. Exact-slot writes copy or merge the worker's committed slot value into the live store, validate the live draft, refresh state-event snapshots from the committed live slot, and replay buffered worker events in descriptor order. Hooks with opaque access, create/delete access, unknown dependencies, broad write conflicts, or dynamic hook uncertainty continue through the serial transaction path.
+Each worker receives a cloned runtime and event queue plus a sparse state-store overlay. The overlay borrows committed pool metadata and active records read-only and allocates arena-backed drafts only for instances the worker writes. The main runtime remains the only owner of the real event queue and committed store. After a parallel wave completes successfully, the main thread applies each worker result in descriptor order. Exact-instance writes copy or merge the worker's draft value into the live store, validate the live draft, refresh state-event snapshots from the committed live instance, and replay buffered worker events in descriptor order. Hooks with opaque access, create/delete access, unknown dependencies, broad write conflicts, or dynamic hook uncertainty continue through the serial transaction path.
 
 In debug builds compiled with `KEK_HOOK_DYNAMIC`, the registry owns mutable descriptor copies and can replace their `run` pointers from a dynamic library. The loader resolves every registered hook by descriptor name before swapping any functions, so a failed reload keeps the previous implementation active. Reloading is manual and should be called by the host at a known safe point, such as before dispatch in a frame loop.
 
@@ -205,4 +206,4 @@ flowchart LR
 - Fixed stream buffer capacity.
 - Fixed state-change snapshot capacity.
 - Synchronous subscriber invocation.
-- Generated state storage owns two caller-sized state buffers.
+- Generated state instances keep committed/draft records in the arena-backed state store.

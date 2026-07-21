@@ -15,6 +15,7 @@
 #define KEK_HOOK_SCHEDULING_OPAQUE (1u << 0)
 #define KEK_HOOK_SCHEDULING_ALLOW_PARALLEL_WRITES (1u << 1)
 #define KEK_HOOK_SCHEDULING_FIELD_MERGE_SAFE (1u << 2)
+#define KEK_HOOK_SCHEDULING_NEEDS_EVENT_STATE (1u << 3)
 
 struct KekRuntime;
 struct KekStateStore;

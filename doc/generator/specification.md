@@ -129,6 +129,7 @@ Parser rules:
 - Typed state slots may use `values` to override initial field values for that slot.
 - `StandardInput` and `StandardOutput` support `config.buffer_size`, which sets the generated String `max` constraint and generated binding buffer size for their text field.
 - `Timer` interval and enablement are configured through `values.interval_ms` and `values.enabled`.
+- State type declarations may set `pool_capacity` to hint the runtime's per-type record-pool capacity. A value of `0` or an omitted value keeps the runtime fallback capacity.
 - `StandardInput` and `StandardOutput` may only be declared once. `Timer` may be declared multiple times.
 - Each custom state type must contain one or more fields.
 - Field names must match `[A-Za-z_][A-Za-z0-9_]*`.
@@ -189,14 +190,14 @@ The generated header contains:
 - A generated state type enum.
 - Void-pointer adapter declarations for descriptor use.
 - A generated `KekStateDescriptor` table declaration.
-- A generated helper for adding one default `KekStateStore` slot per generated state type.
+- A generated helper for adding one default `KekStateStore` instance per generated state type.
 - A generated named slot struct and helpers for adding/removing/resetting schema-declared instances in `KekStateStore`.
-- A generated runtime binding struct that owns `KekStateStore`, `KekHookRegistry`, and declared slot ids for a caller-owned `KekRuntime`.
+- A generated runtime binding struct that owns `KekStateStore`, `KekHookRegistry`, and declared handles for a caller-owned `KekRuntime`.
 - A generated runtime wrapper that owns the low-level runtime app, generated declared slots, generated hook descriptors, and any generated string backing buffers.
 - Generated runtime-wrapper accessors for the underlying `KekRuntime`, `KekStateStore`, declared slots, event dispatch, and named declared-instance reads.
 - Generated per-state create/create-with-initial/delete/find helpers for dynamic instances, both for raw `KekStateStore` callers and generated runtime-wrapper callers.
-- Generated typed accessors for named instances and arbitrary slot ids.
-- A generated `<Name>UpdateItem` batch item alias plus generated update helpers, update-item builders, count helpers, declared-slot predicates, and scalar field setters so application code does not need to stitch together store pointers and slot ids for common operations.
+- Generated typed accessors for named instances and arbitrary handles.
+- A generated `<Name>UpdateItem` batch item alias plus generated update helpers, update-item builders, count helpers, declared-instance predicates, and scalar field setters so application code does not need to stitch together store pointers and handles for common operations.
 - Generated string-field setter helpers for single-string states, useful for standard input/output bridge code.
 - Generated hook function declarations.
 - A generated hook descriptor table declaration.
@@ -222,6 +223,8 @@ The generated source contains:
 - Generated hook access descriptor arrays for precise scheduling, with named-instance access slots patched during generated runtime binding initialization.
 - A generated hook descriptor table.
 
+Hooks that call `kek_hook_event_state()` declare `"needs_event_state": true` in the schema. The generator lowers that to `KEK_HOOK_SCHEDULING_NEEDS_EVENT_STATE`, allowing the runtime to keep state-event snapshots lazy for hooks that only read through store handles.
+
 Default constructors zero-initialize the state first and then assign every field default. Array fields are assigned element-by-element from the declared default array.
 
 Additional constructors call the default constructor first and then assign their partial override values. Array overrides replace the whole generated array element-by-element.
@@ -230,29 +233,29 @@ Check functions return `0` when the state pointer is null or any generated `min`
 
 Reset functions return `0` when the state pointer is null. Otherwise, they assign the corresponding default value into the existing object and return the result of the corresponding check function.
 
-Generated structs expose their fields directly. Callers that need rollback-safe validation should update through `KekStateStore` or `KekStateStorage`, which validate the complete draft before swapping it into place.
+Generated structs expose their fields directly. Callers that need rollback-safe validation should update through `KekStateStore`, which validates the complete draft before swapping it into place.
 
 Each generated state field has a bitmask macro named `<STATE_TYPE_MACRO>_FIELD_<FIELD_NAME>`, used in state-change events and generated hook field filters.
 
-Each generated state descriptor includes a generated field-merge helper. The runtime uses this helper only for opt-in same-slot parallel write merging, copying the fields identified by a generated field mask from a worker result into the live state draft.
+Each generated state descriptor includes a generated field-merge helper and field metadata entries containing field name, mask, offset, size, alignment, and blob/string classification. The runtime stores instances in per-type contiguous AoS record pools and uses the merge helper for opt-in same-instance parallel write merging. The metadata keeps the current AoS generated structs ready for future per-field pool layouts.
 
-`kek_generated_state_store_add_defaults()` adds one default-initialized slot for each generated state type and writes the created slot ids into a caller-provided `size_t slot_ids[KEK_STATE_TYPE_COUNT]` array.
+`kek_generated_state_store_add_defaults()` adds one default-initialized instance for each generated state type and writes the created handles into a caller-provided `KekStateHandle handles[KEK_STATE_TYPE_COUNT]` array.
 
-`<name>_state_slots_add_declared()` adds the schema-declared instances to `KekStateStore` and writes their slot ids into the generated `<Name>StateSlots` struct. The slot struct stores only ids; `KekStateStore` remains the source of truth for all instance data.
+`<name>_state_slots_add_declared()` adds the schema-declared instances to `KekStateStore` and writes their handles into the generated `<Name>StateSlots` struct. The struct stores only handles; `KekStateStore` remains the source of truth for all instance data.
 
 `<name>_state_slots_reset_declared()` resets all currently declared slots through one transactional batch update.
 
 Generated `<name>_<state>_create()` and `<name>_<state>_create_with()` helpers create dynamic instances through `KekStateStore`. The `create_with` variant accepts an already initialized state value and publishes only the created event for that initialized value. Generated `<name>_<state>_delete()` helpers delete dynamic instances.
 
-`<name>_runtime_init()` is the recommended application-facing lifecycle helper. It initializes a generated `<Name>Runtime` object that owns a `KekRuntimeApp`, adds declared instances, resolves declared-instance hook slot ids, registers generated hook descriptors, and attaches the hook registry. `<name>_runtime_destroy()` detaches hooks, destroys the generated store, destroys the runtime, and clears the wrapper object.
+`<name>_runtime_init()` is the recommended application-facing lifecycle helper. It initializes a generated `<Name>Runtime` object that owns a `KekRuntimeApp`, adds declared instances, resolves declared-instance hook handles, registers generated hook descriptors, and attaches the hook registry. `<name>_runtime_destroy()` detaches hooks, destroys the generated store, destroys the runtime, and clears the wrapper object.
 
 `<name>_get_runtime()`, `<name>_get_store()`, `<name>_get_slots()`, and const variants expose the wrapper internals for integrations that still need low-level runtime, store, or slot APIs. `<name>_dispatch()` dispatches pending runtime events for host loops that drive their own frame lifecycle.
 
 For batch updates, the generator emits `<Name>UpdateItem` as the generated-project-facing alias for runtime store update items, plus `<name>_update_many()`.
 
-For each state, the generator emits runtime-scoped helpers named `<name>_create_<state>()`, `<name>_create_<state>_with()`, `<name>_delete_<state>()`, `<name>_<state>_at()`, `<name>_<state>_at_const()`, `<name>_first_<state>()`, `<name>_next_<state>()`, `<name>_count_<state>()`, `<name>_update_<state>_slot()`, and `<name>_<state>_slot_update_item()`. For states with a scalar `bool active` field, it also emits `<name>_count_active_<state>()`.
+For each state, the generator emits runtime-scoped helpers named `<name>_create_<state>()`, `<name>_create_<state>_with()`, `<name>_delete_<state>()`, `<name>_<state>_at()`, `<name>_<state>_at_const()`, `<name>_first_<state>()`, `<name>_next_<state>()`, `<name>_count_<state>()`, `<name>_update_<state>_instance()`, and `<name>_<state>_instance_update_item()`. Store-scoped typed accessors use `<name>_<state>_instance()` and `<name>_<state>_instance_const()`. For states with a scalar `bool active` field, it also emits `<name>_count_active_<state>()`.
 
-For each declared instance, the generator emits `<name>_<instance>_current()`, `<name>_<instance>_current_const()`, `<name>_<instance>_slot_id()`, `<name>_update_<instance>()`, and `<name>_<instance>_update_item()` helpers. These are convenience wrappers around the generated typed slot accessors and the runtime wrapper's declared slot table. When a state has multiple named instances, the generator also emits `<name>_is_declared_<state>_slot()` predicates for filtering dynamic slots.
+For each declared instance, the generator emits `<name>_<instance>_current()`, `<name>_<instance>_current_const()`, `<name>_<instance>_handle()`, `<name>_update_<instance>()`, and `<name>_<instance>_update_item()` helpers. These are convenience wrappers around the generated typed instance accessors and the runtime wrapper's declared handle table. When a state has multiple named instances, the generator also emits `<name>_is_declared_<state>_handle()` predicates for filtering dynamic instances. Slot-named wrappers are still emitted as compatibility aliases while callers migrate to handle/instance terminology.
 
 For scalar non-`String` fields, the generator emits raw-store setters named `<name>_<state>_set_<field>()`, runtime-scoped arbitrary-slot setters named `<name>_set_<state>_slot_<field>()`, and declared-instance setters named `<name>_set_<instance>_<field>()`. Existing generated `String` setters keep their string-specific `(data, len)` API.
 

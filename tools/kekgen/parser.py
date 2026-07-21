@@ -173,8 +173,18 @@ def parse_states(state_items: list[object]) -> list[State]:
 
         fields, field_names = parse_fields(state_name, state_item.get("fields"))
         constructors = parse_constructors(state_name, state_item.get("constructors", []), field_names)
-        states.append(State(state_name, fields, constructors))
+        pool_capacity = parse_optional_nonnegative_int(
+            state_item.get("pool_capacity", 0),
+            f"{state_name}.pool_capacity",
+        )
+        states.append(State(state_name, fields, constructors, pool_capacity))
     return states
+
+
+def parse_optional_nonnegative_int(value: object, label: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError(f"{label} must be a non-negative integer")
+    return value
 
 
 def parse_fields(state_name: str, field_items: object) -> tuple[list[Field], set[str]]:
@@ -292,6 +302,7 @@ def parse_hooks(hook_items: object, instances: list[Instance] | None = None) -> 
                 access_declared,
                 scheduling_opaque,
                 field_merge_safe,
+                bool(hook_item.get("needs_event_state", False)),
             )
         )
     return hooks

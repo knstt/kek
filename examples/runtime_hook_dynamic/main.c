@@ -3,7 +3,7 @@
 
 #include "dynamic_hook_smoke.h"
 #include "runtime/runtime.h"
-#include "runtime/state_storage.h"
+#include "runtime/state_store.h"
 
 #define DYNAMIC_SMOKE_STATE_TYPE 100
 
@@ -47,13 +47,12 @@ int main(int argc, char** argv) {
     kek_hook_registry_init(&registry, &runtime, &store, &app);
 
     KekStateDescriptor state_descriptor = {
-        DYNAMIC_SMOKE_STATE_TYPE,
-        "DynamicSmokeState",
-        sizeof(DynamicSmokeState),
-        dynamic_smoke_default,
-        dynamic_smoke_check,
-        NULL,
-        NULL,
+        .type_id = DYNAMIC_SMOKE_STATE_TYPE,
+        .name = "DynamicSmokeState",
+        .size = sizeof(DynamicSmokeState),
+        .alignment = _Alignof(DynamicSmokeState),
+        .set_default = dynamic_smoke_default,
+        .check = dynamic_smoke_check,
     };
     size_t slot_id = kek_state_store_add_default(&store, &state_descriptor);
     if (slot_id == KEK_STATE_INVALID_ID) {

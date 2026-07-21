@@ -1123,96 +1123,692 @@ int HudMessage_merge_fields(void* target, const void* source, uint64_t fields) {
     return 1;
 }
 
+static const KekStateFieldDescriptor FrameClock_FieldDescriptors[] = {
+    {
+        .name = "tick",
+        .mask = KEK_STATE_TYPE_FRAME_CLOCK_FIELD_TICK,
+        .offset = offsetof(FrameClock, tick),
+        .size = sizeof(((FrameClock*)0)->tick),
+        .alignment = _Alignof(__typeof__(((FrameClock*)0)->tick)),
+        .is_blob = 0,
+    },
+    {
+        .name = "dt",
+        .mask = KEK_STATE_TYPE_FRAME_CLOCK_FIELD_DT,
+        .offset = offsetof(FrameClock, dt),
+        .size = sizeof(((FrameClock*)0)->dt),
+        .alignment = _Alignof(__typeof__(((FrameClock*)0)->dt)),
+        .is_blob = 0,
+    },
+};
+
+static const KekStateFieldDescriptor GameSession_FieldDescriptors[] = {
+    {
+        .name = "mode",
+        .mask = KEK_STATE_TYPE_GAME_SESSION_FIELD_MODE,
+        .offset = offsetof(GameSession, mode),
+        .size = sizeof(((GameSession*)0)->mode),
+        .alignment = _Alignof(__typeof__(((GameSession*)0)->mode)),
+        .is_blob = 0,
+    },
+    {
+        .name = "score",
+        .mask = KEK_STATE_TYPE_GAME_SESSION_FIELD_SCORE,
+        .offset = offsetof(GameSession, score),
+        .size = sizeof(((GameSession*)0)->score),
+        .alignment = _Alignof(__typeof__(((GameSession*)0)->score)),
+        .is_blob = 0,
+    },
+    {
+        .name = "combo",
+        .mask = KEK_STATE_TYPE_GAME_SESSION_FIELD_COMBO,
+        .offset = offsetof(GameSession, combo),
+        .size = sizeof(((GameSession*)0)->combo),
+        .alignment = _Alignof(__typeof__(((GameSession*)0)->combo)),
+        .is_blob = 0,
+    },
+    {
+        .name = "combo_timer",
+        .mask = KEK_STATE_TYPE_GAME_SESSION_FIELD_COMBO_TIMER,
+        .offset = offsetof(GameSession, combo_timer),
+        .size = sizeof(((GameSession*)0)->combo_timer),
+        .alignment = _Alignof(__typeof__(((GameSession*)0)->combo_timer)),
+        .is_blob = 0,
+    },
+    {
+        .name = "time_alive",
+        .mask = KEK_STATE_TYPE_GAME_SESSION_FIELD_TIME_ALIVE,
+        .offset = offsetof(GameSession, time_alive),
+        .size = sizeof(((GameSession*)0)->time_alive),
+        .alignment = _Alignof(__typeof__(((GameSession*)0)->time_alive)),
+        .is_blob = 0,
+    },
+    {
+        .name = "shake",
+        .mask = KEK_STATE_TYPE_GAME_SESSION_FIELD_SHAKE,
+        .offset = offsetof(GameSession, shake),
+        .size = sizeof(((GameSession*)0)->shake),
+        .alignment = _Alignof(__typeof__(((GameSession*)0)->shake)),
+        .is_blob = 0,
+    },
+    {
+        .name = "next_upgrade_score",
+        .mask = KEK_STATE_TYPE_GAME_SESSION_FIELD_NEXT_UPGRADE_SCORE,
+        .offset = offsetof(GameSession, next_upgrade_score),
+        .size = sizeof(((GameSession*)0)->next_upgrade_score),
+        .alignment = _Alignof(__typeof__(((GameSession*)0)->next_upgrade_score)),
+        .is_blob = 0,
+    },
+    {
+        .name = "debug",
+        .mask = KEK_STATE_TYPE_GAME_SESSION_FIELD_DEBUG,
+        .offset = offsetof(GameSession, debug),
+        .size = sizeof(((GameSession*)0)->debug),
+        .alignment = _Alignof(__typeof__(((GameSession*)0)->debug)),
+        .is_blob = 0,
+    },
+};
+
+static const KekStateFieldDescriptor InputIntent_FieldDescriptors[] = {
+    {
+        .name = "move_x",
+        .mask = KEK_STATE_TYPE_INPUT_INTENT_FIELD_MOVE_X,
+        .offset = offsetof(InputIntent, move_x),
+        .size = sizeof(((InputIntent*)0)->move_x),
+        .alignment = _Alignof(__typeof__(((InputIntent*)0)->move_x)),
+        .is_blob = 0,
+    },
+    {
+        .name = "move_y",
+        .mask = KEK_STATE_TYPE_INPUT_INTENT_FIELD_MOVE_Y,
+        .offset = offsetof(InputIntent, move_y),
+        .size = sizeof(((InputIntent*)0)->move_y),
+        .alignment = _Alignof(__typeof__(((InputIntent*)0)->move_y)),
+        .is_blob = 0,
+    },
+    {
+        .name = "aim_x",
+        .mask = KEK_STATE_TYPE_INPUT_INTENT_FIELD_AIM_X,
+        .offset = offsetof(InputIntent, aim_x),
+        .size = sizeof(((InputIntent*)0)->aim_x),
+        .alignment = _Alignof(__typeof__(((InputIntent*)0)->aim_x)),
+        .is_blob = 0,
+    },
+    {
+        .name = "aim_y",
+        .mask = KEK_STATE_TYPE_INPUT_INTENT_FIELD_AIM_Y,
+        .offset = offsetof(InputIntent, aim_y),
+        .size = sizeof(((InputIntent*)0)->aim_y),
+        .alignment = _Alignof(__typeof__(((InputIntent*)0)->aim_y)),
+        .is_blob = 0,
+    },
+    {
+        .name = "shoot",
+        .mask = KEK_STATE_TYPE_INPUT_INTENT_FIELD_SHOOT,
+        .offset = offsetof(InputIntent, shoot),
+        .size = sizeof(((InputIntent*)0)->shoot),
+        .alignment = _Alignof(__typeof__(((InputIntent*)0)->shoot)),
+        .is_blob = 0,
+    },
+    {
+        .name = "dash",
+        .mask = KEK_STATE_TYPE_INPUT_INTENT_FIELD_DASH,
+        .offset = offsetof(InputIntent, dash),
+        .size = sizeof(((InputIntent*)0)->dash),
+        .alignment = _Alignof(__typeof__(((InputIntent*)0)->dash)),
+        .is_blob = 0,
+    },
+    {
+        .name = "pause",
+        .mask = KEK_STATE_TYPE_INPUT_INTENT_FIELD_PAUSE,
+        .offset = offsetof(InputIntent, pause),
+        .size = sizeof(((InputIntent*)0)->pause),
+        .alignment = _Alignof(__typeof__(((InputIntent*)0)->pause)),
+        .is_blob = 0,
+    },
+    {
+        .name = "confirm",
+        .mask = KEK_STATE_TYPE_INPUT_INTENT_FIELD_CONFIRM,
+        .offset = offsetof(InputIntent, confirm),
+        .size = sizeof(((InputIntent*)0)->confirm),
+        .alignment = _Alignof(__typeof__(((InputIntent*)0)->confirm)),
+        .is_blob = 0,
+    },
+};
+
+static const KekStateFieldDescriptor Player_FieldDescriptors[] = {
+    {
+        .name = "x",
+        .mask = KEK_STATE_TYPE_PLAYER_FIELD_X,
+        .offset = offsetof(Player, x),
+        .size = sizeof(((Player*)0)->x),
+        .alignment = _Alignof(__typeof__(((Player*)0)->x)),
+        .is_blob = 0,
+    },
+    {
+        .name = "y",
+        .mask = KEK_STATE_TYPE_PLAYER_FIELD_Y,
+        .offset = offsetof(Player, y),
+        .size = sizeof(((Player*)0)->y),
+        .alignment = _Alignof(__typeof__(((Player*)0)->y)),
+        .is_blob = 0,
+    },
+    {
+        .name = "vx",
+        .mask = KEK_STATE_TYPE_PLAYER_FIELD_VX,
+        .offset = offsetof(Player, vx),
+        .size = sizeof(((Player*)0)->vx),
+        .alignment = _Alignof(__typeof__(((Player*)0)->vx)),
+        .is_blob = 0,
+    },
+    {
+        .name = "vy",
+        .mask = KEK_STATE_TYPE_PLAYER_FIELD_VY,
+        .offset = offsetof(Player, vy),
+        .size = sizeof(((Player*)0)->vy),
+        .alignment = _Alignof(__typeof__(((Player*)0)->vy)),
+        .is_blob = 0,
+    },
+    {
+        .name = "health",
+        .mask = KEK_STATE_TYPE_PLAYER_FIELD_HEALTH,
+        .offset = offsetof(Player, health),
+        .size = sizeof(((Player*)0)->health),
+        .alignment = _Alignof(__typeof__(((Player*)0)->health)),
+        .is_blob = 0,
+    },
+    {
+        .name = "max_health",
+        .mask = KEK_STATE_TYPE_PLAYER_FIELD_MAX_HEALTH,
+        .offset = offsetof(Player, max_health),
+        .size = sizeof(((Player*)0)->max_health),
+        .alignment = _Alignof(__typeof__(((Player*)0)->max_health)),
+        .is_blob = 0,
+    },
+    {
+        .name = "shield",
+        .mask = KEK_STATE_TYPE_PLAYER_FIELD_SHIELD,
+        .offset = offsetof(Player, shield),
+        .size = sizeof(((Player*)0)->shield),
+        .alignment = _Alignof(__typeof__(((Player*)0)->shield)),
+        .is_blob = 0,
+    },
+    {
+        .name = "xp",
+        .mask = KEK_STATE_TYPE_PLAYER_FIELD_XP,
+        .offset = offsetof(Player, xp),
+        .size = sizeof(((Player*)0)->xp),
+        .alignment = _Alignof(__typeof__(((Player*)0)->xp)),
+        .is_blob = 0,
+    },
+    {
+        .name = "level",
+        .mask = KEK_STATE_TYPE_PLAYER_FIELD_LEVEL,
+        .offset = offsetof(Player, level),
+        .size = sizeof(((Player*)0)->level),
+        .alignment = _Alignof(__typeof__(((Player*)0)->level)),
+        .is_blob = 0,
+    },
+    {
+        .name = "fire_cooldown",
+        .mask = KEK_STATE_TYPE_PLAYER_FIELD_FIRE_COOLDOWN,
+        .offset = offsetof(Player, fire_cooldown),
+        .size = sizeof(((Player*)0)->fire_cooldown),
+        .alignment = _Alignof(__typeof__(((Player*)0)->fire_cooldown)),
+        .is_blob = 0,
+    },
+    {
+        .name = "dash_cooldown",
+        .mask = KEK_STATE_TYPE_PLAYER_FIELD_DASH_COOLDOWN,
+        .offset = offsetof(Player, dash_cooldown),
+        .size = sizeof(((Player*)0)->dash_cooldown),
+        .alignment = _Alignof(__typeof__(((Player*)0)->dash_cooldown)),
+        .is_blob = 0,
+    },
+    {
+        .name = "rapid_timer",
+        .mask = KEK_STATE_TYPE_PLAYER_FIELD_RAPID_TIMER,
+        .offset = offsetof(Player, rapid_timer),
+        .size = sizeof(((Player*)0)->rapid_timer),
+        .alignment = _Alignof(__typeof__(((Player*)0)->rapid_timer)),
+        .is_blob = 0,
+    },
+    {
+        .name = "invulnerable_timer",
+        .mask = KEK_STATE_TYPE_PLAYER_FIELD_INVULNERABLE_TIMER,
+        .offset = offsetof(Player, invulnerable_timer),
+        .size = sizeof(((Player*)0)->invulnerable_timer),
+        .alignment = _Alignof(__typeof__(((Player*)0)->invulnerable_timer)),
+        .is_blob = 0,
+    },
+};
+
+static const KekStateFieldDescriptor WaveDirector_FieldDescriptors[] = {
+    {
+        .name = "wave",
+        .mask = KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_WAVE,
+        .offset = offsetof(WaveDirector, wave),
+        .size = sizeof(((WaveDirector*)0)->wave),
+        .alignment = _Alignof(__typeof__(((WaveDirector*)0)->wave)),
+        .is_blob = 0,
+    },
+    {
+        .name = "spawn_budget",
+        .mask = KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_SPAWN_BUDGET,
+        .offset = offsetof(WaveDirector, spawn_budget),
+        .size = sizeof(((WaveDirector*)0)->spawn_budget),
+        .alignment = _Alignof(__typeof__(((WaveDirector*)0)->spawn_budget)),
+        .is_blob = 0,
+    },
+    {
+        .name = "spawn_timer",
+        .mask = KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_SPAWN_TIMER,
+        .offset = offsetof(WaveDirector, spawn_timer),
+        .size = sizeof(((WaveDirector*)0)->spawn_timer),
+        .alignment = _Alignof(__typeof__(((WaveDirector*)0)->spawn_timer)),
+        .is_blob = 0,
+    },
+    {
+        .name = "active_enemies",
+        .mask = KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_ACTIVE_ENEMIES,
+        .offset = offsetof(WaveDirector, active_enemies),
+        .size = sizeof(((WaveDirector*)0)->active_enemies),
+        .alignment = _Alignof(__typeof__(((WaveDirector*)0)->active_enemies)),
+        .is_blob = 0,
+    },
+    {
+        .name = "boss_spawned",
+        .mask = KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_BOSS_SPAWNED,
+        .offset = offsetof(WaveDirector, boss_spawned),
+        .size = sizeof(((WaveDirector*)0)->boss_spawned),
+        .alignment = _Alignof(__typeof__(((WaveDirector*)0)->boss_spawned)),
+        .is_blob = 0,
+    },
+};
+
+static const KekStateFieldDescriptor CameraRig_FieldDescriptors[] = {
+    {
+        .name = "x",
+        .mask = KEK_STATE_TYPE_CAMERA_RIG_FIELD_X,
+        .offset = offsetof(CameraRig, x),
+        .size = sizeof(((CameraRig*)0)->x),
+        .alignment = _Alignof(__typeof__(((CameraRig*)0)->x)),
+        .is_blob = 0,
+    },
+    {
+        .name = "y",
+        .mask = KEK_STATE_TYPE_CAMERA_RIG_FIELD_Y,
+        .offset = offsetof(CameraRig, y),
+        .size = sizeof(((CameraRig*)0)->y),
+        .alignment = _Alignof(__typeof__(((CameraRig*)0)->y)),
+        .is_blob = 0,
+    },
+    {
+        .name = "zoom",
+        .mask = KEK_STATE_TYPE_CAMERA_RIG_FIELD_ZOOM,
+        .offset = offsetof(CameraRig, zoom),
+        .size = sizeof(((CameraRig*)0)->zoom),
+        .alignment = _Alignof(__typeof__(((CameraRig*)0)->zoom)),
+        .is_blob = 0,
+    },
+};
+
+static const KekStateFieldDescriptor Enemy_FieldDescriptors[] = {
+    {
+        .name = "kind",
+        .mask = KEK_STATE_TYPE_ENEMY_FIELD_KIND,
+        .offset = offsetof(Enemy, kind),
+        .size = sizeof(((Enemy*)0)->kind),
+        .alignment = _Alignof(__typeof__(((Enemy*)0)->kind)),
+        .is_blob = 0,
+    },
+    {
+        .name = "x",
+        .mask = KEK_STATE_TYPE_ENEMY_FIELD_X,
+        .offset = offsetof(Enemy, x),
+        .size = sizeof(((Enemy*)0)->x),
+        .alignment = _Alignof(__typeof__(((Enemy*)0)->x)),
+        .is_blob = 0,
+    },
+    {
+        .name = "y",
+        .mask = KEK_STATE_TYPE_ENEMY_FIELD_Y,
+        .offset = offsetof(Enemy, y),
+        .size = sizeof(((Enemy*)0)->y),
+        .alignment = _Alignof(__typeof__(((Enemy*)0)->y)),
+        .is_blob = 0,
+    },
+    {
+        .name = "vx",
+        .mask = KEK_STATE_TYPE_ENEMY_FIELD_VX,
+        .offset = offsetof(Enemy, vx),
+        .size = sizeof(((Enemy*)0)->vx),
+        .alignment = _Alignof(__typeof__(((Enemy*)0)->vx)),
+        .is_blob = 0,
+    },
+    {
+        .name = "vy",
+        .mask = KEK_STATE_TYPE_ENEMY_FIELD_VY,
+        .offset = offsetof(Enemy, vy),
+        .size = sizeof(((Enemy*)0)->vy),
+        .alignment = _Alignof(__typeof__(((Enemy*)0)->vy)),
+        .is_blob = 0,
+    },
+    {
+        .name = "health",
+        .mask = KEK_STATE_TYPE_ENEMY_FIELD_HEALTH,
+        .offset = offsetof(Enemy, health),
+        .size = sizeof(((Enemy*)0)->health),
+        .alignment = _Alignof(__typeof__(((Enemy*)0)->health)),
+        .is_blob = 0,
+    },
+    {
+        .name = "damage",
+        .mask = KEK_STATE_TYPE_ENEMY_FIELD_DAMAGE,
+        .offset = offsetof(Enemy, damage),
+        .size = sizeof(((Enemy*)0)->damage),
+        .alignment = _Alignof(__typeof__(((Enemy*)0)->damage)),
+        .is_blob = 0,
+    },
+    {
+        .name = "radius",
+        .mask = KEK_STATE_TYPE_ENEMY_FIELD_RADIUS,
+        .offset = offsetof(Enemy, radius),
+        .size = sizeof(((Enemy*)0)->radius),
+        .alignment = _Alignof(__typeof__(((Enemy*)0)->radius)),
+        .is_blob = 0,
+    },
+    {
+        .name = "flash",
+        .mask = KEK_STATE_TYPE_ENEMY_FIELD_FLASH,
+        .offset = offsetof(Enemy, flash),
+        .size = sizeof(((Enemy*)0)->flash),
+        .alignment = _Alignof(__typeof__(((Enemy*)0)->flash)),
+        .is_blob = 0,
+    },
+    {
+        .name = "active",
+        .mask = KEK_STATE_TYPE_ENEMY_FIELD_ACTIVE,
+        .offset = offsetof(Enemy, active),
+        .size = sizeof(((Enemy*)0)->active),
+        .alignment = _Alignof(__typeof__(((Enemy*)0)->active)),
+        .is_blob = 0,
+    },
+};
+
+static const KekStateFieldDescriptor Projectile_FieldDescriptors[] = {
+    {
+        .name = "x",
+        .mask = KEK_STATE_TYPE_PROJECTILE_FIELD_X,
+        .offset = offsetof(Projectile, x),
+        .size = sizeof(((Projectile*)0)->x),
+        .alignment = _Alignof(__typeof__(((Projectile*)0)->x)),
+        .is_blob = 0,
+    },
+    {
+        .name = "y",
+        .mask = KEK_STATE_TYPE_PROJECTILE_FIELD_Y,
+        .offset = offsetof(Projectile, y),
+        .size = sizeof(((Projectile*)0)->y),
+        .alignment = _Alignof(__typeof__(((Projectile*)0)->y)),
+        .is_blob = 0,
+    },
+    {
+        .name = "vx",
+        .mask = KEK_STATE_TYPE_PROJECTILE_FIELD_VX,
+        .offset = offsetof(Projectile, vx),
+        .size = sizeof(((Projectile*)0)->vx),
+        .alignment = _Alignof(__typeof__(((Projectile*)0)->vx)),
+        .is_blob = 0,
+    },
+    {
+        .name = "vy",
+        .mask = KEK_STATE_TYPE_PROJECTILE_FIELD_VY,
+        .offset = offsetof(Projectile, vy),
+        .size = sizeof(((Projectile*)0)->vy),
+        .alignment = _Alignof(__typeof__(((Projectile*)0)->vy)),
+        .is_blob = 0,
+    },
+    {
+        .name = "life",
+        .mask = KEK_STATE_TYPE_PROJECTILE_FIELD_LIFE,
+        .offset = offsetof(Projectile, life),
+        .size = sizeof(((Projectile*)0)->life),
+        .alignment = _Alignof(__typeof__(((Projectile*)0)->life)),
+        .is_blob = 0,
+    },
+    {
+        .name = "damage",
+        .mask = KEK_STATE_TYPE_PROJECTILE_FIELD_DAMAGE,
+        .offset = offsetof(Projectile, damage),
+        .size = sizeof(((Projectile*)0)->damage),
+        .alignment = _Alignof(__typeof__(((Projectile*)0)->damage)),
+        .is_blob = 0,
+    },
+    {
+        .name = "pierce",
+        .mask = KEK_STATE_TYPE_PROJECTILE_FIELD_PIERCE,
+        .offset = offsetof(Projectile, pierce),
+        .size = sizeof(((Projectile*)0)->pierce),
+        .alignment = _Alignof(__typeof__(((Projectile*)0)->pierce)),
+        .is_blob = 0,
+    },
+};
+
+static const KekStateFieldDescriptor Pickup_FieldDescriptors[] = {
+    {
+        .name = "kind",
+        .mask = KEK_STATE_TYPE_PICKUP_FIELD_KIND,
+        .offset = offsetof(Pickup, kind),
+        .size = sizeof(((Pickup*)0)->kind),
+        .alignment = _Alignof(__typeof__(((Pickup*)0)->kind)),
+        .is_blob = 0,
+    },
+    {
+        .name = "x",
+        .mask = KEK_STATE_TYPE_PICKUP_FIELD_X,
+        .offset = offsetof(Pickup, x),
+        .size = sizeof(((Pickup*)0)->x),
+        .alignment = _Alignof(__typeof__(((Pickup*)0)->x)),
+        .is_blob = 0,
+    },
+    {
+        .name = "y",
+        .mask = KEK_STATE_TYPE_PICKUP_FIELD_Y,
+        .offset = offsetof(Pickup, y),
+        .size = sizeof(((Pickup*)0)->y),
+        .alignment = _Alignof(__typeof__(((Pickup*)0)->y)),
+        .is_blob = 0,
+    },
+    {
+        .name = "value",
+        .mask = KEK_STATE_TYPE_PICKUP_FIELD_VALUE,
+        .offset = offsetof(Pickup, value),
+        .size = sizeof(((Pickup*)0)->value),
+        .alignment = _Alignof(__typeof__(((Pickup*)0)->value)),
+        .is_blob = 0,
+    },
+    {
+        .name = "life",
+        .mask = KEK_STATE_TYPE_PICKUP_FIELD_LIFE,
+        .offset = offsetof(Pickup, life),
+        .size = sizeof(((Pickup*)0)->life),
+        .alignment = _Alignof(__typeof__(((Pickup*)0)->life)),
+        .is_blob = 0,
+    },
+    {
+        .name = "pulse",
+        .mask = KEK_STATE_TYPE_PICKUP_FIELD_PULSE,
+        .offset = offsetof(Pickup, pulse),
+        .size = sizeof(((Pickup*)0)->pulse),
+        .alignment = _Alignof(__typeof__(((Pickup*)0)->pulse)),
+        .is_blob = 0,
+    },
+};
+
+static const KekStateFieldDescriptor HudMessage_FieldDescriptors[] = {
+    {
+        .name = "kind",
+        .mask = KEK_STATE_TYPE_HUD_MESSAGE_FIELD_KIND,
+        .offset = offsetof(HudMessage, kind),
+        .size = sizeof(((HudMessage*)0)->kind),
+        .alignment = _Alignof(__typeof__(((HudMessage*)0)->kind)),
+        .is_blob = 0,
+    },
+    {
+        .name = "x",
+        .mask = KEK_STATE_TYPE_HUD_MESSAGE_FIELD_X,
+        .offset = offsetof(HudMessage, x),
+        .size = sizeof(((HudMessage*)0)->x),
+        .alignment = _Alignof(__typeof__(((HudMessage*)0)->x)),
+        .is_blob = 0,
+    },
+    {
+        .name = "y",
+        .mask = KEK_STATE_TYPE_HUD_MESSAGE_FIELD_Y,
+        .offset = offsetof(HudMessage, y),
+        .size = sizeof(((HudMessage*)0)->y),
+        .alignment = _Alignof(__typeof__(((HudMessage*)0)->y)),
+        .is_blob = 0,
+    },
+    {
+        .name = "value",
+        .mask = KEK_STATE_TYPE_HUD_MESSAGE_FIELD_VALUE,
+        .offset = offsetof(HudMessage, value),
+        .size = sizeof(((HudMessage*)0)->value),
+        .alignment = _Alignof(__typeof__(((HudMessage*)0)->value)),
+        .is_blob = 0,
+    },
+    {
+        .name = "life",
+        .mask = KEK_STATE_TYPE_HUD_MESSAGE_FIELD_LIFE,
+        .offset = offsetof(HudMessage, life),
+        .size = sizeof(((HudMessage*)0)->life),
+        .alignment = _Alignof(__typeof__(((HudMessage*)0)->life)),
+        .is_blob = 0,
+    },
+};
+
 const KekStateDescriptor KekGeneratedStateDescriptors[KEK_STATE_TYPE_COUNT] = {
     {
         .type_id = KEK_STATE_TYPE_FRAME_CLOCK,
         .name = "FrameClock",
         .size = sizeof(FrameClock),
+        .alignment = _Alignof(FrameClock),
         .set_default = FrameClock_default_into,
         .check = FrameClock_check_void,
         .reset = FrameClock_reset_void,
         .merge_fields = FrameClock_merge_fields,
+        .fields = FrameClock_FieldDescriptors,
+        .field_count = 2,
     },
     {
         .type_id = KEK_STATE_TYPE_GAME_SESSION,
         .name = "GameSession",
         .size = sizeof(GameSession),
+        .alignment = _Alignof(GameSession),
         .set_default = GameSession_default_into,
         .check = GameSession_check_void,
         .reset = GameSession_reset_void,
         .merge_fields = GameSession_merge_fields,
+        .fields = GameSession_FieldDescriptors,
+        .field_count = 8,
     },
     {
         .type_id = KEK_STATE_TYPE_INPUT_INTENT,
         .name = "InputIntent",
         .size = sizeof(InputIntent),
+        .alignment = _Alignof(InputIntent),
         .set_default = InputIntent_default_into,
         .check = InputIntent_check_void,
         .reset = InputIntent_reset_void,
         .merge_fields = InputIntent_merge_fields,
+        .fields = InputIntent_FieldDescriptors,
+        .field_count = 8,
     },
     {
         .type_id = KEK_STATE_TYPE_PLAYER,
         .name = "Player",
         .size = sizeof(Player),
+        .alignment = _Alignof(Player),
         .set_default = Player_default_into,
         .check = Player_check_void,
         .reset = Player_reset_void,
         .merge_fields = Player_merge_fields,
+        .fields = Player_FieldDescriptors,
+        .field_count = 13,
     },
     {
         .type_id = KEK_STATE_TYPE_WAVE_DIRECTOR,
         .name = "WaveDirector",
         .size = sizeof(WaveDirector),
+        .alignment = _Alignof(WaveDirector),
         .set_default = WaveDirector_default_into,
         .check = WaveDirector_check_void,
         .reset = WaveDirector_reset_void,
         .merge_fields = WaveDirector_merge_fields,
+        .fields = WaveDirector_FieldDescriptors,
+        .field_count = 5,
     },
     {
         .type_id = KEK_STATE_TYPE_CAMERA_RIG,
         .name = "CameraRig",
         .size = sizeof(CameraRig),
+        .alignment = _Alignof(CameraRig),
         .set_default = CameraRig_default_into,
         .check = CameraRig_check_void,
         .reset = CameraRig_reset_void,
         .merge_fields = CameraRig_merge_fields,
+        .fields = CameraRig_FieldDescriptors,
+        .field_count = 3,
     },
     {
         .type_id = KEK_STATE_TYPE_ENEMY,
         .name = "Enemy",
         .size = sizeof(Enemy),
+        .alignment = _Alignof(Enemy),
         .set_default = Enemy_default_into,
         .check = Enemy_check_void,
         .reset = Enemy_reset_void,
         .merge_fields = Enemy_merge_fields,
+        .fields = Enemy_FieldDescriptors,
+        .field_count = 10,
     },
     {
         .type_id = KEK_STATE_TYPE_PROJECTILE,
         .name = "Projectile",
         .size = sizeof(Projectile),
+        .alignment = _Alignof(Projectile),
         .set_default = Projectile_default_into,
         .check = Projectile_check_void,
         .reset = Projectile_reset_void,
         .merge_fields = Projectile_merge_fields,
+        .fields = Projectile_FieldDescriptors,
+        .field_count = 7,
     },
     {
         .type_id = KEK_STATE_TYPE_PICKUP,
         .name = "Pickup",
         .size = sizeof(Pickup),
+        .alignment = _Alignof(Pickup),
         .set_default = Pickup_default_into,
         .check = Pickup_check_void,
         .reset = Pickup_reset_void,
         .merge_fields = Pickup_merge_fields,
+        .fields = Pickup_FieldDescriptors,
+        .field_count = 6,
     },
     {
         .type_id = KEK_STATE_TYPE_HUD_MESSAGE,
         .name = "HudMessage",
         .size = sizeof(HudMessage),
+        .alignment = _Alignof(HudMessage),
         .set_default = HudMessage_default_into,
         .check = HudMessage_check_void,
         .reset = HudMessage_reset_void,
         .merge_fields = HudMessage_merge_fields,
+        .fields = HudMessage_FieldDescriptors,
+        .field_count = 5,
     },
 };
 
@@ -1896,89 +2492,105 @@ int game_state_update_many(Game_stateRuntime* runtime, const Game_stateUpdateIte
     return kek_state_store_update_many(game_state_get_store(runtime), updates, update_count);
 }
 
-size_t game_state_frame_clock_create(KekStateStore* store) {
+KekStateHandle game_state_frame_clock_create(KekStateStore* store) {
     return kek_state_store_add_default(store, &KekGeneratedStateDescriptors[KEK_STATE_TYPE_FRAME_CLOCK]);
 }
 
-size_t game_state_frame_clock_create_with(KekStateStore* store, const FrameClock* initial) {
+KekStateHandle game_state_frame_clock_create_with(KekStateStore* store, const FrameClock* initial) {
     return kek_state_store_add(store, &KekGeneratedStateDescriptors[KEK_STATE_TYPE_FRAME_CLOCK], initial);
 }
 
-int game_state_frame_clock_delete(KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+int game_state_frame_clock_delete(KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_FRAME_CLOCK) {
         return 0;
     }
-    return kek_state_store_remove(store, slot_id);
+    return kek_state_store_remove(store, handle);
 }
 
-FrameClock* game_state_frame_clock_slot(KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+FrameClock* game_state_frame_clock_instance(KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_FRAME_CLOCK) {
         return 0;
     }
-    return (FrameClock*)kek_state_store_current(store, slot_id);
+    return (FrameClock*)kek_state_store_current(store, handle);
 }
 
-const FrameClock* game_state_frame_clock_slot_const(const KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+const FrameClock* game_state_frame_clock_instance_const(const KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_FRAME_CLOCK) {
         return 0;
     }
-    return (const FrameClock*)kek_state_store_current_const(store, slot_id);
+    return (const FrameClock*)kek_state_store_current_const(store, handle);
 }
 
-size_t game_state_frame_clock_first(const KekStateStore* store) {
+FrameClock* game_state_frame_clock_slot(KekStateStore* store, KekStateHandle handle) {
+    return game_state_frame_clock_instance(store, handle);
+}
+
+const FrameClock* game_state_frame_clock_slot_const(const KekStateStore* store, KekStateHandle handle) {
+    return game_state_frame_clock_instance_const(store, handle);
+}
+
+KekStateHandle game_state_frame_clock_first(const KekStateStore* store) {
     return kek_state_store_find_first(store, KEK_STATE_TYPE_FRAME_CLOCK);
 }
 
-size_t game_state_frame_clock_next(const KekStateStore* store, size_t after_slot_id) {
-    return kek_state_store_find_next(store, KEK_STATE_TYPE_FRAME_CLOCK, after_slot_id);
+KekStateHandle game_state_frame_clock_next(const KekStateStore* store, KekStateHandle after_handle) {
+    return kek_state_store_find_next(store, KEK_STATE_TYPE_FRAME_CLOCK, after_handle);
 }
 
-size_t game_state_create_frame_clock(Game_stateRuntime* runtime) {
+KekStateHandle game_state_create_frame_clock(Game_stateRuntime* runtime) {
     return game_state_frame_clock_create(game_state_get_store(runtime));
 }
 
-size_t game_state_create_frame_clock_with(Game_stateRuntime* runtime, const FrameClock* initial) {
+KekStateHandle game_state_create_frame_clock_with(Game_stateRuntime* runtime, const FrameClock* initial) {
     return game_state_frame_clock_create_with(game_state_get_store(runtime), initial);
 }
 
-int game_state_delete_frame_clock(Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_frame_clock_delete(game_state_get_store(runtime), slot_id);
+int game_state_delete_frame_clock(Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_frame_clock_delete(game_state_get_store(runtime), handle);
 }
 
-FrameClock* game_state_frame_clock_at(Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_frame_clock_slot(game_state_get_store(runtime), slot_id);
+FrameClock* game_state_frame_clock_at(Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_frame_clock_instance(game_state_get_store(runtime), handle);
 }
 
-const FrameClock* game_state_frame_clock_at_const(const Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_frame_clock_slot_const(game_state_get_store_const(runtime), slot_id);
+const FrameClock* game_state_frame_clock_at_const(const Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_frame_clock_instance_const(game_state_get_store_const(runtime), handle);
 }
 
-size_t game_state_first_frame_clock(const Game_stateRuntime* runtime) {
+KekStateHandle game_state_first_frame_clock(const Game_stateRuntime* runtime) {
     return game_state_frame_clock_first(game_state_get_store_const(runtime));
 }
 
-size_t game_state_next_frame_clock(const Game_stateRuntime* runtime, size_t after_slot_id) {
-    return game_state_frame_clock_next(game_state_get_store_const(runtime), after_slot_id);
+KekStateHandle game_state_next_frame_clock(const Game_stateRuntime* runtime, KekStateHandle after_handle) {
+    return game_state_frame_clock_next(game_state_get_store_const(runtime), after_handle);
 }
 
 int game_state_count_frame_clock(const Game_stateRuntime* runtime) {
     int count = 0;
-    for (size_t slot = game_state_first_frame_clock(runtime); slot != KEK_STATE_INVALID_ID; slot = game_state_next_frame_clock(runtime, slot)) {
+    for (KekStateHandle handle = game_state_first_frame_clock(runtime); handle != KEK_STATE_INVALID_ID; handle = game_state_next_frame_clock(runtime, handle)) {
         count++;
     }
     return count;
 }
 
-int game_state_update_frame_clock_slot(Game_stateRuntime* runtime, size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return kek_state_store_update_fields(game_state_get_store(runtime), slot_id, update, context, changed_fields);
+int game_state_update_frame_clock_instance(Game_stateRuntime* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return kek_state_store_update_fields(game_state_get_store(runtime), handle, update, context, changed_fields);
 }
 
-Game_stateUpdateItem game_state_frame_clock_slot_update_item(size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    Game_stateUpdateItem item = {slot_id, update, context, changed_fields};
+int game_state_update_frame_clock_slot(Game_stateRuntime* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_update_frame_clock_instance(runtime, handle, update, context, changed_fields);
+}
+
+Game_stateUpdateItem game_state_frame_clock_instance_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    Game_stateUpdateItem item = {handle, update, context, changed_fields};
     return item;
+}
+
+Game_stateUpdateItem game_state_frame_clock_slot_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_frame_clock_instance_update_item(handle, update, context, changed_fields);
 }
 
 typedef struct FrameClock_tick_FieldUpdate {
@@ -1994,13 +2606,17 @@ static void game_state_frame_clock_set_tick_update(void* draft, void* context) {
     state->tick = update->value;
 }
 
-int game_state_frame_clock_set_tick(KekStateStore* store, size_t slot_id, uint64_t value) {
+int game_state_frame_clock_set_tick(KekStateStore* store, KekStateHandle handle, uint64_t value) {
     FrameClock_tick_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_frame_clock_set_tick_update, &update, KEK_STATE_TYPE_FRAME_CLOCK_FIELD_TICK);
+    return kek_state_store_update_fields(store, handle, game_state_frame_clock_set_tick_update, &update, KEK_STATE_TYPE_FRAME_CLOCK_FIELD_TICK);
 }
 
-int game_state_set_frame_clock_slot_tick(Game_stateRuntime* runtime, size_t slot_id, uint64_t value) {
-    return game_state_frame_clock_set_tick(game_state_get_store(runtime), slot_id, value);
+int game_state_set_frame_clock_instance_tick(Game_stateRuntime* runtime, KekStateHandle handle, uint64_t value) {
+    return game_state_frame_clock_set_tick(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_frame_clock_slot_tick(Game_stateRuntime* runtime, KekStateHandle handle, uint64_t value) {
+    return game_state_set_frame_clock_instance_tick(runtime, handle, value);
 }
 
 typedef struct FrameClock_dt_FieldUpdate {
@@ -2016,98 +2632,118 @@ static void game_state_frame_clock_set_dt_update(void* draft, void* context) {
     state->dt = update->value;
 }
 
-int game_state_frame_clock_set_dt(KekStateStore* store, size_t slot_id, float value) {
+int game_state_frame_clock_set_dt(KekStateStore* store, KekStateHandle handle, float value) {
     FrameClock_dt_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_frame_clock_set_dt_update, &update, KEK_STATE_TYPE_FRAME_CLOCK_FIELD_DT);
+    return kek_state_store_update_fields(store, handle, game_state_frame_clock_set_dt_update, &update, KEK_STATE_TYPE_FRAME_CLOCK_FIELD_DT);
 }
 
-int game_state_set_frame_clock_slot_dt(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_frame_clock_set_dt(game_state_get_store(runtime), slot_id, value);
+int game_state_set_frame_clock_instance_dt(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_frame_clock_set_dt(game_state_get_store(runtime), handle, value);
 }
 
-size_t game_state_game_session_create(KekStateStore* store) {
+int game_state_set_frame_clock_slot_dt(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_frame_clock_instance_dt(runtime, handle, value);
+}
+
+KekStateHandle game_state_game_session_create(KekStateStore* store) {
     return kek_state_store_add_default(store, &KekGeneratedStateDescriptors[KEK_STATE_TYPE_GAME_SESSION]);
 }
 
-size_t game_state_game_session_create_with(KekStateStore* store, const GameSession* initial) {
+KekStateHandle game_state_game_session_create_with(KekStateStore* store, const GameSession* initial) {
     return kek_state_store_add(store, &KekGeneratedStateDescriptors[KEK_STATE_TYPE_GAME_SESSION], initial);
 }
 
-int game_state_game_session_delete(KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+int game_state_game_session_delete(KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_GAME_SESSION) {
         return 0;
     }
-    return kek_state_store_remove(store, slot_id);
+    return kek_state_store_remove(store, handle);
 }
 
-GameSession* game_state_game_session_slot(KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+GameSession* game_state_game_session_instance(KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_GAME_SESSION) {
         return 0;
     }
-    return (GameSession*)kek_state_store_current(store, slot_id);
+    return (GameSession*)kek_state_store_current(store, handle);
 }
 
-const GameSession* game_state_game_session_slot_const(const KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+const GameSession* game_state_game_session_instance_const(const KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_GAME_SESSION) {
         return 0;
     }
-    return (const GameSession*)kek_state_store_current_const(store, slot_id);
+    return (const GameSession*)kek_state_store_current_const(store, handle);
 }
 
-size_t game_state_game_session_first(const KekStateStore* store) {
+GameSession* game_state_game_session_slot(KekStateStore* store, KekStateHandle handle) {
+    return game_state_game_session_instance(store, handle);
+}
+
+const GameSession* game_state_game_session_slot_const(const KekStateStore* store, KekStateHandle handle) {
+    return game_state_game_session_instance_const(store, handle);
+}
+
+KekStateHandle game_state_game_session_first(const KekStateStore* store) {
     return kek_state_store_find_first(store, KEK_STATE_TYPE_GAME_SESSION);
 }
 
-size_t game_state_game_session_next(const KekStateStore* store, size_t after_slot_id) {
-    return kek_state_store_find_next(store, KEK_STATE_TYPE_GAME_SESSION, after_slot_id);
+KekStateHandle game_state_game_session_next(const KekStateStore* store, KekStateHandle after_handle) {
+    return kek_state_store_find_next(store, KEK_STATE_TYPE_GAME_SESSION, after_handle);
 }
 
-size_t game_state_create_game_session(Game_stateRuntime* runtime) {
+KekStateHandle game_state_create_game_session(Game_stateRuntime* runtime) {
     return game_state_game_session_create(game_state_get_store(runtime));
 }
 
-size_t game_state_create_game_session_with(Game_stateRuntime* runtime, const GameSession* initial) {
+KekStateHandle game_state_create_game_session_with(Game_stateRuntime* runtime, const GameSession* initial) {
     return game_state_game_session_create_with(game_state_get_store(runtime), initial);
 }
 
-int game_state_delete_game_session(Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_game_session_delete(game_state_get_store(runtime), slot_id);
+int game_state_delete_game_session(Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_game_session_delete(game_state_get_store(runtime), handle);
 }
 
-GameSession* game_state_game_session_at(Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_game_session_slot(game_state_get_store(runtime), slot_id);
+GameSession* game_state_game_session_at(Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_game_session_instance(game_state_get_store(runtime), handle);
 }
 
-const GameSession* game_state_game_session_at_const(const Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_game_session_slot_const(game_state_get_store_const(runtime), slot_id);
+const GameSession* game_state_game_session_at_const(const Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_game_session_instance_const(game_state_get_store_const(runtime), handle);
 }
 
-size_t game_state_first_game_session(const Game_stateRuntime* runtime) {
+KekStateHandle game_state_first_game_session(const Game_stateRuntime* runtime) {
     return game_state_game_session_first(game_state_get_store_const(runtime));
 }
 
-size_t game_state_next_game_session(const Game_stateRuntime* runtime, size_t after_slot_id) {
-    return game_state_game_session_next(game_state_get_store_const(runtime), after_slot_id);
+KekStateHandle game_state_next_game_session(const Game_stateRuntime* runtime, KekStateHandle after_handle) {
+    return game_state_game_session_next(game_state_get_store_const(runtime), after_handle);
 }
 
 int game_state_count_game_session(const Game_stateRuntime* runtime) {
     int count = 0;
-    for (size_t slot = game_state_first_game_session(runtime); slot != KEK_STATE_INVALID_ID; slot = game_state_next_game_session(runtime, slot)) {
+    for (KekStateHandle handle = game_state_first_game_session(runtime); handle != KEK_STATE_INVALID_ID; handle = game_state_next_game_session(runtime, handle)) {
         count++;
     }
     return count;
 }
 
-int game_state_update_game_session_slot(Game_stateRuntime* runtime, size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return kek_state_store_update_fields(game_state_get_store(runtime), slot_id, update, context, changed_fields);
+int game_state_update_game_session_instance(Game_stateRuntime* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return kek_state_store_update_fields(game_state_get_store(runtime), handle, update, context, changed_fields);
 }
 
-Game_stateUpdateItem game_state_game_session_slot_update_item(size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    Game_stateUpdateItem item = {slot_id, update, context, changed_fields};
+int game_state_update_game_session_slot(Game_stateRuntime* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_update_game_session_instance(runtime, handle, update, context, changed_fields);
+}
+
+Game_stateUpdateItem game_state_game_session_instance_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    Game_stateUpdateItem item = {handle, update, context, changed_fields};
     return item;
+}
+
+Game_stateUpdateItem game_state_game_session_slot_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_game_session_instance_update_item(handle, update, context, changed_fields);
 }
 
 typedef struct GameSession_mode_FieldUpdate {
@@ -2123,13 +2759,17 @@ static void game_state_game_session_set_mode_update(void* draft, void* context) 
     state->mode = update->value;
 }
 
-int game_state_game_session_set_mode(KekStateStore* store, size_t slot_id, GameMode value) {
+int game_state_game_session_set_mode(KekStateStore* store, KekStateHandle handle, GameMode value) {
     GameSession_mode_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_game_session_set_mode_update, &update, KEK_STATE_TYPE_GAME_SESSION_FIELD_MODE);
+    return kek_state_store_update_fields(store, handle, game_state_game_session_set_mode_update, &update, KEK_STATE_TYPE_GAME_SESSION_FIELD_MODE);
 }
 
-int game_state_set_game_session_slot_mode(Game_stateRuntime* runtime, size_t slot_id, GameMode value) {
-    return game_state_game_session_set_mode(game_state_get_store(runtime), slot_id, value);
+int game_state_set_game_session_instance_mode(Game_stateRuntime* runtime, KekStateHandle handle, GameMode value) {
+    return game_state_game_session_set_mode(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_game_session_slot_mode(Game_stateRuntime* runtime, KekStateHandle handle, GameMode value) {
+    return game_state_set_game_session_instance_mode(runtime, handle, value);
 }
 
 typedef struct GameSession_score_FieldUpdate {
@@ -2145,13 +2785,17 @@ static void game_state_game_session_set_score_update(void* draft, void* context)
     state->score = update->value;
 }
 
-int game_state_game_session_set_score(KekStateStore* store, size_t slot_id, int32_t value) {
+int game_state_game_session_set_score(KekStateStore* store, KekStateHandle handle, int32_t value) {
     GameSession_score_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_game_session_set_score_update, &update, KEK_STATE_TYPE_GAME_SESSION_FIELD_SCORE);
+    return kek_state_store_update_fields(store, handle, game_state_game_session_set_score_update, &update, KEK_STATE_TYPE_GAME_SESSION_FIELD_SCORE);
 }
 
-int game_state_set_game_session_slot_score(Game_stateRuntime* runtime, size_t slot_id, int32_t value) {
-    return game_state_game_session_set_score(game_state_get_store(runtime), slot_id, value);
+int game_state_set_game_session_instance_score(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_game_session_set_score(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_game_session_slot_score(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_set_game_session_instance_score(runtime, handle, value);
 }
 
 typedef struct GameSession_combo_FieldUpdate {
@@ -2167,13 +2811,17 @@ static void game_state_game_session_set_combo_update(void* draft, void* context)
     state->combo = update->value;
 }
 
-int game_state_game_session_set_combo(KekStateStore* store, size_t slot_id, int32_t value) {
+int game_state_game_session_set_combo(KekStateStore* store, KekStateHandle handle, int32_t value) {
     GameSession_combo_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_game_session_set_combo_update, &update, KEK_STATE_TYPE_GAME_SESSION_FIELD_COMBO);
+    return kek_state_store_update_fields(store, handle, game_state_game_session_set_combo_update, &update, KEK_STATE_TYPE_GAME_SESSION_FIELD_COMBO);
 }
 
-int game_state_set_game_session_slot_combo(Game_stateRuntime* runtime, size_t slot_id, int32_t value) {
-    return game_state_game_session_set_combo(game_state_get_store(runtime), slot_id, value);
+int game_state_set_game_session_instance_combo(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_game_session_set_combo(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_game_session_slot_combo(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_set_game_session_instance_combo(runtime, handle, value);
 }
 
 typedef struct GameSession_combo_timer_FieldUpdate {
@@ -2189,13 +2837,17 @@ static void game_state_game_session_set_combo_timer_update(void* draft, void* co
     state->combo_timer = update->value;
 }
 
-int game_state_game_session_set_combo_timer(KekStateStore* store, size_t slot_id, float value) {
+int game_state_game_session_set_combo_timer(KekStateStore* store, KekStateHandle handle, float value) {
     GameSession_combo_timer_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_game_session_set_combo_timer_update, &update, KEK_STATE_TYPE_GAME_SESSION_FIELD_COMBO_TIMER);
+    return kek_state_store_update_fields(store, handle, game_state_game_session_set_combo_timer_update, &update, KEK_STATE_TYPE_GAME_SESSION_FIELD_COMBO_TIMER);
 }
 
-int game_state_set_game_session_slot_combo_timer(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_game_session_set_combo_timer(game_state_get_store(runtime), slot_id, value);
+int game_state_set_game_session_instance_combo_timer(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_game_session_set_combo_timer(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_game_session_slot_combo_timer(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_game_session_instance_combo_timer(runtime, handle, value);
 }
 
 typedef struct GameSession_time_alive_FieldUpdate {
@@ -2211,13 +2863,17 @@ static void game_state_game_session_set_time_alive_update(void* draft, void* con
     state->time_alive = update->value;
 }
 
-int game_state_game_session_set_time_alive(KekStateStore* store, size_t slot_id, float value) {
+int game_state_game_session_set_time_alive(KekStateStore* store, KekStateHandle handle, float value) {
     GameSession_time_alive_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_game_session_set_time_alive_update, &update, KEK_STATE_TYPE_GAME_SESSION_FIELD_TIME_ALIVE);
+    return kek_state_store_update_fields(store, handle, game_state_game_session_set_time_alive_update, &update, KEK_STATE_TYPE_GAME_SESSION_FIELD_TIME_ALIVE);
 }
 
-int game_state_set_game_session_slot_time_alive(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_game_session_set_time_alive(game_state_get_store(runtime), slot_id, value);
+int game_state_set_game_session_instance_time_alive(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_game_session_set_time_alive(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_game_session_slot_time_alive(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_game_session_instance_time_alive(runtime, handle, value);
 }
 
 typedef struct GameSession_shake_FieldUpdate {
@@ -2233,13 +2889,17 @@ static void game_state_game_session_set_shake_update(void* draft, void* context)
     state->shake = update->value;
 }
 
-int game_state_game_session_set_shake(KekStateStore* store, size_t slot_id, float value) {
+int game_state_game_session_set_shake(KekStateStore* store, KekStateHandle handle, float value) {
     GameSession_shake_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_game_session_set_shake_update, &update, KEK_STATE_TYPE_GAME_SESSION_FIELD_SHAKE);
+    return kek_state_store_update_fields(store, handle, game_state_game_session_set_shake_update, &update, KEK_STATE_TYPE_GAME_SESSION_FIELD_SHAKE);
 }
 
-int game_state_set_game_session_slot_shake(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_game_session_set_shake(game_state_get_store(runtime), slot_id, value);
+int game_state_set_game_session_instance_shake(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_game_session_set_shake(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_game_session_slot_shake(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_game_session_instance_shake(runtime, handle, value);
 }
 
 typedef struct GameSession_next_upgrade_score_FieldUpdate {
@@ -2255,13 +2915,17 @@ static void game_state_game_session_set_next_upgrade_score_update(void* draft, v
     state->next_upgrade_score = update->value;
 }
 
-int game_state_game_session_set_next_upgrade_score(KekStateStore* store, size_t slot_id, int32_t value) {
+int game_state_game_session_set_next_upgrade_score(KekStateStore* store, KekStateHandle handle, int32_t value) {
     GameSession_next_upgrade_score_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_game_session_set_next_upgrade_score_update, &update, KEK_STATE_TYPE_GAME_SESSION_FIELD_NEXT_UPGRADE_SCORE);
+    return kek_state_store_update_fields(store, handle, game_state_game_session_set_next_upgrade_score_update, &update, KEK_STATE_TYPE_GAME_SESSION_FIELD_NEXT_UPGRADE_SCORE);
 }
 
-int game_state_set_game_session_slot_next_upgrade_score(Game_stateRuntime* runtime, size_t slot_id, int32_t value) {
-    return game_state_game_session_set_next_upgrade_score(game_state_get_store(runtime), slot_id, value);
+int game_state_set_game_session_instance_next_upgrade_score(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_game_session_set_next_upgrade_score(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_game_session_slot_next_upgrade_score(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_set_game_session_instance_next_upgrade_score(runtime, handle, value);
 }
 
 typedef struct GameSession_debug_FieldUpdate {
@@ -2277,98 +2941,118 @@ static void game_state_game_session_set_debug_update(void* draft, void* context)
     state->debug = update->value;
 }
 
-int game_state_game_session_set_debug(KekStateStore* store, size_t slot_id, bool value) {
+int game_state_game_session_set_debug(KekStateStore* store, KekStateHandle handle, bool value) {
     GameSession_debug_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_game_session_set_debug_update, &update, KEK_STATE_TYPE_GAME_SESSION_FIELD_DEBUG);
+    return kek_state_store_update_fields(store, handle, game_state_game_session_set_debug_update, &update, KEK_STATE_TYPE_GAME_SESSION_FIELD_DEBUG);
 }
 
-int game_state_set_game_session_slot_debug(Game_stateRuntime* runtime, size_t slot_id, bool value) {
-    return game_state_game_session_set_debug(game_state_get_store(runtime), slot_id, value);
+int game_state_set_game_session_instance_debug(Game_stateRuntime* runtime, KekStateHandle handle, bool value) {
+    return game_state_game_session_set_debug(game_state_get_store(runtime), handle, value);
 }
 
-size_t game_state_input_intent_create(KekStateStore* store) {
+int game_state_set_game_session_slot_debug(Game_stateRuntime* runtime, KekStateHandle handle, bool value) {
+    return game_state_set_game_session_instance_debug(runtime, handle, value);
+}
+
+KekStateHandle game_state_input_intent_create(KekStateStore* store) {
     return kek_state_store_add_default(store, &KekGeneratedStateDescriptors[KEK_STATE_TYPE_INPUT_INTENT]);
 }
 
-size_t game_state_input_intent_create_with(KekStateStore* store, const InputIntent* initial) {
+KekStateHandle game_state_input_intent_create_with(KekStateStore* store, const InputIntent* initial) {
     return kek_state_store_add(store, &KekGeneratedStateDescriptors[KEK_STATE_TYPE_INPUT_INTENT], initial);
 }
 
-int game_state_input_intent_delete(KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+int game_state_input_intent_delete(KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_INPUT_INTENT) {
         return 0;
     }
-    return kek_state_store_remove(store, slot_id);
+    return kek_state_store_remove(store, handle);
 }
 
-InputIntent* game_state_input_intent_slot(KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+InputIntent* game_state_input_intent_instance(KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_INPUT_INTENT) {
         return 0;
     }
-    return (InputIntent*)kek_state_store_current(store, slot_id);
+    return (InputIntent*)kek_state_store_current(store, handle);
 }
 
-const InputIntent* game_state_input_intent_slot_const(const KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+const InputIntent* game_state_input_intent_instance_const(const KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_INPUT_INTENT) {
         return 0;
     }
-    return (const InputIntent*)kek_state_store_current_const(store, slot_id);
+    return (const InputIntent*)kek_state_store_current_const(store, handle);
 }
 
-size_t game_state_input_intent_first(const KekStateStore* store) {
+InputIntent* game_state_input_intent_slot(KekStateStore* store, KekStateHandle handle) {
+    return game_state_input_intent_instance(store, handle);
+}
+
+const InputIntent* game_state_input_intent_slot_const(const KekStateStore* store, KekStateHandle handle) {
+    return game_state_input_intent_instance_const(store, handle);
+}
+
+KekStateHandle game_state_input_intent_first(const KekStateStore* store) {
     return kek_state_store_find_first(store, KEK_STATE_TYPE_INPUT_INTENT);
 }
 
-size_t game_state_input_intent_next(const KekStateStore* store, size_t after_slot_id) {
-    return kek_state_store_find_next(store, KEK_STATE_TYPE_INPUT_INTENT, after_slot_id);
+KekStateHandle game_state_input_intent_next(const KekStateStore* store, KekStateHandle after_handle) {
+    return kek_state_store_find_next(store, KEK_STATE_TYPE_INPUT_INTENT, after_handle);
 }
 
-size_t game_state_create_input_intent(Game_stateRuntime* runtime) {
+KekStateHandle game_state_create_input_intent(Game_stateRuntime* runtime) {
     return game_state_input_intent_create(game_state_get_store(runtime));
 }
 
-size_t game_state_create_input_intent_with(Game_stateRuntime* runtime, const InputIntent* initial) {
+KekStateHandle game_state_create_input_intent_with(Game_stateRuntime* runtime, const InputIntent* initial) {
     return game_state_input_intent_create_with(game_state_get_store(runtime), initial);
 }
 
-int game_state_delete_input_intent(Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_input_intent_delete(game_state_get_store(runtime), slot_id);
+int game_state_delete_input_intent(Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_input_intent_delete(game_state_get_store(runtime), handle);
 }
 
-InputIntent* game_state_input_intent_at(Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_input_intent_slot(game_state_get_store(runtime), slot_id);
+InputIntent* game_state_input_intent_at(Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_input_intent_instance(game_state_get_store(runtime), handle);
 }
 
-const InputIntent* game_state_input_intent_at_const(const Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_input_intent_slot_const(game_state_get_store_const(runtime), slot_id);
+const InputIntent* game_state_input_intent_at_const(const Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_input_intent_instance_const(game_state_get_store_const(runtime), handle);
 }
 
-size_t game_state_first_input_intent(const Game_stateRuntime* runtime) {
+KekStateHandle game_state_first_input_intent(const Game_stateRuntime* runtime) {
     return game_state_input_intent_first(game_state_get_store_const(runtime));
 }
 
-size_t game_state_next_input_intent(const Game_stateRuntime* runtime, size_t after_slot_id) {
-    return game_state_input_intent_next(game_state_get_store_const(runtime), after_slot_id);
+KekStateHandle game_state_next_input_intent(const Game_stateRuntime* runtime, KekStateHandle after_handle) {
+    return game_state_input_intent_next(game_state_get_store_const(runtime), after_handle);
 }
 
 int game_state_count_input_intent(const Game_stateRuntime* runtime) {
     int count = 0;
-    for (size_t slot = game_state_first_input_intent(runtime); slot != KEK_STATE_INVALID_ID; slot = game_state_next_input_intent(runtime, slot)) {
+    for (KekStateHandle handle = game_state_first_input_intent(runtime); handle != KEK_STATE_INVALID_ID; handle = game_state_next_input_intent(runtime, handle)) {
         count++;
     }
     return count;
 }
 
-int game_state_update_input_intent_slot(Game_stateRuntime* runtime, size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return kek_state_store_update_fields(game_state_get_store(runtime), slot_id, update, context, changed_fields);
+int game_state_update_input_intent_instance(Game_stateRuntime* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return kek_state_store_update_fields(game_state_get_store(runtime), handle, update, context, changed_fields);
 }
 
-Game_stateUpdateItem game_state_input_intent_slot_update_item(size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    Game_stateUpdateItem item = {slot_id, update, context, changed_fields};
+int game_state_update_input_intent_slot(Game_stateRuntime* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_update_input_intent_instance(runtime, handle, update, context, changed_fields);
+}
+
+Game_stateUpdateItem game_state_input_intent_instance_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    Game_stateUpdateItem item = {handle, update, context, changed_fields};
     return item;
+}
+
+Game_stateUpdateItem game_state_input_intent_slot_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_input_intent_instance_update_item(handle, update, context, changed_fields);
 }
 
 typedef struct InputIntent_move_x_FieldUpdate {
@@ -2384,13 +3068,17 @@ static void game_state_input_intent_set_move_x_update(void* draft, void* context
     state->move_x = update->value;
 }
 
-int game_state_input_intent_set_move_x(KekStateStore* store, size_t slot_id, float value) {
+int game_state_input_intent_set_move_x(KekStateStore* store, KekStateHandle handle, float value) {
     InputIntent_move_x_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_input_intent_set_move_x_update, &update, KEK_STATE_TYPE_INPUT_INTENT_FIELD_MOVE_X);
+    return kek_state_store_update_fields(store, handle, game_state_input_intent_set_move_x_update, &update, KEK_STATE_TYPE_INPUT_INTENT_FIELD_MOVE_X);
 }
 
-int game_state_set_input_intent_slot_move_x(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_input_intent_set_move_x(game_state_get_store(runtime), slot_id, value);
+int game_state_set_input_intent_instance_move_x(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_input_intent_set_move_x(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_input_intent_slot_move_x(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_input_intent_instance_move_x(runtime, handle, value);
 }
 
 typedef struct InputIntent_move_y_FieldUpdate {
@@ -2406,13 +3094,17 @@ static void game_state_input_intent_set_move_y_update(void* draft, void* context
     state->move_y = update->value;
 }
 
-int game_state_input_intent_set_move_y(KekStateStore* store, size_t slot_id, float value) {
+int game_state_input_intent_set_move_y(KekStateStore* store, KekStateHandle handle, float value) {
     InputIntent_move_y_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_input_intent_set_move_y_update, &update, KEK_STATE_TYPE_INPUT_INTENT_FIELD_MOVE_Y);
+    return kek_state_store_update_fields(store, handle, game_state_input_intent_set_move_y_update, &update, KEK_STATE_TYPE_INPUT_INTENT_FIELD_MOVE_Y);
 }
 
-int game_state_set_input_intent_slot_move_y(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_input_intent_set_move_y(game_state_get_store(runtime), slot_id, value);
+int game_state_set_input_intent_instance_move_y(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_input_intent_set_move_y(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_input_intent_slot_move_y(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_input_intent_instance_move_y(runtime, handle, value);
 }
 
 typedef struct InputIntent_aim_x_FieldUpdate {
@@ -2428,13 +3120,17 @@ static void game_state_input_intent_set_aim_x_update(void* draft, void* context)
     state->aim_x = update->value;
 }
 
-int game_state_input_intent_set_aim_x(KekStateStore* store, size_t slot_id, float value) {
+int game_state_input_intent_set_aim_x(KekStateStore* store, KekStateHandle handle, float value) {
     InputIntent_aim_x_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_input_intent_set_aim_x_update, &update, KEK_STATE_TYPE_INPUT_INTENT_FIELD_AIM_X);
+    return kek_state_store_update_fields(store, handle, game_state_input_intent_set_aim_x_update, &update, KEK_STATE_TYPE_INPUT_INTENT_FIELD_AIM_X);
 }
 
-int game_state_set_input_intent_slot_aim_x(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_input_intent_set_aim_x(game_state_get_store(runtime), slot_id, value);
+int game_state_set_input_intent_instance_aim_x(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_input_intent_set_aim_x(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_input_intent_slot_aim_x(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_input_intent_instance_aim_x(runtime, handle, value);
 }
 
 typedef struct InputIntent_aim_y_FieldUpdate {
@@ -2450,13 +3146,17 @@ static void game_state_input_intent_set_aim_y_update(void* draft, void* context)
     state->aim_y = update->value;
 }
 
-int game_state_input_intent_set_aim_y(KekStateStore* store, size_t slot_id, float value) {
+int game_state_input_intent_set_aim_y(KekStateStore* store, KekStateHandle handle, float value) {
     InputIntent_aim_y_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_input_intent_set_aim_y_update, &update, KEK_STATE_TYPE_INPUT_INTENT_FIELD_AIM_Y);
+    return kek_state_store_update_fields(store, handle, game_state_input_intent_set_aim_y_update, &update, KEK_STATE_TYPE_INPUT_INTENT_FIELD_AIM_Y);
 }
 
-int game_state_set_input_intent_slot_aim_y(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_input_intent_set_aim_y(game_state_get_store(runtime), slot_id, value);
+int game_state_set_input_intent_instance_aim_y(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_input_intent_set_aim_y(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_input_intent_slot_aim_y(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_input_intent_instance_aim_y(runtime, handle, value);
 }
 
 typedef struct InputIntent_shoot_FieldUpdate {
@@ -2472,13 +3172,17 @@ static void game_state_input_intent_set_shoot_update(void* draft, void* context)
     state->shoot = update->value;
 }
 
-int game_state_input_intent_set_shoot(KekStateStore* store, size_t slot_id, bool value) {
+int game_state_input_intent_set_shoot(KekStateStore* store, KekStateHandle handle, bool value) {
     InputIntent_shoot_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_input_intent_set_shoot_update, &update, KEK_STATE_TYPE_INPUT_INTENT_FIELD_SHOOT);
+    return kek_state_store_update_fields(store, handle, game_state_input_intent_set_shoot_update, &update, KEK_STATE_TYPE_INPUT_INTENT_FIELD_SHOOT);
 }
 
-int game_state_set_input_intent_slot_shoot(Game_stateRuntime* runtime, size_t slot_id, bool value) {
-    return game_state_input_intent_set_shoot(game_state_get_store(runtime), slot_id, value);
+int game_state_set_input_intent_instance_shoot(Game_stateRuntime* runtime, KekStateHandle handle, bool value) {
+    return game_state_input_intent_set_shoot(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_input_intent_slot_shoot(Game_stateRuntime* runtime, KekStateHandle handle, bool value) {
+    return game_state_set_input_intent_instance_shoot(runtime, handle, value);
 }
 
 typedef struct InputIntent_dash_FieldUpdate {
@@ -2494,13 +3198,17 @@ static void game_state_input_intent_set_dash_update(void* draft, void* context) 
     state->dash = update->value;
 }
 
-int game_state_input_intent_set_dash(KekStateStore* store, size_t slot_id, bool value) {
+int game_state_input_intent_set_dash(KekStateStore* store, KekStateHandle handle, bool value) {
     InputIntent_dash_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_input_intent_set_dash_update, &update, KEK_STATE_TYPE_INPUT_INTENT_FIELD_DASH);
+    return kek_state_store_update_fields(store, handle, game_state_input_intent_set_dash_update, &update, KEK_STATE_TYPE_INPUT_INTENT_FIELD_DASH);
 }
 
-int game_state_set_input_intent_slot_dash(Game_stateRuntime* runtime, size_t slot_id, bool value) {
-    return game_state_input_intent_set_dash(game_state_get_store(runtime), slot_id, value);
+int game_state_set_input_intent_instance_dash(Game_stateRuntime* runtime, KekStateHandle handle, bool value) {
+    return game_state_input_intent_set_dash(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_input_intent_slot_dash(Game_stateRuntime* runtime, KekStateHandle handle, bool value) {
+    return game_state_set_input_intent_instance_dash(runtime, handle, value);
 }
 
 typedef struct InputIntent_pause_FieldUpdate {
@@ -2516,13 +3224,17 @@ static void game_state_input_intent_set_pause_update(void* draft, void* context)
     state->pause = update->value;
 }
 
-int game_state_input_intent_set_pause(KekStateStore* store, size_t slot_id, bool value) {
+int game_state_input_intent_set_pause(KekStateStore* store, KekStateHandle handle, bool value) {
     InputIntent_pause_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_input_intent_set_pause_update, &update, KEK_STATE_TYPE_INPUT_INTENT_FIELD_PAUSE);
+    return kek_state_store_update_fields(store, handle, game_state_input_intent_set_pause_update, &update, KEK_STATE_TYPE_INPUT_INTENT_FIELD_PAUSE);
 }
 
-int game_state_set_input_intent_slot_pause(Game_stateRuntime* runtime, size_t slot_id, bool value) {
-    return game_state_input_intent_set_pause(game_state_get_store(runtime), slot_id, value);
+int game_state_set_input_intent_instance_pause(Game_stateRuntime* runtime, KekStateHandle handle, bool value) {
+    return game_state_input_intent_set_pause(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_input_intent_slot_pause(Game_stateRuntime* runtime, KekStateHandle handle, bool value) {
+    return game_state_set_input_intent_instance_pause(runtime, handle, value);
 }
 
 typedef struct InputIntent_confirm_FieldUpdate {
@@ -2538,98 +3250,118 @@ static void game_state_input_intent_set_confirm_update(void* draft, void* contex
     state->confirm = update->value;
 }
 
-int game_state_input_intent_set_confirm(KekStateStore* store, size_t slot_id, bool value) {
+int game_state_input_intent_set_confirm(KekStateStore* store, KekStateHandle handle, bool value) {
     InputIntent_confirm_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_input_intent_set_confirm_update, &update, KEK_STATE_TYPE_INPUT_INTENT_FIELD_CONFIRM);
+    return kek_state_store_update_fields(store, handle, game_state_input_intent_set_confirm_update, &update, KEK_STATE_TYPE_INPUT_INTENT_FIELD_CONFIRM);
 }
 
-int game_state_set_input_intent_slot_confirm(Game_stateRuntime* runtime, size_t slot_id, bool value) {
-    return game_state_input_intent_set_confirm(game_state_get_store(runtime), slot_id, value);
+int game_state_set_input_intent_instance_confirm(Game_stateRuntime* runtime, KekStateHandle handle, bool value) {
+    return game_state_input_intent_set_confirm(game_state_get_store(runtime), handle, value);
 }
 
-size_t game_state_player_create(KekStateStore* store) {
+int game_state_set_input_intent_slot_confirm(Game_stateRuntime* runtime, KekStateHandle handle, bool value) {
+    return game_state_set_input_intent_instance_confirm(runtime, handle, value);
+}
+
+KekStateHandle game_state_player_create(KekStateStore* store) {
     return kek_state_store_add_default(store, &KekGeneratedStateDescriptors[KEK_STATE_TYPE_PLAYER]);
 }
 
-size_t game_state_player_create_with(KekStateStore* store, const Player* initial) {
+KekStateHandle game_state_player_create_with(KekStateStore* store, const Player* initial) {
     return kek_state_store_add(store, &KekGeneratedStateDescriptors[KEK_STATE_TYPE_PLAYER], initial);
 }
 
-int game_state_player_delete(KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+int game_state_player_delete(KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_PLAYER) {
         return 0;
     }
-    return kek_state_store_remove(store, slot_id);
+    return kek_state_store_remove(store, handle);
 }
 
-Player* game_state_player_slot(KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+Player* game_state_player_instance(KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_PLAYER) {
         return 0;
     }
-    return (Player*)kek_state_store_current(store, slot_id);
+    return (Player*)kek_state_store_current(store, handle);
 }
 
-const Player* game_state_player_slot_const(const KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+const Player* game_state_player_instance_const(const KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_PLAYER) {
         return 0;
     }
-    return (const Player*)kek_state_store_current_const(store, slot_id);
+    return (const Player*)kek_state_store_current_const(store, handle);
 }
 
-size_t game_state_player_first(const KekStateStore* store) {
+Player* game_state_player_slot(KekStateStore* store, KekStateHandle handle) {
+    return game_state_player_instance(store, handle);
+}
+
+const Player* game_state_player_slot_const(const KekStateStore* store, KekStateHandle handle) {
+    return game_state_player_instance_const(store, handle);
+}
+
+KekStateHandle game_state_player_first(const KekStateStore* store) {
     return kek_state_store_find_first(store, KEK_STATE_TYPE_PLAYER);
 }
 
-size_t game_state_player_next(const KekStateStore* store, size_t after_slot_id) {
-    return kek_state_store_find_next(store, KEK_STATE_TYPE_PLAYER, after_slot_id);
+KekStateHandle game_state_player_next(const KekStateStore* store, KekStateHandle after_handle) {
+    return kek_state_store_find_next(store, KEK_STATE_TYPE_PLAYER, after_handle);
 }
 
-size_t game_state_create_player(Game_stateRuntime* runtime) {
+KekStateHandle game_state_create_player(Game_stateRuntime* runtime) {
     return game_state_player_create(game_state_get_store(runtime));
 }
 
-size_t game_state_create_player_with(Game_stateRuntime* runtime, const Player* initial) {
+KekStateHandle game_state_create_player_with(Game_stateRuntime* runtime, const Player* initial) {
     return game_state_player_create_with(game_state_get_store(runtime), initial);
 }
 
-int game_state_delete_player(Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_player_delete(game_state_get_store(runtime), slot_id);
+int game_state_delete_player(Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_player_delete(game_state_get_store(runtime), handle);
 }
 
-Player* game_state_player_at(Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_player_slot(game_state_get_store(runtime), slot_id);
+Player* game_state_player_at(Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_player_instance(game_state_get_store(runtime), handle);
 }
 
-const Player* game_state_player_at_const(const Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_player_slot_const(game_state_get_store_const(runtime), slot_id);
+const Player* game_state_player_at_const(const Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_player_instance_const(game_state_get_store_const(runtime), handle);
 }
 
-size_t game_state_first_player(const Game_stateRuntime* runtime) {
+KekStateHandle game_state_first_player(const Game_stateRuntime* runtime) {
     return game_state_player_first(game_state_get_store_const(runtime));
 }
 
-size_t game_state_next_player(const Game_stateRuntime* runtime, size_t after_slot_id) {
-    return game_state_player_next(game_state_get_store_const(runtime), after_slot_id);
+KekStateHandle game_state_next_player(const Game_stateRuntime* runtime, KekStateHandle after_handle) {
+    return game_state_player_next(game_state_get_store_const(runtime), after_handle);
 }
 
 int game_state_count_player(const Game_stateRuntime* runtime) {
     int count = 0;
-    for (size_t slot = game_state_first_player(runtime); slot != KEK_STATE_INVALID_ID; slot = game_state_next_player(runtime, slot)) {
+    for (KekStateHandle handle = game_state_first_player(runtime); handle != KEK_STATE_INVALID_ID; handle = game_state_next_player(runtime, handle)) {
         count++;
     }
     return count;
 }
 
-int game_state_update_player_slot(Game_stateRuntime* runtime, size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return kek_state_store_update_fields(game_state_get_store(runtime), slot_id, update, context, changed_fields);
+int game_state_update_player_instance(Game_stateRuntime* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return kek_state_store_update_fields(game_state_get_store(runtime), handle, update, context, changed_fields);
 }
 
-Game_stateUpdateItem game_state_player_slot_update_item(size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    Game_stateUpdateItem item = {slot_id, update, context, changed_fields};
+int game_state_update_player_slot(Game_stateRuntime* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_update_player_instance(runtime, handle, update, context, changed_fields);
+}
+
+Game_stateUpdateItem game_state_player_instance_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    Game_stateUpdateItem item = {handle, update, context, changed_fields};
     return item;
+}
+
+Game_stateUpdateItem game_state_player_slot_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_player_instance_update_item(handle, update, context, changed_fields);
 }
 
 typedef struct Player_x_FieldUpdate {
@@ -2645,13 +3377,17 @@ static void game_state_player_set_x_update(void* draft, void* context) {
     state->x = update->value;
 }
 
-int game_state_player_set_x(KekStateStore* store, size_t slot_id, float value) {
+int game_state_player_set_x(KekStateStore* store, KekStateHandle handle, float value) {
     Player_x_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_player_set_x_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_X);
+    return kek_state_store_update_fields(store, handle, game_state_player_set_x_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_X);
 }
 
-int game_state_set_player_slot_x(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_player_set_x(game_state_get_store(runtime), slot_id, value);
+int game_state_set_player_instance_x(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_player_set_x(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_player_slot_x(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_player_instance_x(runtime, handle, value);
 }
 
 typedef struct Player_y_FieldUpdate {
@@ -2667,13 +3403,17 @@ static void game_state_player_set_y_update(void* draft, void* context) {
     state->y = update->value;
 }
 
-int game_state_player_set_y(KekStateStore* store, size_t slot_id, float value) {
+int game_state_player_set_y(KekStateStore* store, KekStateHandle handle, float value) {
     Player_y_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_player_set_y_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_Y);
+    return kek_state_store_update_fields(store, handle, game_state_player_set_y_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_Y);
 }
 
-int game_state_set_player_slot_y(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_player_set_y(game_state_get_store(runtime), slot_id, value);
+int game_state_set_player_instance_y(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_player_set_y(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_player_slot_y(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_player_instance_y(runtime, handle, value);
 }
 
 typedef struct Player_vx_FieldUpdate {
@@ -2689,13 +3429,17 @@ static void game_state_player_set_vx_update(void* draft, void* context) {
     state->vx = update->value;
 }
 
-int game_state_player_set_vx(KekStateStore* store, size_t slot_id, float value) {
+int game_state_player_set_vx(KekStateStore* store, KekStateHandle handle, float value) {
     Player_vx_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_player_set_vx_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_VX);
+    return kek_state_store_update_fields(store, handle, game_state_player_set_vx_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_VX);
 }
 
-int game_state_set_player_slot_vx(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_player_set_vx(game_state_get_store(runtime), slot_id, value);
+int game_state_set_player_instance_vx(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_player_set_vx(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_player_slot_vx(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_player_instance_vx(runtime, handle, value);
 }
 
 typedef struct Player_vy_FieldUpdate {
@@ -2711,13 +3455,17 @@ static void game_state_player_set_vy_update(void* draft, void* context) {
     state->vy = update->value;
 }
 
-int game_state_player_set_vy(KekStateStore* store, size_t slot_id, float value) {
+int game_state_player_set_vy(KekStateStore* store, KekStateHandle handle, float value) {
     Player_vy_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_player_set_vy_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_VY);
+    return kek_state_store_update_fields(store, handle, game_state_player_set_vy_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_VY);
 }
 
-int game_state_set_player_slot_vy(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_player_set_vy(game_state_get_store(runtime), slot_id, value);
+int game_state_set_player_instance_vy(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_player_set_vy(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_player_slot_vy(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_player_instance_vy(runtime, handle, value);
 }
 
 typedef struct Player_health_FieldUpdate {
@@ -2733,13 +3481,17 @@ static void game_state_player_set_health_update(void* draft, void* context) {
     state->health = update->value;
 }
 
-int game_state_player_set_health(KekStateStore* store, size_t slot_id, int32_t value) {
+int game_state_player_set_health(KekStateStore* store, KekStateHandle handle, int32_t value) {
     Player_health_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_player_set_health_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_HEALTH);
+    return kek_state_store_update_fields(store, handle, game_state_player_set_health_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_HEALTH);
 }
 
-int game_state_set_player_slot_health(Game_stateRuntime* runtime, size_t slot_id, int32_t value) {
-    return game_state_player_set_health(game_state_get_store(runtime), slot_id, value);
+int game_state_set_player_instance_health(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_player_set_health(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_player_slot_health(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_set_player_instance_health(runtime, handle, value);
 }
 
 typedef struct Player_max_health_FieldUpdate {
@@ -2755,13 +3507,17 @@ static void game_state_player_set_max_health_update(void* draft, void* context) 
     state->max_health = update->value;
 }
 
-int game_state_player_set_max_health(KekStateStore* store, size_t slot_id, int32_t value) {
+int game_state_player_set_max_health(KekStateStore* store, KekStateHandle handle, int32_t value) {
     Player_max_health_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_player_set_max_health_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_MAX_HEALTH);
+    return kek_state_store_update_fields(store, handle, game_state_player_set_max_health_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_MAX_HEALTH);
 }
 
-int game_state_set_player_slot_max_health(Game_stateRuntime* runtime, size_t slot_id, int32_t value) {
-    return game_state_player_set_max_health(game_state_get_store(runtime), slot_id, value);
+int game_state_set_player_instance_max_health(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_player_set_max_health(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_player_slot_max_health(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_set_player_instance_max_health(runtime, handle, value);
 }
 
 typedef struct Player_shield_FieldUpdate {
@@ -2777,13 +3533,17 @@ static void game_state_player_set_shield_update(void* draft, void* context) {
     state->shield = update->value;
 }
 
-int game_state_player_set_shield(KekStateStore* store, size_t slot_id, int32_t value) {
+int game_state_player_set_shield(KekStateStore* store, KekStateHandle handle, int32_t value) {
     Player_shield_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_player_set_shield_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_SHIELD);
+    return kek_state_store_update_fields(store, handle, game_state_player_set_shield_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_SHIELD);
 }
 
-int game_state_set_player_slot_shield(Game_stateRuntime* runtime, size_t slot_id, int32_t value) {
-    return game_state_player_set_shield(game_state_get_store(runtime), slot_id, value);
+int game_state_set_player_instance_shield(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_player_set_shield(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_player_slot_shield(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_set_player_instance_shield(runtime, handle, value);
 }
 
 typedef struct Player_xp_FieldUpdate {
@@ -2799,13 +3559,17 @@ static void game_state_player_set_xp_update(void* draft, void* context) {
     state->xp = update->value;
 }
 
-int game_state_player_set_xp(KekStateStore* store, size_t slot_id, int32_t value) {
+int game_state_player_set_xp(KekStateStore* store, KekStateHandle handle, int32_t value) {
     Player_xp_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_player_set_xp_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_XP);
+    return kek_state_store_update_fields(store, handle, game_state_player_set_xp_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_XP);
 }
 
-int game_state_set_player_slot_xp(Game_stateRuntime* runtime, size_t slot_id, int32_t value) {
-    return game_state_player_set_xp(game_state_get_store(runtime), slot_id, value);
+int game_state_set_player_instance_xp(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_player_set_xp(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_player_slot_xp(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_set_player_instance_xp(runtime, handle, value);
 }
 
 typedef struct Player_level_FieldUpdate {
@@ -2821,13 +3585,17 @@ static void game_state_player_set_level_update(void* draft, void* context) {
     state->level = update->value;
 }
 
-int game_state_player_set_level(KekStateStore* store, size_t slot_id, int32_t value) {
+int game_state_player_set_level(KekStateStore* store, KekStateHandle handle, int32_t value) {
     Player_level_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_player_set_level_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_LEVEL);
+    return kek_state_store_update_fields(store, handle, game_state_player_set_level_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_LEVEL);
 }
 
-int game_state_set_player_slot_level(Game_stateRuntime* runtime, size_t slot_id, int32_t value) {
-    return game_state_player_set_level(game_state_get_store(runtime), slot_id, value);
+int game_state_set_player_instance_level(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_player_set_level(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_player_slot_level(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_set_player_instance_level(runtime, handle, value);
 }
 
 typedef struct Player_fire_cooldown_FieldUpdate {
@@ -2843,13 +3611,17 @@ static void game_state_player_set_fire_cooldown_update(void* draft, void* contex
     state->fire_cooldown = update->value;
 }
 
-int game_state_player_set_fire_cooldown(KekStateStore* store, size_t slot_id, float value) {
+int game_state_player_set_fire_cooldown(KekStateStore* store, KekStateHandle handle, float value) {
     Player_fire_cooldown_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_player_set_fire_cooldown_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_FIRE_COOLDOWN);
+    return kek_state_store_update_fields(store, handle, game_state_player_set_fire_cooldown_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_FIRE_COOLDOWN);
 }
 
-int game_state_set_player_slot_fire_cooldown(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_player_set_fire_cooldown(game_state_get_store(runtime), slot_id, value);
+int game_state_set_player_instance_fire_cooldown(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_player_set_fire_cooldown(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_player_slot_fire_cooldown(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_player_instance_fire_cooldown(runtime, handle, value);
 }
 
 typedef struct Player_dash_cooldown_FieldUpdate {
@@ -2865,13 +3637,17 @@ static void game_state_player_set_dash_cooldown_update(void* draft, void* contex
     state->dash_cooldown = update->value;
 }
 
-int game_state_player_set_dash_cooldown(KekStateStore* store, size_t slot_id, float value) {
+int game_state_player_set_dash_cooldown(KekStateStore* store, KekStateHandle handle, float value) {
     Player_dash_cooldown_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_player_set_dash_cooldown_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_DASH_COOLDOWN);
+    return kek_state_store_update_fields(store, handle, game_state_player_set_dash_cooldown_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_DASH_COOLDOWN);
 }
 
-int game_state_set_player_slot_dash_cooldown(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_player_set_dash_cooldown(game_state_get_store(runtime), slot_id, value);
+int game_state_set_player_instance_dash_cooldown(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_player_set_dash_cooldown(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_player_slot_dash_cooldown(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_player_instance_dash_cooldown(runtime, handle, value);
 }
 
 typedef struct Player_rapid_timer_FieldUpdate {
@@ -2887,13 +3663,17 @@ static void game_state_player_set_rapid_timer_update(void* draft, void* context)
     state->rapid_timer = update->value;
 }
 
-int game_state_player_set_rapid_timer(KekStateStore* store, size_t slot_id, float value) {
+int game_state_player_set_rapid_timer(KekStateStore* store, KekStateHandle handle, float value) {
     Player_rapid_timer_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_player_set_rapid_timer_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_RAPID_TIMER);
+    return kek_state_store_update_fields(store, handle, game_state_player_set_rapid_timer_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_RAPID_TIMER);
 }
 
-int game_state_set_player_slot_rapid_timer(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_player_set_rapid_timer(game_state_get_store(runtime), slot_id, value);
+int game_state_set_player_instance_rapid_timer(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_player_set_rapid_timer(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_player_slot_rapid_timer(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_player_instance_rapid_timer(runtime, handle, value);
 }
 
 typedef struct Player_invulnerable_timer_FieldUpdate {
@@ -2909,98 +3689,118 @@ static void game_state_player_set_invulnerable_timer_update(void* draft, void* c
     state->invulnerable_timer = update->value;
 }
 
-int game_state_player_set_invulnerable_timer(KekStateStore* store, size_t slot_id, float value) {
+int game_state_player_set_invulnerable_timer(KekStateStore* store, KekStateHandle handle, float value) {
     Player_invulnerable_timer_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_player_set_invulnerable_timer_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_INVULNERABLE_TIMER);
+    return kek_state_store_update_fields(store, handle, game_state_player_set_invulnerable_timer_update, &update, KEK_STATE_TYPE_PLAYER_FIELD_INVULNERABLE_TIMER);
 }
 
-int game_state_set_player_slot_invulnerable_timer(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_player_set_invulnerable_timer(game_state_get_store(runtime), slot_id, value);
+int game_state_set_player_instance_invulnerable_timer(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_player_set_invulnerable_timer(game_state_get_store(runtime), handle, value);
 }
 
-size_t game_state_wave_director_create(KekStateStore* store) {
+int game_state_set_player_slot_invulnerable_timer(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_player_instance_invulnerable_timer(runtime, handle, value);
+}
+
+KekStateHandle game_state_wave_director_create(KekStateStore* store) {
     return kek_state_store_add_default(store, &KekGeneratedStateDescriptors[KEK_STATE_TYPE_WAVE_DIRECTOR]);
 }
 
-size_t game_state_wave_director_create_with(KekStateStore* store, const WaveDirector* initial) {
+KekStateHandle game_state_wave_director_create_with(KekStateStore* store, const WaveDirector* initial) {
     return kek_state_store_add(store, &KekGeneratedStateDescriptors[KEK_STATE_TYPE_WAVE_DIRECTOR], initial);
 }
 
-int game_state_wave_director_delete(KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+int game_state_wave_director_delete(KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_WAVE_DIRECTOR) {
         return 0;
     }
-    return kek_state_store_remove(store, slot_id);
+    return kek_state_store_remove(store, handle);
 }
 
-WaveDirector* game_state_wave_director_slot(KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+WaveDirector* game_state_wave_director_instance(KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_WAVE_DIRECTOR) {
         return 0;
     }
-    return (WaveDirector*)kek_state_store_current(store, slot_id);
+    return (WaveDirector*)kek_state_store_current(store, handle);
 }
 
-const WaveDirector* game_state_wave_director_slot_const(const KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+const WaveDirector* game_state_wave_director_instance_const(const KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_WAVE_DIRECTOR) {
         return 0;
     }
-    return (const WaveDirector*)kek_state_store_current_const(store, slot_id);
+    return (const WaveDirector*)kek_state_store_current_const(store, handle);
 }
 
-size_t game_state_wave_director_first(const KekStateStore* store) {
+WaveDirector* game_state_wave_director_slot(KekStateStore* store, KekStateHandle handle) {
+    return game_state_wave_director_instance(store, handle);
+}
+
+const WaveDirector* game_state_wave_director_slot_const(const KekStateStore* store, KekStateHandle handle) {
+    return game_state_wave_director_instance_const(store, handle);
+}
+
+KekStateHandle game_state_wave_director_first(const KekStateStore* store) {
     return kek_state_store_find_first(store, KEK_STATE_TYPE_WAVE_DIRECTOR);
 }
 
-size_t game_state_wave_director_next(const KekStateStore* store, size_t after_slot_id) {
-    return kek_state_store_find_next(store, KEK_STATE_TYPE_WAVE_DIRECTOR, after_slot_id);
+KekStateHandle game_state_wave_director_next(const KekStateStore* store, KekStateHandle after_handle) {
+    return kek_state_store_find_next(store, KEK_STATE_TYPE_WAVE_DIRECTOR, after_handle);
 }
 
-size_t game_state_create_wave_director(Game_stateRuntime* runtime) {
+KekStateHandle game_state_create_wave_director(Game_stateRuntime* runtime) {
     return game_state_wave_director_create(game_state_get_store(runtime));
 }
 
-size_t game_state_create_wave_director_with(Game_stateRuntime* runtime, const WaveDirector* initial) {
+KekStateHandle game_state_create_wave_director_with(Game_stateRuntime* runtime, const WaveDirector* initial) {
     return game_state_wave_director_create_with(game_state_get_store(runtime), initial);
 }
 
-int game_state_delete_wave_director(Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_wave_director_delete(game_state_get_store(runtime), slot_id);
+int game_state_delete_wave_director(Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_wave_director_delete(game_state_get_store(runtime), handle);
 }
 
-WaveDirector* game_state_wave_director_at(Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_wave_director_slot(game_state_get_store(runtime), slot_id);
+WaveDirector* game_state_wave_director_at(Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_wave_director_instance(game_state_get_store(runtime), handle);
 }
 
-const WaveDirector* game_state_wave_director_at_const(const Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_wave_director_slot_const(game_state_get_store_const(runtime), slot_id);
+const WaveDirector* game_state_wave_director_at_const(const Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_wave_director_instance_const(game_state_get_store_const(runtime), handle);
 }
 
-size_t game_state_first_wave_director(const Game_stateRuntime* runtime) {
+KekStateHandle game_state_first_wave_director(const Game_stateRuntime* runtime) {
     return game_state_wave_director_first(game_state_get_store_const(runtime));
 }
 
-size_t game_state_next_wave_director(const Game_stateRuntime* runtime, size_t after_slot_id) {
-    return game_state_wave_director_next(game_state_get_store_const(runtime), after_slot_id);
+KekStateHandle game_state_next_wave_director(const Game_stateRuntime* runtime, KekStateHandle after_handle) {
+    return game_state_wave_director_next(game_state_get_store_const(runtime), after_handle);
 }
 
 int game_state_count_wave_director(const Game_stateRuntime* runtime) {
     int count = 0;
-    for (size_t slot = game_state_first_wave_director(runtime); slot != KEK_STATE_INVALID_ID; slot = game_state_next_wave_director(runtime, slot)) {
+    for (KekStateHandle handle = game_state_first_wave_director(runtime); handle != KEK_STATE_INVALID_ID; handle = game_state_next_wave_director(runtime, handle)) {
         count++;
     }
     return count;
 }
 
-int game_state_update_wave_director_slot(Game_stateRuntime* runtime, size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return kek_state_store_update_fields(game_state_get_store(runtime), slot_id, update, context, changed_fields);
+int game_state_update_wave_director_instance(Game_stateRuntime* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return kek_state_store_update_fields(game_state_get_store(runtime), handle, update, context, changed_fields);
 }
 
-Game_stateUpdateItem game_state_wave_director_slot_update_item(size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    Game_stateUpdateItem item = {slot_id, update, context, changed_fields};
+int game_state_update_wave_director_slot(Game_stateRuntime* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_update_wave_director_instance(runtime, handle, update, context, changed_fields);
+}
+
+Game_stateUpdateItem game_state_wave_director_instance_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    Game_stateUpdateItem item = {handle, update, context, changed_fields};
     return item;
+}
+
+Game_stateUpdateItem game_state_wave_director_slot_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_wave_director_instance_update_item(handle, update, context, changed_fields);
 }
 
 typedef struct WaveDirector_wave_FieldUpdate {
@@ -3016,13 +3816,17 @@ static void game_state_wave_director_set_wave_update(void* draft, void* context)
     state->wave = update->value;
 }
 
-int game_state_wave_director_set_wave(KekStateStore* store, size_t slot_id, int32_t value) {
+int game_state_wave_director_set_wave(KekStateStore* store, KekStateHandle handle, int32_t value) {
     WaveDirector_wave_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_wave_director_set_wave_update, &update, KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_WAVE);
+    return kek_state_store_update_fields(store, handle, game_state_wave_director_set_wave_update, &update, KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_WAVE);
 }
 
-int game_state_set_wave_director_slot_wave(Game_stateRuntime* runtime, size_t slot_id, int32_t value) {
-    return game_state_wave_director_set_wave(game_state_get_store(runtime), slot_id, value);
+int game_state_set_wave_director_instance_wave(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_wave_director_set_wave(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_wave_director_slot_wave(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_set_wave_director_instance_wave(runtime, handle, value);
 }
 
 typedef struct WaveDirector_spawn_budget_FieldUpdate {
@@ -3038,13 +3842,17 @@ static void game_state_wave_director_set_spawn_budget_update(void* draft, void* 
     state->spawn_budget = update->value;
 }
 
-int game_state_wave_director_set_spawn_budget(KekStateStore* store, size_t slot_id, int32_t value) {
+int game_state_wave_director_set_spawn_budget(KekStateStore* store, KekStateHandle handle, int32_t value) {
     WaveDirector_spawn_budget_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_wave_director_set_spawn_budget_update, &update, KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_SPAWN_BUDGET);
+    return kek_state_store_update_fields(store, handle, game_state_wave_director_set_spawn_budget_update, &update, KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_SPAWN_BUDGET);
 }
 
-int game_state_set_wave_director_slot_spawn_budget(Game_stateRuntime* runtime, size_t slot_id, int32_t value) {
-    return game_state_wave_director_set_spawn_budget(game_state_get_store(runtime), slot_id, value);
+int game_state_set_wave_director_instance_spawn_budget(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_wave_director_set_spawn_budget(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_wave_director_slot_spawn_budget(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_set_wave_director_instance_spawn_budget(runtime, handle, value);
 }
 
 typedef struct WaveDirector_spawn_timer_FieldUpdate {
@@ -3060,13 +3868,17 @@ static void game_state_wave_director_set_spawn_timer_update(void* draft, void* c
     state->spawn_timer = update->value;
 }
 
-int game_state_wave_director_set_spawn_timer(KekStateStore* store, size_t slot_id, float value) {
+int game_state_wave_director_set_spawn_timer(KekStateStore* store, KekStateHandle handle, float value) {
     WaveDirector_spawn_timer_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_wave_director_set_spawn_timer_update, &update, KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_SPAWN_TIMER);
+    return kek_state_store_update_fields(store, handle, game_state_wave_director_set_spawn_timer_update, &update, KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_SPAWN_TIMER);
 }
 
-int game_state_set_wave_director_slot_spawn_timer(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_wave_director_set_spawn_timer(game_state_get_store(runtime), slot_id, value);
+int game_state_set_wave_director_instance_spawn_timer(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_wave_director_set_spawn_timer(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_wave_director_slot_spawn_timer(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_wave_director_instance_spawn_timer(runtime, handle, value);
 }
 
 typedef struct WaveDirector_active_enemies_FieldUpdate {
@@ -3082,13 +3894,17 @@ static void game_state_wave_director_set_active_enemies_update(void* draft, void
     state->active_enemies = update->value;
 }
 
-int game_state_wave_director_set_active_enemies(KekStateStore* store, size_t slot_id, int32_t value) {
+int game_state_wave_director_set_active_enemies(KekStateStore* store, KekStateHandle handle, int32_t value) {
     WaveDirector_active_enemies_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_wave_director_set_active_enemies_update, &update, KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_ACTIVE_ENEMIES);
+    return kek_state_store_update_fields(store, handle, game_state_wave_director_set_active_enemies_update, &update, KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_ACTIVE_ENEMIES);
 }
 
-int game_state_set_wave_director_slot_active_enemies(Game_stateRuntime* runtime, size_t slot_id, int32_t value) {
-    return game_state_wave_director_set_active_enemies(game_state_get_store(runtime), slot_id, value);
+int game_state_set_wave_director_instance_active_enemies(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_wave_director_set_active_enemies(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_wave_director_slot_active_enemies(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_set_wave_director_instance_active_enemies(runtime, handle, value);
 }
 
 typedef struct WaveDirector_boss_spawned_FieldUpdate {
@@ -3104,98 +3920,118 @@ static void game_state_wave_director_set_boss_spawned_update(void* draft, void* 
     state->boss_spawned = update->value;
 }
 
-int game_state_wave_director_set_boss_spawned(KekStateStore* store, size_t slot_id, bool value) {
+int game_state_wave_director_set_boss_spawned(KekStateStore* store, KekStateHandle handle, bool value) {
     WaveDirector_boss_spawned_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_wave_director_set_boss_spawned_update, &update, KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_BOSS_SPAWNED);
+    return kek_state_store_update_fields(store, handle, game_state_wave_director_set_boss_spawned_update, &update, KEK_STATE_TYPE_WAVE_DIRECTOR_FIELD_BOSS_SPAWNED);
 }
 
-int game_state_set_wave_director_slot_boss_spawned(Game_stateRuntime* runtime, size_t slot_id, bool value) {
-    return game_state_wave_director_set_boss_spawned(game_state_get_store(runtime), slot_id, value);
+int game_state_set_wave_director_instance_boss_spawned(Game_stateRuntime* runtime, KekStateHandle handle, bool value) {
+    return game_state_wave_director_set_boss_spawned(game_state_get_store(runtime), handle, value);
 }
 
-size_t game_state_camera_rig_create(KekStateStore* store) {
+int game_state_set_wave_director_slot_boss_spawned(Game_stateRuntime* runtime, KekStateHandle handle, bool value) {
+    return game_state_set_wave_director_instance_boss_spawned(runtime, handle, value);
+}
+
+KekStateHandle game_state_camera_rig_create(KekStateStore* store) {
     return kek_state_store_add_default(store, &KekGeneratedStateDescriptors[KEK_STATE_TYPE_CAMERA_RIG]);
 }
 
-size_t game_state_camera_rig_create_with(KekStateStore* store, const CameraRig* initial) {
+KekStateHandle game_state_camera_rig_create_with(KekStateStore* store, const CameraRig* initial) {
     return kek_state_store_add(store, &KekGeneratedStateDescriptors[KEK_STATE_TYPE_CAMERA_RIG], initial);
 }
 
-int game_state_camera_rig_delete(KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+int game_state_camera_rig_delete(KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_CAMERA_RIG) {
         return 0;
     }
-    return kek_state_store_remove(store, slot_id);
+    return kek_state_store_remove(store, handle);
 }
 
-CameraRig* game_state_camera_rig_slot(KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+CameraRig* game_state_camera_rig_instance(KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_CAMERA_RIG) {
         return 0;
     }
-    return (CameraRig*)kek_state_store_current(store, slot_id);
+    return (CameraRig*)kek_state_store_current(store, handle);
 }
 
-const CameraRig* game_state_camera_rig_slot_const(const KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+const CameraRig* game_state_camera_rig_instance_const(const KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_CAMERA_RIG) {
         return 0;
     }
-    return (const CameraRig*)kek_state_store_current_const(store, slot_id);
+    return (const CameraRig*)kek_state_store_current_const(store, handle);
 }
 
-size_t game_state_camera_rig_first(const KekStateStore* store) {
+CameraRig* game_state_camera_rig_slot(KekStateStore* store, KekStateHandle handle) {
+    return game_state_camera_rig_instance(store, handle);
+}
+
+const CameraRig* game_state_camera_rig_slot_const(const KekStateStore* store, KekStateHandle handle) {
+    return game_state_camera_rig_instance_const(store, handle);
+}
+
+KekStateHandle game_state_camera_rig_first(const KekStateStore* store) {
     return kek_state_store_find_first(store, KEK_STATE_TYPE_CAMERA_RIG);
 }
 
-size_t game_state_camera_rig_next(const KekStateStore* store, size_t after_slot_id) {
-    return kek_state_store_find_next(store, KEK_STATE_TYPE_CAMERA_RIG, after_slot_id);
+KekStateHandle game_state_camera_rig_next(const KekStateStore* store, KekStateHandle after_handle) {
+    return kek_state_store_find_next(store, KEK_STATE_TYPE_CAMERA_RIG, after_handle);
 }
 
-size_t game_state_create_camera_rig(Game_stateRuntime* runtime) {
+KekStateHandle game_state_create_camera_rig(Game_stateRuntime* runtime) {
     return game_state_camera_rig_create(game_state_get_store(runtime));
 }
 
-size_t game_state_create_camera_rig_with(Game_stateRuntime* runtime, const CameraRig* initial) {
+KekStateHandle game_state_create_camera_rig_with(Game_stateRuntime* runtime, const CameraRig* initial) {
     return game_state_camera_rig_create_with(game_state_get_store(runtime), initial);
 }
 
-int game_state_delete_camera_rig(Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_camera_rig_delete(game_state_get_store(runtime), slot_id);
+int game_state_delete_camera_rig(Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_camera_rig_delete(game_state_get_store(runtime), handle);
 }
 
-CameraRig* game_state_camera_rig_at(Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_camera_rig_slot(game_state_get_store(runtime), slot_id);
+CameraRig* game_state_camera_rig_at(Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_camera_rig_instance(game_state_get_store(runtime), handle);
 }
 
-const CameraRig* game_state_camera_rig_at_const(const Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_camera_rig_slot_const(game_state_get_store_const(runtime), slot_id);
+const CameraRig* game_state_camera_rig_at_const(const Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_camera_rig_instance_const(game_state_get_store_const(runtime), handle);
 }
 
-size_t game_state_first_camera_rig(const Game_stateRuntime* runtime) {
+KekStateHandle game_state_first_camera_rig(const Game_stateRuntime* runtime) {
     return game_state_camera_rig_first(game_state_get_store_const(runtime));
 }
 
-size_t game_state_next_camera_rig(const Game_stateRuntime* runtime, size_t after_slot_id) {
-    return game_state_camera_rig_next(game_state_get_store_const(runtime), after_slot_id);
+KekStateHandle game_state_next_camera_rig(const Game_stateRuntime* runtime, KekStateHandle after_handle) {
+    return game_state_camera_rig_next(game_state_get_store_const(runtime), after_handle);
 }
 
 int game_state_count_camera_rig(const Game_stateRuntime* runtime) {
     int count = 0;
-    for (size_t slot = game_state_first_camera_rig(runtime); slot != KEK_STATE_INVALID_ID; slot = game_state_next_camera_rig(runtime, slot)) {
+    for (KekStateHandle handle = game_state_first_camera_rig(runtime); handle != KEK_STATE_INVALID_ID; handle = game_state_next_camera_rig(runtime, handle)) {
         count++;
     }
     return count;
 }
 
-int game_state_update_camera_rig_slot(Game_stateRuntime* runtime, size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return kek_state_store_update_fields(game_state_get_store(runtime), slot_id, update, context, changed_fields);
+int game_state_update_camera_rig_instance(Game_stateRuntime* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return kek_state_store_update_fields(game_state_get_store(runtime), handle, update, context, changed_fields);
 }
 
-Game_stateUpdateItem game_state_camera_rig_slot_update_item(size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    Game_stateUpdateItem item = {slot_id, update, context, changed_fields};
+int game_state_update_camera_rig_slot(Game_stateRuntime* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_update_camera_rig_instance(runtime, handle, update, context, changed_fields);
+}
+
+Game_stateUpdateItem game_state_camera_rig_instance_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    Game_stateUpdateItem item = {handle, update, context, changed_fields};
     return item;
+}
+
+Game_stateUpdateItem game_state_camera_rig_slot_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_camera_rig_instance_update_item(handle, update, context, changed_fields);
 }
 
 typedef struct CameraRig_x_FieldUpdate {
@@ -3211,13 +4047,17 @@ static void game_state_camera_rig_set_x_update(void* draft, void* context) {
     state->x = update->value;
 }
 
-int game_state_camera_rig_set_x(KekStateStore* store, size_t slot_id, float value) {
+int game_state_camera_rig_set_x(KekStateStore* store, KekStateHandle handle, float value) {
     CameraRig_x_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_camera_rig_set_x_update, &update, KEK_STATE_TYPE_CAMERA_RIG_FIELD_X);
+    return kek_state_store_update_fields(store, handle, game_state_camera_rig_set_x_update, &update, KEK_STATE_TYPE_CAMERA_RIG_FIELD_X);
 }
 
-int game_state_set_camera_rig_slot_x(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_camera_rig_set_x(game_state_get_store(runtime), slot_id, value);
+int game_state_set_camera_rig_instance_x(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_camera_rig_set_x(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_camera_rig_slot_x(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_camera_rig_instance_x(runtime, handle, value);
 }
 
 typedef struct CameraRig_y_FieldUpdate {
@@ -3233,13 +4073,17 @@ static void game_state_camera_rig_set_y_update(void* draft, void* context) {
     state->y = update->value;
 }
 
-int game_state_camera_rig_set_y(KekStateStore* store, size_t slot_id, float value) {
+int game_state_camera_rig_set_y(KekStateStore* store, KekStateHandle handle, float value) {
     CameraRig_y_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_camera_rig_set_y_update, &update, KEK_STATE_TYPE_CAMERA_RIG_FIELD_Y);
+    return kek_state_store_update_fields(store, handle, game_state_camera_rig_set_y_update, &update, KEK_STATE_TYPE_CAMERA_RIG_FIELD_Y);
 }
 
-int game_state_set_camera_rig_slot_y(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_camera_rig_set_y(game_state_get_store(runtime), slot_id, value);
+int game_state_set_camera_rig_instance_y(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_camera_rig_set_y(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_camera_rig_slot_y(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_camera_rig_instance_y(runtime, handle, value);
 }
 
 typedef struct CameraRig_zoom_FieldUpdate {
@@ -3255,86 +4099,98 @@ static void game_state_camera_rig_set_zoom_update(void* draft, void* context) {
     state->zoom = update->value;
 }
 
-int game_state_camera_rig_set_zoom(KekStateStore* store, size_t slot_id, float value) {
+int game_state_camera_rig_set_zoom(KekStateStore* store, KekStateHandle handle, float value) {
     CameraRig_zoom_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_camera_rig_set_zoom_update, &update, KEK_STATE_TYPE_CAMERA_RIG_FIELD_ZOOM);
+    return kek_state_store_update_fields(store, handle, game_state_camera_rig_set_zoom_update, &update, KEK_STATE_TYPE_CAMERA_RIG_FIELD_ZOOM);
 }
 
-int game_state_set_camera_rig_slot_zoom(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_camera_rig_set_zoom(game_state_get_store(runtime), slot_id, value);
+int game_state_set_camera_rig_instance_zoom(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_camera_rig_set_zoom(game_state_get_store(runtime), handle, value);
 }
 
-size_t game_state_enemy_create(KekStateStore* store) {
+int game_state_set_camera_rig_slot_zoom(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_camera_rig_instance_zoom(runtime, handle, value);
+}
+
+KekStateHandle game_state_enemy_create(KekStateStore* store) {
     return kek_state_store_add_default(store, &KekGeneratedStateDescriptors[KEK_STATE_TYPE_ENEMY]);
 }
 
-size_t game_state_enemy_create_with(KekStateStore* store, const Enemy* initial) {
+KekStateHandle game_state_enemy_create_with(KekStateStore* store, const Enemy* initial) {
     return kek_state_store_add(store, &KekGeneratedStateDescriptors[KEK_STATE_TYPE_ENEMY], initial);
 }
 
-int game_state_enemy_delete(KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+int game_state_enemy_delete(KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_ENEMY) {
         return 0;
     }
-    return kek_state_store_remove(store, slot_id);
+    return kek_state_store_remove(store, handle);
 }
 
-Enemy* game_state_enemy_slot(KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+Enemy* game_state_enemy_instance(KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_ENEMY) {
         return 0;
     }
-    return (Enemy*)kek_state_store_current(store, slot_id);
+    return (Enemy*)kek_state_store_current(store, handle);
 }
 
-const Enemy* game_state_enemy_slot_const(const KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+const Enemy* game_state_enemy_instance_const(const KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_ENEMY) {
         return 0;
     }
-    return (const Enemy*)kek_state_store_current_const(store, slot_id);
+    return (const Enemy*)kek_state_store_current_const(store, handle);
 }
 
-size_t game_state_enemy_first(const KekStateStore* store) {
+Enemy* game_state_enemy_slot(KekStateStore* store, KekStateHandle handle) {
+    return game_state_enemy_instance(store, handle);
+}
+
+const Enemy* game_state_enemy_slot_const(const KekStateStore* store, KekStateHandle handle) {
+    return game_state_enemy_instance_const(store, handle);
+}
+
+KekStateHandle game_state_enemy_first(const KekStateStore* store) {
     return kek_state_store_find_first(store, KEK_STATE_TYPE_ENEMY);
 }
 
-size_t game_state_enemy_next(const KekStateStore* store, size_t after_slot_id) {
-    return kek_state_store_find_next(store, KEK_STATE_TYPE_ENEMY, after_slot_id);
+KekStateHandle game_state_enemy_next(const KekStateStore* store, KekStateHandle after_handle) {
+    return kek_state_store_find_next(store, KEK_STATE_TYPE_ENEMY, after_handle);
 }
 
-size_t game_state_create_enemy(Game_stateRuntime* runtime) {
+KekStateHandle game_state_create_enemy(Game_stateRuntime* runtime) {
     return game_state_enemy_create(game_state_get_store(runtime));
 }
 
-size_t game_state_create_enemy_with(Game_stateRuntime* runtime, const Enemy* initial) {
+KekStateHandle game_state_create_enemy_with(Game_stateRuntime* runtime, const Enemy* initial) {
     return game_state_enemy_create_with(game_state_get_store(runtime), initial);
 }
 
-int game_state_delete_enemy(Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_enemy_delete(game_state_get_store(runtime), slot_id);
+int game_state_delete_enemy(Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_enemy_delete(game_state_get_store(runtime), handle);
 }
 
-Enemy* game_state_enemy_at(Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_enemy_slot(game_state_get_store(runtime), slot_id);
+Enemy* game_state_enemy_at(Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_enemy_instance(game_state_get_store(runtime), handle);
 }
 
-const Enemy* game_state_enemy_at_const(const Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_enemy_slot_const(game_state_get_store_const(runtime), slot_id);
+const Enemy* game_state_enemy_at_const(const Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_enemy_instance_const(game_state_get_store_const(runtime), handle);
 }
 
-size_t game_state_first_enemy(const Game_stateRuntime* runtime) {
+KekStateHandle game_state_first_enemy(const Game_stateRuntime* runtime) {
     return game_state_enemy_first(game_state_get_store_const(runtime));
 }
 
-size_t game_state_next_enemy(const Game_stateRuntime* runtime, size_t after_slot_id) {
-    return game_state_enemy_next(game_state_get_store_const(runtime), after_slot_id);
+KekStateHandle game_state_next_enemy(const Game_stateRuntime* runtime, KekStateHandle after_handle) {
+    return game_state_enemy_next(game_state_get_store_const(runtime), after_handle);
 }
 
 int game_state_count_enemy(const Game_stateRuntime* runtime) {
     int count = 0;
-    for (size_t slot = game_state_first_enemy(runtime); slot != KEK_STATE_INVALID_ID; slot = game_state_next_enemy(runtime, slot)) {
+    for (KekStateHandle handle = game_state_first_enemy(runtime); handle != KEK_STATE_INVALID_ID; handle = game_state_next_enemy(runtime, handle)) {
         count++;
     }
     return count;
@@ -3342,8 +4198,8 @@ int game_state_count_enemy(const Game_stateRuntime* runtime) {
 
 int game_state_count_active_enemy(const Game_stateRuntime* runtime) {
     int count = 0;
-    for (size_t slot = game_state_first_enemy(runtime); slot != KEK_STATE_INVALID_ID; slot = game_state_next_enemy(runtime, slot)) {
-        const Enemy* state = game_state_enemy_at_const(runtime, slot);
+    for (KekStateHandle handle = game_state_first_enemy(runtime); handle != KEK_STATE_INVALID_ID; handle = game_state_next_enemy(runtime, handle)) {
+        const Enemy* state = game_state_enemy_at_const(runtime, handle);
         if (state && state->active) {
             count++;
         }
@@ -3351,13 +4207,21 @@ int game_state_count_active_enemy(const Game_stateRuntime* runtime) {
     return count;
 }
 
-int game_state_update_enemy_slot(Game_stateRuntime* runtime, size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return kek_state_store_update_fields(game_state_get_store(runtime), slot_id, update, context, changed_fields);
+int game_state_update_enemy_instance(Game_stateRuntime* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return kek_state_store_update_fields(game_state_get_store(runtime), handle, update, context, changed_fields);
 }
 
-Game_stateUpdateItem game_state_enemy_slot_update_item(size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    Game_stateUpdateItem item = {slot_id, update, context, changed_fields};
+int game_state_update_enemy_slot(Game_stateRuntime* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_update_enemy_instance(runtime, handle, update, context, changed_fields);
+}
+
+Game_stateUpdateItem game_state_enemy_instance_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    Game_stateUpdateItem item = {handle, update, context, changed_fields};
     return item;
+}
+
+Game_stateUpdateItem game_state_enemy_slot_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_enemy_instance_update_item(handle, update, context, changed_fields);
 }
 
 typedef struct Enemy_kind_FieldUpdate {
@@ -3373,13 +4237,17 @@ static void game_state_enemy_set_kind_update(void* draft, void* context) {
     state->kind = update->value;
 }
 
-int game_state_enemy_set_kind(KekStateStore* store, size_t slot_id, EnemyKind value) {
+int game_state_enemy_set_kind(KekStateStore* store, KekStateHandle handle, EnemyKind value) {
     Enemy_kind_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_enemy_set_kind_update, &update, KEK_STATE_TYPE_ENEMY_FIELD_KIND);
+    return kek_state_store_update_fields(store, handle, game_state_enemy_set_kind_update, &update, KEK_STATE_TYPE_ENEMY_FIELD_KIND);
 }
 
-int game_state_set_enemy_slot_kind(Game_stateRuntime* runtime, size_t slot_id, EnemyKind value) {
-    return game_state_enemy_set_kind(game_state_get_store(runtime), slot_id, value);
+int game_state_set_enemy_instance_kind(Game_stateRuntime* runtime, KekStateHandle handle, EnemyKind value) {
+    return game_state_enemy_set_kind(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_enemy_slot_kind(Game_stateRuntime* runtime, KekStateHandle handle, EnemyKind value) {
+    return game_state_set_enemy_instance_kind(runtime, handle, value);
 }
 
 typedef struct Enemy_x_FieldUpdate {
@@ -3395,13 +4263,17 @@ static void game_state_enemy_set_x_update(void* draft, void* context) {
     state->x = update->value;
 }
 
-int game_state_enemy_set_x(KekStateStore* store, size_t slot_id, float value) {
+int game_state_enemy_set_x(KekStateStore* store, KekStateHandle handle, float value) {
     Enemy_x_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_enemy_set_x_update, &update, KEK_STATE_TYPE_ENEMY_FIELD_X);
+    return kek_state_store_update_fields(store, handle, game_state_enemy_set_x_update, &update, KEK_STATE_TYPE_ENEMY_FIELD_X);
 }
 
-int game_state_set_enemy_slot_x(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_enemy_set_x(game_state_get_store(runtime), slot_id, value);
+int game_state_set_enemy_instance_x(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_enemy_set_x(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_enemy_slot_x(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_enemy_instance_x(runtime, handle, value);
 }
 
 typedef struct Enemy_y_FieldUpdate {
@@ -3417,13 +4289,17 @@ static void game_state_enemy_set_y_update(void* draft, void* context) {
     state->y = update->value;
 }
 
-int game_state_enemy_set_y(KekStateStore* store, size_t slot_id, float value) {
+int game_state_enemy_set_y(KekStateStore* store, KekStateHandle handle, float value) {
     Enemy_y_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_enemy_set_y_update, &update, KEK_STATE_TYPE_ENEMY_FIELD_Y);
+    return kek_state_store_update_fields(store, handle, game_state_enemy_set_y_update, &update, KEK_STATE_TYPE_ENEMY_FIELD_Y);
 }
 
-int game_state_set_enemy_slot_y(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_enemy_set_y(game_state_get_store(runtime), slot_id, value);
+int game_state_set_enemy_instance_y(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_enemy_set_y(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_enemy_slot_y(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_enemy_instance_y(runtime, handle, value);
 }
 
 typedef struct Enemy_vx_FieldUpdate {
@@ -3439,13 +4315,17 @@ static void game_state_enemy_set_vx_update(void* draft, void* context) {
     state->vx = update->value;
 }
 
-int game_state_enemy_set_vx(KekStateStore* store, size_t slot_id, float value) {
+int game_state_enemy_set_vx(KekStateStore* store, KekStateHandle handle, float value) {
     Enemy_vx_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_enemy_set_vx_update, &update, KEK_STATE_TYPE_ENEMY_FIELD_VX);
+    return kek_state_store_update_fields(store, handle, game_state_enemy_set_vx_update, &update, KEK_STATE_TYPE_ENEMY_FIELD_VX);
 }
 
-int game_state_set_enemy_slot_vx(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_enemy_set_vx(game_state_get_store(runtime), slot_id, value);
+int game_state_set_enemy_instance_vx(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_enemy_set_vx(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_enemy_slot_vx(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_enemy_instance_vx(runtime, handle, value);
 }
 
 typedef struct Enemy_vy_FieldUpdate {
@@ -3461,13 +4341,17 @@ static void game_state_enemy_set_vy_update(void* draft, void* context) {
     state->vy = update->value;
 }
 
-int game_state_enemy_set_vy(KekStateStore* store, size_t slot_id, float value) {
+int game_state_enemy_set_vy(KekStateStore* store, KekStateHandle handle, float value) {
     Enemy_vy_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_enemy_set_vy_update, &update, KEK_STATE_TYPE_ENEMY_FIELD_VY);
+    return kek_state_store_update_fields(store, handle, game_state_enemy_set_vy_update, &update, KEK_STATE_TYPE_ENEMY_FIELD_VY);
 }
 
-int game_state_set_enemy_slot_vy(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_enemy_set_vy(game_state_get_store(runtime), slot_id, value);
+int game_state_set_enemy_instance_vy(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_enemy_set_vy(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_enemy_slot_vy(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_enemy_instance_vy(runtime, handle, value);
 }
 
 typedef struct Enemy_health_FieldUpdate {
@@ -3483,13 +4367,17 @@ static void game_state_enemy_set_health_update(void* draft, void* context) {
     state->health = update->value;
 }
 
-int game_state_enemy_set_health(KekStateStore* store, size_t slot_id, int32_t value) {
+int game_state_enemy_set_health(KekStateStore* store, KekStateHandle handle, int32_t value) {
     Enemy_health_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_enemy_set_health_update, &update, KEK_STATE_TYPE_ENEMY_FIELD_HEALTH);
+    return kek_state_store_update_fields(store, handle, game_state_enemy_set_health_update, &update, KEK_STATE_TYPE_ENEMY_FIELD_HEALTH);
 }
 
-int game_state_set_enemy_slot_health(Game_stateRuntime* runtime, size_t slot_id, int32_t value) {
-    return game_state_enemy_set_health(game_state_get_store(runtime), slot_id, value);
+int game_state_set_enemy_instance_health(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_enemy_set_health(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_enemy_slot_health(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_set_enemy_instance_health(runtime, handle, value);
 }
 
 typedef struct Enemy_damage_FieldUpdate {
@@ -3505,13 +4393,17 @@ static void game_state_enemy_set_damage_update(void* draft, void* context) {
     state->damage = update->value;
 }
 
-int game_state_enemy_set_damage(KekStateStore* store, size_t slot_id, int32_t value) {
+int game_state_enemy_set_damage(KekStateStore* store, KekStateHandle handle, int32_t value) {
     Enemy_damage_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_enemy_set_damage_update, &update, KEK_STATE_TYPE_ENEMY_FIELD_DAMAGE);
+    return kek_state_store_update_fields(store, handle, game_state_enemy_set_damage_update, &update, KEK_STATE_TYPE_ENEMY_FIELD_DAMAGE);
 }
 
-int game_state_set_enemy_slot_damage(Game_stateRuntime* runtime, size_t slot_id, int32_t value) {
-    return game_state_enemy_set_damage(game_state_get_store(runtime), slot_id, value);
+int game_state_set_enemy_instance_damage(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_enemy_set_damage(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_enemy_slot_damage(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_set_enemy_instance_damage(runtime, handle, value);
 }
 
 typedef struct Enemy_radius_FieldUpdate {
@@ -3527,13 +4419,17 @@ static void game_state_enemy_set_radius_update(void* draft, void* context) {
     state->radius = update->value;
 }
 
-int game_state_enemy_set_radius(KekStateStore* store, size_t slot_id, float value) {
+int game_state_enemy_set_radius(KekStateStore* store, KekStateHandle handle, float value) {
     Enemy_radius_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_enemy_set_radius_update, &update, KEK_STATE_TYPE_ENEMY_FIELD_RADIUS);
+    return kek_state_store_update_fields(store, handle, game_state_enemy_set_radius_update, &update, KEK_STATE_TYPE_ENEMY_FIELD_RADIUS);
 }
 
-int game_state_set_enemy_slot_radius(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_enemy_set_radius(game_state_get_store(runtime), slot_id, value);
+int game_state_set_enemy_instance_radius(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_enemy_set_radius(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_enemy_slot_radius(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_enemy_instance_radius(runtime, handle, value);
 }
 
 typedef struct Enemy_flash_FieldUpdate {
@@ -3549,13 +4445,17 @@ static void game_state_enemy_set_flash_update(void* draft, void* context) {
     state->flash = update->value;
 }
 
-int game_state_enemy_set_flash(KekStateStore* store, size_t slot_id, float value) {
+int game_state_enemy_set_flash(KekStateStore* store, KekStateHandle handle, float value) {
     Enemy_flash_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_enemy_set_flash_update, &update, KEK_STATE_TYPE_ENEMY_FIELD_FLASH);
+    return kek_state_store_update_fields(store, handle, game_state_enemy_set_flash_update, &update, KEK_STATE_TYPE_ENEMY_FIELD_FLASH);
 }
 
-int game_state_set_enemy_slot_flash(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_enemy_set_flash(game_state_get_store(runtime), slot_id, value);
+int game_state_set_enemy_instance_flash(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_enemy_set_flash(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_enemy_slot_flash(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_enemy_instance_flash(runtime, handle, value);
 }
 
 typedef struct Enemy_active_FieldUpdate {
@@ -3571,98 +4471,118 @@ static void game_state_enemy_set_active_update(void* draft, void* context) {
     state->active = update->value;
 }
 
-int game_state_enemy_set_active(KekStateStore* store, size_t slot_id, bool value) {
+int game_state_enemy_set_active(KekStateStore* store, KekStateHandle handle, bool value) {
     Enemy_active_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_enemy_set_active_update, &update, KEK_STATE_TYPE_ENEMY_FIELD_ACTIVE);
+    return kek_state_store_update_fields(store, handle, game_state_enemy_set_active_update, &update, KEK_STATE_TYPE_ENEMY_FIELD_ACTIVE);
 }
 
-int game_state_set_enemy_slot_active(Game_stateRuntime* runtime, size_t slot_id, bool value) {
-    return game_state_enemy_set_active(game_state_get_store(runtime), slot_id, value);
+int game_state_set_enemy_instance_active(Game_stateRuntime* runtime, KekStateHandle handle, bool value) {
+    return game_state_enemy_set_active(game_state_get_store(runtime), handle, value);
 }
 
-size_t game_state_projectile_create(KekStateStore* store) {
+int game_state_set_enemy_slot_active(Game_stateRuntime* runtime, KekStateHandle handle, bool value) {
+    return game_state_set_enemy_instance_active(runtime, handle, value);
+}
+
+KekStateHandle game_state_projectile_create(KekStateStore* store) {
     return kek_state_store_add_default(store, &KekGeneratedStateDescriptors[KEK_STATE_TYPE_PROJECTILE]);
 }
 
-size_t game_state_projectile_create_with(KekStateStore* store, const Projectile* initial) {
+KekStateHandle game_state_projectile_create_with(KekStateStore* store, const Projectile* initial) {
     return kek_state_store_add(store, &KekGeneratedStateDescriptors[KEK_STATE_TYPE_PROJECTILE], initial);
 }
 
-int game_state_projectile_delete(KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+int game_state_projectile_delete(KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_PROJECTILE) {
         return 0;
     }
-    return kek_state_store_remove(store, slot_id);
+    return kek_state_store_remove(store, handle);
 }
 
-Projectile* game_state_projectile_slot(KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+Projectile* game_state_projectile_instance(KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_PROJECTILE) {
         return 0;
     }
-    return (Projectile*)kek_state_store_current(store, slot_id);
+    return (Projectile*)kek_state_store_current(store, handle);
 }
 
-const Projectile* game_state_projectile_slot_const(const KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+const Projectile* game_state_projectile_instance_const(const KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_PROJECTILE) {
         return 0;
     }
-    return (const Projectile*)kek_state_store_current_const(store, slot_id);
+    return (const Projectile*)kek_state_store_current_const(store, handle);
 }
 
-size_t game_state_projectile_first(const KekStateStore* store) {
+Projectile* game_state_projectile_slot(KekStateStore* store, KekStateHandle handle) {
+    return game_state_projectile_instance(store, handle);
+}
+
+const Projectile* game_state_projectile_slot_const(const KekStateStore* store, KekStateHandle handle) {
+    return game_state_projectile_instance_const(store, handle);
+}
+
+KekStateHandle game_state_projectile_first(const KekStateStore* store) {
     return kek_state_store_find_first(store, KEK_STATE_TYPE_PROJECTILE);
 }
 
-size_t game_state_projectile_next(const KekStateStore* store, size_t after_slot_id) {
-    return kek_state_store_find_next(store, KEK_STATE_TYPE_PROJECTILE, after_slot_id);
+KekStateHandle game_state_projectile_next(const KekStateStore* store, KekStateHandle after_handle) {
+    return kek_state_store_find_next(store, KEK_STATE_TYPE_PROJECTILE, after_handle);
 }
 
-size_t game_state_create_projectile(Game_stateRuntime* runtime) {
+KekStateHandle game_state_create_projectile(Game_stateRuntime* runtime) {
     return game_state_projectile_create(game_state_get_store(runtime));
 }
 
-size_t game_state_create_projectile_with(Game_stateRuntime* runtime, const Projectile* initial) {
+KekStateHandle game_state_create_projectile_with(Game_stateRuntime* runtime, const Projectile* initial) {
     return game_state_projectile_create_with(game_state_get_store(runtime), initial);
 }
 
-int game_state_delete_projectile(Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_projectile_delete(game_state_get_store(runtime), slot_id);
+int game_state_delete_projectile(Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_projectile_delete(game_state_get_store(runtime), handle);
 }
 
-Projectile* game_state_projectile_at(Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_projectile_slot(game_state_get_store(runtime), slot_id);
+Projectile* game_state_projectile_at(Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_projectile_instance(game_state_get_store(runtime), handle);
 }
 
-const Projectile* game_state_projectile_at_const(const Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_projectile_slot_const(game_state_get_store_const(runtime), slot_id);
+const Projectile* game_state_projectile_at_const(const Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_projectile_instance_const(game_state_get_store_const(runtime), handle);
 }
 
-size_t game_state_first_projectile(const Game_stateRuntime* runtime) {
+KekStateHandle game_state_first_projectile(const Game_stateRuntime* runtime) {
     return game_state_projectile_first(game_state_get_store_const(runtime));
 }
 
-size_t game_state_next_projectile(const Game_stateRuntime* runtime, size_t after_slot_id) {
-    return game_state_projectile_next(game_state_get_store_const(runtime), after_slot_id);
+KekStateHandle game_state_next_projectile(const Game_stateRuntime* runtime, KekStateHandle after_handle) {
+    return game_state_projectile_next(game_state_get_store_const(runtime), after_handle);
 }
 
 int game_state_count_projectile(const Game_stateRuntime* runtime) {
     int count = 0;
-    for (size_t slot = game_state_first_projectile(runtime); slot != KEK_STATE_INVALID_ID; slot = game_state_next_projectile(runtime, slot)) {
+    for (KekStateHandle handle = game_state_first_projectile(runtime); handle != KEK_STATE_INVALID_ID; handle = game_state_next_projectile(runtime, handle)) {
         count++;
     }
     return count;
 }
 
-int game_state_update_projectile_slot(Game_stateRuntime* runtime, size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return kek_state_store_update_fields(game_state_get_store(runtime), slot_id, update, context, changed_fields);
+int game_state_update_projectile_instance(Game_stateRuntime* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return kek_state_store_update_fields(game_state_get_store(runtime), handle, update, context, changed_fields);
 }
 
-Game_stateUpdateItem game_state_projectile_slot_update_item(size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    Game_stateUpdateItem item = {slot_id, update, context, changed_fields};
+int game_state_update_projectile_slot(Game_stateRuntime* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_update_projectile_instance(runtime, handle, update, context, changed_fields);
+}
+
+Game_stateUpdateItem game_state_projectile_instance_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    Game_stateUpdateItem item = {handle, update, context, changed_fields};
     return item;
+}
+
+Game_stateUpdateItem game_state_projectile_slot_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_projectile_instance_update_item(handle, update, context, changed_fields);
 }
 
 typedef struct Projectile_x_FieldUpdate {
@@ -3678,13 +4598,17 @@ static void game_state_projectile_set_x_update(void* draft, void* context) {
     state->x = update->value;
 }
 
-int game_state_projectile_set_x(KekStateStore* store, size_t slot_id, float value) {
+int game_state_projectile_set_x(KekStateStore* store, KekStateHandle handle, float value) {
     Projectile_x_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_projectile_set_x_update, &update, KEK_STATE_TYPE_PROJECTILE_FIELD_X);
+    return kek_state_store_update_fields(store, handle, game_state_projectile_set_x_update, &update, KEK_STATE_TYPE_PROJECTILE_FIELD_X);
 }
 
-int game_state_set_projectile_slot_x(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_projectile_set_x(game_state_get_store(runtime), slot_id, value);
+int game_state_set_projectile_instance_x(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_projectile_set_x(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_projectile_slot_x(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_projectile_instance_x(runtime, handle, value);
 }
 
 typedef struct Projectile_y_FieldUpdate {
@@ -3700,13 +4624,17 @@ static void game_state_projectile_set_y_update(void* draft, void* context) {
     state->y = update->value;
 }
 
-int game_state_projectile_set_y(KekStateStore* store, size_t slot_id, float value) {
+int game_state_projectile_set_y(KekStateStore* store, KekStateHandle handle, float value) {
     Projectile_y_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_projectile_set_y_update, &update, KEK_STATE_TYPE_PROJECTILE_FIELD_Y);
+    return kek_state_store_update_fields(store, handle, game_state_projectile_set_y_update, &update, KEK_STATE_TYPE_PROJECTILE_FIELD_Y);
 }
 
-int game_state_set_projectile_slot_y(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_projectile_set_y(game_state_get_store(runtime), slot_id, value);
+int game_state_set_projectile_instance_y(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_projectile_set_y(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_projectile_slot_y(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_projectile_instance_y(runtime, handle, value);
 }
 
 typedef struct Projectile_vx_FieldUpdate {
@@ -3722,13 +4650,17 @@ static void game_state_projectile_set_vx_update(void* draft, void* context) {
     state->vx = update->value;
 }
 
-int game_state_projectile_set_vx(KekStateStore* store, size_t slot_id, float value) {
+int game_state_projectile_set_vx(KekStateStore* store, KekStateHandle handle, float value) {
     Projectile_vx_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_projectile_set_vx_update, &update, KEK_STATE_TYPE_PROJECTILE_FIELD_VX);
+    return kek_state_store_update_fields(store, handle, game_state_projectile_set_vx_update, &update, KEK_STATE_TYPE_PROJECTILE_FIELD_VX);
 }
 
-int game_state_set_projectile_slot_vx(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_projectile_set_vx(game_state_get_store(runtime), slot_id, value);
+int game_state_set_projectile_instance_vx(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_projectile_set_vx(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_projectile_slot_vx(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_projectile_instance_vx(runtime, handle, value);
 }
 
 typedef struct Projectile_vy_FieldUpdate {
@@ -3744,13 +4676,17 @@ static void game_state_projectile_set_vy_update(void* draft, void* context) {
     state->vy = update->value;
 }
 
-int game_state_projectile_set_vy(KekStateStore* store, size_t slot_id, float value) {
+int game_state_projectile_set_vy(KekStateStore* store, KekStateHandle handle, float value) {
     Projectile_vy_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_projectile_set_vy_update, &update, KEK_STATE_TYPE_PROJECTILE_FIELD_VY);
+    return kek_state_store_update_fields(store, handle, game_state_projectile_set_vy_update, &update, KEK_STATE_TYPE_PROJECTILE_FIELD_VY);
 }
 
-int game_state_set_projectile_slot_vy(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_projectile_set_vy(game_state_get_store(runtime), slot_id, value);
+int game_state_set_projectile_instance_vy(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_projectile_set_vy(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_projectile_slot_vy(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_projectile_instance_vy(runtime, handle, value);
 }
 
 typedef struct Projectile_life_FieldUpdate {
@@ -3766,13 +4702,17 @@ static void game_state_projectile_set_life_update(void* draft, void* context) {
     state->life = update->value;
 }
 
-int game_state_projectile_set_life(KekStateStore* store, size_t slot_id, float value) {
+int game_state_projectile_set_life(KekStateStore* store, KekStateHandle handle, float value) {
     Projectile_life_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_projectile_set_life_update, &update, KEK_STATE_TYPE_PROJECTILE_FIELD_LIFE);
+    return kek_state_store_update_fields(store, handle, game_state_projectile_set_life_update, &update, KEK_STATE_TYPE_PROJECTILE_FIELD_LIFE);
 }
 
-int game_state_set_projectile_slot_life(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_projectile_set_life(game_state_get_store(runtime), slot_id, value);
+int game_state_set_projectile_instance_life(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_projectile_set_life(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_projectile_slot_life(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_projectile_instance_life(runtime, handle, value);
 }
 
 typedef struct Projectile_damage_FieldUpdate {
@@ -3788,13 +4728,17 @@ static void game_state_projectile_set_damage_update(void* draft, void* context) 
     state->damage = update->value;
 }
 
-int game_state_projectile_set_damage(KekStateStore* store, size_t slot_id, int32_t value) {
+int game_state_projectile_set_damage(KekStateStore* store, KekStateHandle handle, int32_t value) {
     Projectile_damage_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_projectile_set_damage_update, &update, KEK_STATE_TYPE_PROJECTILE_FIELD_DAMAGE);
+    return kek_state_store_update_fields(store, handle, game_state_projectile_set_damage_update, &update, KEK_STATE_TYPE_PROJECTILE_FIELD_DAMAGE);
 }
 
-int game_state_set_projectile_slot_damage(Game_stateRuntime* runtime, size_t slot_id, int32_t value) {
-    return game_state_projectile_set_damage(game_state_get_store(runtime), slot_id, value);
+int game_state_set_projectile_instance_damage(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_projectile_set_damage(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_projectile_slot_damage(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_set_projectile_instance_damage(runtime, handle, value);
 }
 
 typedef struct Projectile_pierce_FieldUpdate {
@@ -3810,98 +4754,118 @@ static void game_state_projectile_set_pierce_update(void* draft, void* context) 
     state->pierce = update->value;
 }
 
-int game_state_projectile_set_pierce(KekStateStore* store, size_t slot_id, int32_t value) {
+int game_state_projectile_set_pierce(KekStateStore* store, KekStateHandle handle, int32_t value) {
     Projectile_pierce_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_projectile_set_pierce_update, &update, KEK_STATE_TYPE_PROJECTILE_FIELD_PIERCE);
+    return kek_state_store_update_fields(store, handle, game_state_projectile_set_pierce_update, &update, KEK_STATE_TYPE_PROJECTILE_FIELD_PIERCE);
 }
 
-int game_state_set_projectile_slot_pierce(Game_stateRuntime* runtime, size_t slot_id, int32_t value) {
-    return game_state_projectile_set_pierce(game_state_get_store(runtime), slot_id, value);
+int game_state_set_projectile_instance_pierce(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_projectile_set_pierce(game_state_get_store(runtime), handle, value);
 }
 
-size_t game_state_pickup_create(KekStateStore* store) {
+int game_state_set_projectile_slot_pierce(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_set_projectile_instance_pierce(runtime, handle, value);
+}
+
+KekStateHandle game_state_pickup_create(KekStateStore* store) {
     return kek_state_store_add_default(store, &KekGeneratedStateDescriptors[KEK_STATE_TYPE_PICKUP]);
 }
 
-size_t game_state_pickup_create_with(KekStateStore* store, const Pickup* initial) {
+KekStateHandle game_state_pickup_create_with(KekStateStore* store, const Pickup* initial) {
     return kek_state_store_add(store, &KekGeneratedStateDescriptors[KEK_STATE_TYPE_PICKUP], initial);
 }
 
-int game_state_pickup_delete(KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+int game_state_pickup_delete(KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_PICKUP) {
         return 0;
     }
-    return kek_state_store_remove(store, slot_id);
+    return kek_state_store_remove(store, handle);
 }
 
-Pickup* game_state_pickup_slot(KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+Pickup* game_state_pickup_instance(KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_PICKUP) {
         return 0;
     }
-    return (Pickup*)kek_state_store_current(store, slot_id);
+    return (Pickup*)kek_state_store_current(store, handle);
 }
 
-const Pickup* game_state_pickup_slot_const(const KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+const Pickup* game_state_pickup_instance_const(const KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_PICKUP) {
         return 0;
     }
-    return (const Pickup*)kek_state_store_current_const(store, slot_id);
+    return (const Pickup*)kek_state_store_current_const(store, handle);
 }
 
-size_t game_state_pickup_first(const KekStateStore* store) {
+Pickup* game_state_pickup_slot(KekStateStore* store, KekStateHandle handle) {
+    return game_state_pickup_instance(store, handle);
+}
+
+const Pickup* game_state_pickup_slot_const(const KekStateStore* store, KekStateHandle handle) {
+    return game_state_pickup_instance_const(store, handle);
+}
+
+KekStateHandle game_state_pickup_first(const KekStateStore* store) {
     return kek_state_store_find_first(store, KEK_STATE_TYPE_PICKUP);
 }
 
-size_t game_state_pickup_next(const KekStateStore* store, size_t after_slot_id) {
-    return kek_state_store_find_next(store, KEK_STATE_TYPE_PICKUP, after_slot_id);
+KekStateHandle game_state_pickup_next(const KekStateStore* store, KekStateHandle after_handle) {
+    return kek_state_store_find_next(store, KEK_STATE_TYPE_PICKUP, after_handle);
 }
 
-size_t game_state_create_pickup(Game_stateRuntime* runtime) {
+KekStateHandle game_state_create_pickup(Game_stateRuntime* runtime) {
     return game_state_pickup_create(game_state_get_store(runtime));
 }
 
-size_t game_state_create_pickup_with(Game_stateRuntime* runtime, const Pickup* initial) {
+KekStateHandle game_state_create_pickup_with(Game_stateRuntime* runtime, const Pickup* initial) {
     return game_state_pickup_create_with(game_state_get_store(runtime), initial);
 }
 
-int game_state_delete_pickup(Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_pickup_delete(game_state_get_store(runtime), slot_id);
+int game_state_delete_pickup(Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_pickup_delete(game_state_get_store(runtime), handle);
 }
 
-Pickup* game_state_pickup_at(Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_pickup_slot(game_state_get_store(runtime), slot_id);
+Pickup* game_state_pickup_at(Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_pickup_instance(game_state_get_store(runtime), handle);
 }
 
-const Pickup* game_state_pickup_at_const(const Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_pickup_slot_const(game_state_get_store_const(runtime), slot_id);
+const Pickup* game_state_pickup_at_const(const Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_pickup_instance_const(game_state_get_store_const(runtime), handle);
 }
 
-size_t game_state_first_pickup(const Game_stateRuntime* runtime) {
+KekStateHandle game_state_first_pickup(const Game_stateRuntime* runtime) {
     return game_state_pickup_first(game_state_get_store_const(runtime));
 }
 
-size_t game_state_next_pickup(const Game_stateRuntime* runtime, size_t after_slot_id) {
-    return game_state_pickup_next(game_state_get_store_const(runtime), after_slot_id);
+KekStateHandle game_state_next_pickup(const Game_stateRuntime* runtime, KekStateHandle after_handle) {
+    return game_state_pickup_next(game_state_get_store_const(runtime), after_handle);
 }
 
 int game_state_count_pickup(const Game_stateRuntime* runtime) {
     int count = 0;
-    for (size_t slot = game_state_first_pickup(runtime); slot != KEK_STATE_INVALID_ID; slot = game_state_next_pickup(runtime, slot)) {
+    for (KekStateHandle handle = game_state_first_pickup(runtime); handle != KEK_STATE_INVALID_ID; handle = game_state_next_pickup(runtime, handle)) {
         count++;
     }
     return count;
 }
 
-int game_state_update_pickup_slot(Game_stateRuntime* runtime, size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return kek_state_store_update_fields(game_state_get_store(runtime), slot_id, update, context, changed_fields);
+int game_state_update_pickup_instance(Game_stateRuntime* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return kek_state_store_update_fields(game_state_get_store(runtime), handle, update, context, changed_fields);
 }
 
-Game_stateUpdateItem game_state_pickup_slot_update_item(size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    Game_stateUpdateItem item = {slot_id, update, context, changed_fields};
+int game_state_update_pickup_slot(Game_stateRuntime* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_update_pickup_instance(runtime, handle, update, context, changed_fields);
+}
+
+Game_stateUpdateItem game_state_pickup_instance_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    Game_stateUpdateItem item = {handle, update, context, changed_fields};
     return item;
+}
+
+Game_stateUpdateItem game_state_pickup_slot_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_pickup_instance_update_item(handle, update, context, changed_fields);
 }
 
 typedef struct Pickup_kind_FieldUpdate {
@@ -3917,13 +4881,17 @@ static void game_state_pickup_set_kind_update(void* draft, void* context) {
     state->kind = update->value;
 }
 
-int game_state_pickup_set_kind(KekStateStore* store, size_t slot_id, PickupKind value) {
+int game_state_pickup_set_kind(KekStateStore* store, KekStateHandle handle, PickupKind value) {
     Pickup_kind_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_pickup_set_kind_update, &update, KEK_STATE_TYPE_PICKUP_FIELD_KIND);
+    return kek_state_store_update_fields(store, handle, game_state_pickup_set_kind_update, &update, KEK_STATE_TYPE_PICKUP_FIELD_KIND);
 }
 
-int game_state_set_pickup_slot_kind(Game_stateRuntime* runtime, size_t slot_id, PickupKind value) {
-    return game_state_pickup_set_kind(game_state_get_store(runtime), slot_id, value);
+int game_state_set_pickup_instance_kind(Game_stateRuntime* runtime, KekStateHandle handle, PickupKind value) {
+    return game_state_pickup_set_kind(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_pickup_slot_kind(Game_stateRuntime* runtime, KekStateHandle handle, PickupKind value) {
+    return game_state_set_pickup_instance_kind(runtime, handle, value);
 }
 
 typedef struct Pickup_x_FieldUpdate {
@@ -3939,13 +4907,17 @@ static void game_state_pickup_set_x_update(void* draft, void* context) {
     state->x = update->value;
 }
 
-int game_state_pickup_set_x(KekStateStore* store, size_t slot_id, float value) {
+int game_state_pickup_set_x(KekStateStore* store, KekStateHandle handle, float value) {
     Pickup_x_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_pickup_set_x_update, &update, KEK_STATE_TYPE_PICKUP_FIELD_X);
+    return kek_state_store_update_fields(store, handle, game_state_pickup_set_x_update, &update, KEK_STATE_TYPE_PICKUP_FIELD_X);
 }
 
-int game_state_set_pickup_slot_x(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_pickup_set_x(game_state_get_store(runtime), slot_id, value);
+int game_state_set_pickup_instance_x(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_pickup_set_x(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_pickup_slot_x(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_pickup_instance_x(runtime, handle, value);
 }
 
 typedef struct Pickup_y_FieldUpdate {
@@ -3961,13 +4933,17 @@ static void game_state_pickup_set_y_update(void* draft, void* context) {
     state->y = update->value;
 }
 
-int game_state_pickup_set_y(KekStateStore* store, size_t slot_id, float value) {
+int game_state_pickup_set_y(KekStateStore* store, KekStateHandle handle, float value) {
     Pickup_y_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_pickup_set_y_update, &update, KEK_STATE_TYPE_PICKUP_FIELD_Y);
+    return kek_state_store_update_fields(store, handle, game_state_pickup_set_y_update, &update, KEK_STATE_TYPE_PICKUP_FIELD_Y);
 }
 
-int game_state_set_pickup_slot_y(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_pickup_set_y(game_state_get_store(runtime), slot_id, value);
+int game_state_set_pickup_instance_y(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_pickup_set_y(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_pickup_slot_y(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_pickup_instance_y(runtime, handle, value);
 }
 
 typedef struct Pickup_value_FieldUpdate {
@@ -3983,13 +4959,17 @@ static void game_state_pickup_set_value_update(void* draft, void* context) {
     state->value = update->value;
 }
 
-int game_state_pickup_set_value(KekStateStore* store, size_t slot_id, int32_t value) {
+int game_state_pickup_set_value(KekStateStore* store, KekStateHandle handle, int32_t value) {
     Pickup_value_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_pickup_set_value_update, &update, KEK_STATE_TYPE_PICKUP_FIELD_VALUE);
+    return kek_state_store_update_fields(store, handle, game_state_pickup_set_value_update, &update, KEK_STATE_TYPE_PICKUP_FIELD_VALUE);
 }
 
-int game_state_set_pickup_slot_value(Game_stateRuntime* runtime, size_t slot_id, int32_t value) {
-    return game_state_pickup_set_value(game_state_get_store(runtime), slot_id, value);
+int game_state_set_pickup_instance_value(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_pickup_set_value(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_pickup_slot_value(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_set_pickup_instance_value(runtime, handle, value);
 }
 
 typedef struct Pickup_life_FieldUpdate {
@@ -4005,13 +4985,17 @@ static void game_state_pickup_set_life_update(void* draft, void* context) {
     state->life = update->value;
 }
 
-int game_state_pickup_set_life(KekStateStore* store, size_t slot_id, float value) {
+int game_state_pickup_set_life(KekStateStore* store, KekStateHandle handle, float value) {
     Pickup_life_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_pickup_set_life_update, &update, KEK_STATE_TYPE_PICKUP_FIELD_LIFE);
+    return kek_state_store_update_fields(store, handle, game_state_pickup_set_life_update, &update, KEK_STATE_TYPE_PICKUP_FIELD_LIFE);
 }
 
-int game_state_set_pickup_slot_life(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_pickup_set_life(game_state_get_store(runtime), slot_id, value);
+int game_state_set_pickup_instance_life(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_pickup_set_life(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_pickup_slot_life(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_pickup_instance_life(runtime, handle, value);
 }
 
 typedef struct Pickup_pulse_FieldUpdate {
@@ -4027,98 +5011,118 @@ static void game_state_pickup_set_pulse_update(void* draft, void* context) {
     state->pulse = update->value;
 }
 
-int game_state_pickup_set_pulse(KekStateStore* store, size_t slot_id, float value) {
+int game_state_pickup_set_pulse(KekStateStore* store, KekStateHandle handle, float value) {
     Pickup_pulse_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_pickup_set_pulse_update, &update, KEK_STATE_TYPE_PICKUP_FIELD_PULSE);
+    return kek_state_store_update_fields(store, handle, game_state_pickup_set_pulse_update, &update, KEK_STATE_TYPE_PICKUP_FIELD_PULSE);
 }
 
-int game_state_set_pickup_slot_pulse(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_pickup_set_pulse(game_state_get_store(runtime), slot_id, value);
+int game_state_set_pickup_instance_pulse(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_pickup_set_pulse(game_state_get_store(runtime), handle, value);
 }
 
-size_t game_state_hud_message_create(KekStateStore* store) {
+int game_state_set_pickup_slot_pulse(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_pickup_instance_pulse(runtime, handle, value);
+}
+
+KekStateHandle game_state_hud_message_create(KekStateStore* store) {
     return kek_state_store_add_default(store, &KekGeneratedStateDescriptors[KEK_STATE_TYPE_HUD_MESSAGE]);
 }
 
-size_t game_state_hud_message_create_with(KekStateStore* store, const HudMessage* initial) {
+KekStateHandle game_state_hud_message_create_with(KekStateStore* store, const HudMessage* initial) {
     return kek_state_store_add(store, &KekGeneratedStateDescriptors[KEK_STATE_TYPE_HUD_MESSAGE], initial);
 }
 
-int game_state_hud_message_delete(KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+int game_state_hud_message_delete(KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_HUD_MESSAGE) {
         return 0;
     }
-    return kek_state_store_remove(store, slot_id);
+    return kek_state_store_remove(store, handle);
 }
 
-HudMessage* game_state_hud_message_slot(KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+HudMessage* game_state_hud_message_instance(KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_HUD_MESSAGE) {
         return 0;
     }
-    return (HudMessage*)kek_state_store_current(store, slot_id);
+    return (HudMessage*)kek_state_store_current(store, handle);
 }
 
-const HudMessage* game_state_hud_message_slot_const(const KekStateStore* store, size_t slot_id) {
-    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);
+const HudMessage* game_state_hud_message_instance_const(const KekStateStore* store, KekStateHandle handle) {
+    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);
     if (descriptor == 0 || descriptor->type_id != KEK_STATE_TYPE_HUD_MESSAGE) {
         return 0;
     }
-    return (const HudMessage*)kek_state_store_current_const(store, slot_id);
+    return (const HudMessage*)kek_state_store_current_const(store, handle);
 }
 
-size_t game_state_hud_message_first(const KekStateStore* store) {
+HudMessage* game_state_hud_message_slot(KekStateStore* store, KekStateHandle handle) {
+    return game_state_hud_message_instance(store, handle);
+}
+
+const HudMessage* game_state_hud_message_slot_const(const KekStateStore* store, KekStateHandle handle) {
+    return game_state_hud_message_instance_const(store, handle);
+}
+
+KekStateHandle game_state_hud_message_first(const KekStateStore* store) {
     return kek_state_store_find_first(store, KEK_STATE_TYPE_HUD_MESSAGE);
 }
 
-size_t game_state_hud_message_next(const KekStateStore* store, size_t after_slot_id) {
-    return kek_state_store_find_next(store, KEK_STATE_TYPE_HUD_MESSAGE, after_slot_id);
+KekStateHandle game_state_hud_message_next(const KekStateStore* store, KekStateHandle after_handle) {
+    return kek_state_store_find_next(store, KEK_STATE_TYPE_HUD_MESSAGE, after_handle);
 }
 
-size_t game_state_create_hud_message(Game_stateRuntime* runtime) {
+KekStateHandle game_state_create_hud_message(Game_stateRuntime* runtime) {
     return game_state_hud_message_create(game_state_get_store(runtime));
 }
 
-size_t game_state_create_hud_message_with(Game_stateRuntime* runtime, const HudMessage* initial) {
+KekStateHandle game_state_create_hud_message_with(Game_stateRuntime* runtime, const HudMessage* initial) {
     return game_state_hud_message_create_with(game_state_get_store(runtime), initial);
 }
 
-int game_state_delete_hud_message(Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_hud_message_delete(game_state_get_store(runtime), slot_id);
+int game_state_delete_hud_message(Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_hud_message_delete(game_state_get_store(runtime), handle);
 }
 
-HudMessage* game_state_hud_message_at(Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_hud_message_slot(game_state_get_store(runtime), slot_id);
+HudMessage* game_state_hud_message_at(Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_hud_message_instance(game_state_get_store(runtime), handle);
 }
 
-const HudMessage* game_state_hud_message_at_const(const Game_stateRuntime* runtime, size_t slot_id) {
-    return game_state_hud_message_slot_const(game_state_get_store_const(runtime), slot_id);
+const HudMessage* game_state_hud_message_at_const(const Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_hud_message_instance_const(game_state_get_store_const(runtime), handle);
 }
 
-size_t game_state_first_hud_message(const Game_stateRuntime* runtime) {
+KekStateHandle game_state_first_hud_message(const Game_stateRuntime* runtime) {
     return game_state_hud_message_first(game_state_get_store_const(runtime));
 }
 
-size_t game_state_next_hud_message(const Game_stateRuntime* runtime, size_t after_slot_id) {
-    return game_state_hud_message_next(game_state_get_store_const(runtime), after_slot_id);
+KekStateHandle game_state_next_hud_message(const Game_stateRuntime* runtime, KekStateHandle after_handle) {
+    return game_state_hud_message_next(game_state_get_store_const(runtime), after_handle);
 }
 
 int game_state_count_hud_message(const Game_stateRuntime* runtime) {
     int count = 0;
-    for (size_t slot = game_state_first_hud_message(runtime); slot != KEK_STATE_INVALID_ID; slot = game_state_next_hud_message(runtime, slot)) {
+    for (KekStateHandle handle = game_state_first_hud_message(runtime); handle != KEK_STATE_INVALID_ID; handle = game_state_next_hud_message(runtime, handle)) {
         count++;
     }
     return count;
 }
 
-int game_state_update_hud_message_slot(Game_stateRuntime* runtime, size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return kek_state_store_update_fields(game_state_get_store(runtime), slot_id, update, context, changed_fields);
+int game_state_update_hud_message_instance(Game_stateRuntime* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return kek_state_store_update_fields(game_state_get_store(runtime), handle, update, context, changed_fields);
 }
 
-Game_stateUpdateItem game_state_hud_message_slot_update_item(size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    Game_stateUpdateItem item = {slot_id, update, context, changed_fields};
+int game_state_update_hud_message_slot(Game_stateRuntime* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_update_hud_message_instance(runtime, handle, update, context, changed_fields);
+}
+
+Game_stateUpdateItem game_state_hud_message_instance_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    Game_stateUpdateItem item = {handle, update, context, changed_fields};
     return item;
+}
+
+Game_stateUpdateItem game_state_hud_message_slot_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_hud_message_instance_update_item(handle, update, context, changed_fields);
 }
 
 typedef struct HudMessage_kind_FieldUpdate {
@@ -4134,13 +5138,17 @@ static void game_state_hud_message_set_kind_update(void* draft, void* context) {
     state->kind = update->value;
 }
 
-int game_state_hud_message_set_kind(KekStateStore* store, size_t slot_id, HudMessageKind value) {
+int game_state_hud_message_set_kind(KekStateStore* store, KekStateHandle handle, HudMessageKind value) {
     HudMessage_kind_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_hud_message_set_kind_update, &update, KEK_STATE_TYPE_HUD_MESSAGE_FIELD_KIND);
+    return kek_state_store_update_fields(store, handle, game_state_hud_message_set_kind_update, &update, KEK_STATE_TYPE_HUD_MESSAGE_FIELD_KIND);
 }
 
-int game_state_set_hud_message_slot_kind(Game_stateRuntime* runtime, size_t slot_id, HudMessageKind value) {
-    return game_state_hud_message_set_kind(game_state_get_store(runtime), slot_id, value);
+int game_state_set_hud_message_instance_kind(Game_stateRuntime* runtime, KekStateHandle handle, HudMessageKind value) {
+    return game_state_hud_message_set_kind(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_hud_message_slot_kind(Game_stateRuntime* runtime, KekStateHandle handle, HudMessageKind value) {
+    return game_state_set_hud_message_instance_kind(runtime, handle, value);
 }
 
 typedef struct HudMessage_x_FieldUpdate {
@@ -4156,13 +5164,17 @@ static void game_state_hud_message_set_x_update(void* draft, void* context) {
     state->x = update->value;
 }
 
-int game_state_hud_message_set_x(KekStateStore* store, size_t slot_id, float value) {
+int game_state_hud_message_set_x(KekStateStore* store, KekStateHandle handle, float value) {
     HudMessage_x_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_hud_message_set_x_update, &update, KEK_STATE_TYPE_HUD_MESSAGE_FIELD_X);
+    return kek_state_store_update_fields(store, handle, game_state_hud_message_set_x_update, &update, KEK_STATE_TYPE_HUD_MESSAGE_FIELD_X);
 }
 
-int game_state_set_hud_message_slot_x(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_hud_message_set_x(game_state_get_store(runtime), slot_id, value);
+int game_state_set_hud_message_instance_x(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_hud_message_set_x(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_hud_message_slot_x(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_hud_message_instance_x(runtime, handle, value);
 }
 
 typedef struct HudMessage_y_FieldUpdate {
@@ -4178,13 +5190,17 @@ static void game_state_hud_message_set_y_update(void* draft, void* context) {
     state->y = update->value;
 }
 
-int game_state_hud_message_set_y(KekStateStore* store, size_t slot_id, float value) {
+int game_state_hud_message_set_y(KekStateStore* store, KekStateHandle handle, float value) {
     HudMessage_y_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_hud_message_set_y_update, &update, KEK_STATE_TYPE_HUD_MESSAGE_FIELD_Y);
+    return kek_state_store_update_fields(store, handle, game_state_hud_message_set_y_update, &update, KEK_STATE_TYPE_HUD_MESSAGE_FIELD_Y);
 }
 
-int game_state_set_hud_message_slot_y(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_hud_message_set_y(game_state_get_store(runtime), slot_id, value);
+int game_state_set_hud_message_instance_y(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_hud_message_set_y(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_hud_message_slot_y(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_hud_message_instance_y(runtime, handle, value);
 }
 
 typedef struct HudMessage_value_FieldUpdate {
@@ -4200,13 +5216,17 @@ static void game_state_hud_message_set_value_update(void* draft, void* context) 
     state->value = update->value;
 }
 
-int game_state_hud_message_set_value(KekStateStore* store, size_t slot_id, int32_t value) {
+int game_state_hud_message_set_value(KekStateStore* store, KekStateHandle handle, int32_t value) {
     HudMessage_value_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_hud_message_set_value_update, &update, KEK_STATE_TYPE_HUD_MESSAGE_FIELD_VALUE);
+    return kek_state_store_update_fields(store, handle, game_state_hud_message_set_value_update, &update, KEK_STATE_TYPE_HUD_MESSAGE_FIELD_VALUE);
 }
 
-int game_state_set_hud_message_slot_value(Game_stateRuntime* runtime, size_t slot_id, int32_t value) {
-    return game_state_hud_message_set_value(game_state_get_store(runtime), slot_id, value);
+int game_state_set_hud_message_instance_value(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_hud_message_set_value(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_hud_message_slot_value(Game_stateRuntime* runtime, KekStateHandle handle, int32_t value) {
+    return game_state_set_hud_message_instance_value(runtime, handle, value);
 }
 
 typedef struct HudMessage_life_FieldUpdate {
@@ -4222,13 +5242,17 @@ static void game_state_hud_message_set_life_update(void* draft, void* context) {
     state->life = update->value;
 }
 
-int game_state_hud_message_set_life(KekStateStore* store, size_t slot_id, float value) {
+int game_state_hud_message_set_life(KekStateStore* store, KekStateHandle handle, float value) {
     HudMessage_life_FieldUpdate update = {value};
-    return kek_state_store_update_fields(store, slot_id, game_state_hud_message_set_life_update, &update, KEK_STATE_TYPE_HUD_MESSAGE_FIELD_LIFE);
+    return kek_state_store_update_fields(store, handle, game_state_hud_message_set_life_update, &update, KEK_STATE_TYPE_HUD_MESSAGE_FIELD_LIFE);
 }
 
-int game_state_set_hud_message_slot_life(Game_stateRuntime* runtime, size_t slot_id, float value) {
-    return game_state_hud_message_set_life(game_state_get_store(runtime), slot_id, value);
+int game_state_set_hud_message_instance_life(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_hud_message_set_life(game_state_get_store(runtime), handle, value);
+}
+
+int game_state_set_hud_message_slot_life(Game_stateRuntime* runtime, KekStateHandle handle, float value) {
+    return game_state_set_hud_message_instance_life(runtime, handle, value);
 }
 
 FrameClock* game_state_frame(KekStateStore* store, const Game_stateStateSlots* slots) {
@@ -4253,25 +5277,29 @@ const FrameClock* game_state_frame_current_const(const Game_stateRuntime* runtim
     return game_state_frame_const(game_state_get_store_const(runtime), game_state_get_slots_const(runtime));
 }
 
-size_t game_state_frame_slot_id(const Game_stateRuntime* runtime) {
+KekStateHandle game_state_frame_handle(const Game_stateRuntime* runtime) {
     const Game_stateStateSlots* slots = game_state_get_slots_const(runtime);
     return slots ? slots->frame : KEK_STATE_INVALID_ID;
 }
 
-int game_state_update_frame(Game_stateRuntime* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return game_state_update_frame_clock_slot(runtime, game_state_frame_slot_id(runtime), update, context, changed_fields);
+KekStateHandle game_state_frame_slot_id(const Game_stateRuntime* runtime) {
+    return game_state_frame_handle(runtime);
 }
 
-Game_stateUpdateItem game_state_frame_update_item(Game_stateRuntime* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return game_state_frame_clock_slot_update_item(game_state_frame_slot_id(runtime), update, context, changed_fields);
+int game_state_update_frame(Game_stateRuntime* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_update_frame_clock_instance(runtime, game_state_frame_handle(runtime), update, context, changed_fields);
+}
+
+Game_stateUpdateItem game_state_frame_update_item(Game_stateRuntime* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_frame_clock_instance_update_item(game_state_frame_handle(runtime), update, context, changed_fields);
 }
 
 int game_state_set_frame_tick(Game_stateRuntime* runtime, uint64_t value) {
-    return game_state_set_frame_clock_slot_tick(runtime, game_state_frame_slot_id(runtime), value);
+    return game_state_set_frame_clock_instance_tick(runtime, game_state_frame_handle(runtime), value);
 }
 
 int game_state_set_frame_dt(Game_stateRuntime* runtime, float value) {
-    return game_state_set_frame_clock_slot_dt(runtime, game_state_frame_slot_id(runtime), value);
+    return game_state_set_frame_clock_instance_dt(runtime, game_state_frame_handle(runtime), value);
 }
 
 GameSession* game_state_session(KekStateStore* store, const Game_stateStateSlots* slots) {
@@ -4296,49 +5324,53 @@ const GameSession* game_state_session_current_const(const Game_stateRuntime* run
     return game_state_session_const(game_state_get_store_const(runtime), game_state_get_slots_const(runtime));
 }
 
-size_t game_state_session_slot_id(const Game_stateRuntime* runtime) {
+KekStateHandle game_state_session_handle(const Game_stateRuntime* runtime) {
     const Game_stateStateSlots* slots = game_state_get_slots_const(runtime);
     return slots ? slots->session : KEK_STATE_INVALID_ID;
 }
 
-int game_state_update_session(Game_stateRuntime* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return game_state_update_game_session_slot(runtime, game_state_session_slot_id(runtime), update, context, changed_fields);
+KekStateHandle game_state_session_slot_id(const Game_stateRuntime* runtime) {
+    return game_state_session_handle(runtime);
 }
 
-Game_stateUpdateItem game_state_session_update_item(Game_stateRuntime* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return game_state_game_session_slot_update_item(game_state_session_slot_id(runtime), update, context, changed_fields);
+int game_state_update_session(Game_stateRuntime* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_update_game_session_instance(runtime, game_state_session_handle(runtime), update, context, changed_fields);
+}
+
+Game_stateUpdateItem game_state_session_update_item(Game_stateRuntime* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_game_session_instance_update_item(game_state_session_handle(runtime), update, context, changed_fields);
 }
 
 int game_state_set_session_mode(Game_stateRuntime* runtime, GameMode value) {
-    return game_state_set_game_session_slot_mode(runtime, game_state_session_slot_id(runtime), value);
+    return game_state_set_game_session_instance_mode(runtime, game_state_session_handle(runtime), value);
 }
 
 int game_state_set_session_score(Game_stateRuntime* runtime, int32_t value) {
-    return game_state_set_game_session_slot_score(runtime, game_state_session_slot_id(runtime), value);
+    return game_state_set_game_session_instance_score(runtime, game_state_session_handle(runtime), value);
 }
 
 int game_state_set_session_combo(Game_stateRuntime* runtime, int32_t value) {
-    return game_state_set_game_session_slot_combo(runtime, game_state_session_slot_id(runtime), value);
+    return game_state_set_game_session_instance_combo(runtime, game_state_session_handle(runtime), value);
 }
 
 int game_state_set_session_combo_timer(Game_stateRuntime* runtime, float value) {
-    return game_state_set_game_session_slot_combo_timer(runtime, game_state_session_slot_id(runtime), value);
+    return game_state_set_game_session_instance_combo_timer(runtime, game_state_session_handle(runtime), value);
 }
 
 int game_state_set_session_time_alive(Game_stateRuntime* runtime, float value) {
-    return game_state_set_game_session_slot_time_alive(runtime, game_state_session_slot_id(runtime), value);
+    return game_state_set_game_session_instance_time_alive(runtime, game_state_session_handle(runtime), value);
 }
 
 int game_state_set_session_shake(Game_stateRuntime* runtime, float value) {
-    return game_state_set_game_session_slot_shake(runtime, game_state_session_slot_id(runtime), value);
+    return game_state_set_game_session_instance_shake(runtime, game_state_session_handle(runtime), value);
 }
 
 int game_state_set_session_next_upgrade_score(Game_stateRuntime* runtime, int32_t value) {
-    return game_state_set_game_session_slot_next_upgrade_score(runtime, game_state_session_slot_id(runtime), value);
+    return game_state_set_game_session_instance_next_upgrade_score(runtime, game_state_session_handle(runtime), value);
 }
 
 int game_state_set_session_debug(Game_stateRuntime* runtime, bool value) {
-    return game_state_set_game_session_slot_debug(runtime, game_state_session_slot_id(runtime), value);
+    return game_state_set_game_session_instance_debug(runtime, game_state_session_handle(runtime), value);
 }
 
 InputIntent* game_state_input(KekStateStore* store, const Game_stateStateSlots* slots) {
@@ -4363,49 +5395,53 @@ const InputIntent* game_state_input_current_const(const Game_stateRuntime* runti
     return game_state_input_const(game_state_get_store_const(runtime), game_state_get_slots_const(runtime));
 }
 
-size_t game_state_input_slot_id(const Game_stateRuntime* runtime) {
+KekStateHandle game_state_input_handle(const Game_stateRuntime* runtime) {
     const Game_stateStateSlots* slots = game_state_get_slots_const(runtime);
     return slots ? slots->input : KEK_STATE_INVALID_ID;
 }
 
-int game_state_update_input(Game_stateRuntime* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return game_state_update_input_intent_slot(runtime, game_state_input_slot_id(runtime), update, context, changed_fields);
+KekStateHandle game_state_input_slot_id(const Game_stateRuntime* runtime) {
+    return game_state_input_handle(runtime);
 }
 
-Game_stateUpdateItem game_state_input_update_item(Game_stateRuntime* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return game_state_input_intent_slot_update_item(game_state_input_slot_id(runtime), update, context, changed_fields);
+int game_state_update_input(Game_stateRuntime* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_update_input_intent_instance(runtime, game_state_input_handle(runtime), update, context, changed_fields);
+}
+
+Game_stateUpdateItem game_state_input_update_item(Game_stateRuntime* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_input_intent_instance_update_item(game_state_input_handle(runtime), update, context, changed_fields);
 }
 
 int game_state_set_input_move_x(Game_stateRuntime* runtime, float value) {
-    return game_state_set_input_intent_slot_move_x(runtime, game_state_input_slot_id(runtime), value);
+    return game_state_set_input_intent_instance_move_x(runtime, game_state_input_handle(runtime), value);
 }
 
 int game_state_set_input_move_y(Game_stateRuntime* runtime, float value) {
-    return game_state_set_input_intent_slot_move_y(runtime, game_state_input_slot_id(runtime), value);
+    return game_state_set_input_intent_instance_move_y(runtime, game_state_input_handle(runtime), value);
 }
 
 int game_state_set_input_aim_x(Game_stateRuntime* runtime, float value) {
-    return game_state_set_input_intent_slot_aim_x(runtime, game_state_input_slot_id(runtime), value);
+    return game_state_set_input_intent_instance_aim_x(runtime, game_state_input_handle(runtime), value);
 }
 
 int game_state_set_input_aim_y(Game_stateRuntime* runtime, float value) {
-    return game_state_set_input_intent_slot_aim_y(runtime, game_state_input_slot_id(runtime), value);
+    return game_state_set_input_intent_instance_aim_y(runtime, game_state_input_handle(runtime), value);
 }
 
 int game_state_set_input_shoot(Game_stateRuntime* runtime, bool value) {
-    return game_state_set_input_intent_slot_shoot(runtime, game_state_input_slot_id(runtime), value);
+    return game_state_set_input_intent_instance_shoot(runtime, game_state_input_handle(runtime), value);
 }
 
 int game_state_set_input_dash(Game_stateRuntime* runtime, bool value) {
-    return game_state_set_input_intent_slot_dash(runtime, game_state_input_slot_id(runtime), value);
+    return game_state_set_input_intent_instance_dash(runtime, game_state_input_handle(runtime), value);
 }
 
 int game_state_set_input_pause(Game_stateRuntime* runtime, bool value) {
-    return game_state_set_input_intent_slot_pause(runtime, game_state_input_slot_id(runtime), value);
+    return game_state_set_input_intent_instance_pause(runtime, game_state_input_handle(runtime), value);
 }
 
 int game_state_set_input_confirm(Game_stateRuntime* runtime, bool value) {
-    return game_state_set_input_intent_slot_confirm(runtime, game_state_input_slot_id(runtime), value);
+    return game_state_set_input_intent_instance_confirm(runtime, game_state_input_handle(runtime), value);
 }
 
 Player* game_state_player(KekStateStore* store, const Game_stateStateSlots* slots) {
@@ -4430,69 +5466,73 @@ const Player* game_state_player_current_const(const Game_stateRuntime* runtime) 
     return game_state_player_const(game_state_get_store_const(runtime), game_state_get_slots_const(runtime));
 }
 
-size_t game_state_player_slot_id(const Game_stateRuntime* runtime) {
+KekStateHandle game_state_player_handle(const Game_stateRuntime* runtime) {
     const Game_stateStateSlots* slots = game_state_get_slots_const(runtime);
     return slots ? slots->player : KEK_STATE_INVALID_ID;
 }
 
-int game_state_update_player(Game_stateRuntime* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return game_state_update_player_slot(runtime, game_state_player_slot_id(runtime), update, context, changed_fields);
+KekStateHandle game_state_player_slot_id(const Game_stateRuntime* runtime) {
+    return game_state_player_handle(runtime);
 }
 
-Game_stateUpdateItem game_state_player_update_item(Game_stateRuntime* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return game_state_player_slot_update_item(game_state_player_slot_id(runtime), update, context, changed_fields);
+int game_state_update_player(Game_stateRuntime* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_update_player_instance(runtime, game_state_player_handle(runtime), update, context, changed_fields);
+}
+
+Game_stateUpdateItem game_state_player_update_item(Game_stateRuntime* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_player_instance_update_item(game_state_player_handle(runtime), update, context, changed_fields);
 }
 
 int game_state_set_player_x(Game_stateRuntime* runtime, float value) {
-    return game_state_set_player_slot_x(runtime, game_state_player_slot_id(runtime), value);
+    return game_state_set_player_instance_x(runtime, game_state_player_handle(runtime), value);
 }
 
 int game_state_set_player_y(Game_stateRuntime* runtime, float value) {
-    return game_state_set_player_slot_y(runtime, game_state_player_slot_id(runtime), value);
+    return game_state_set_player_instance_y(runtime, game_state_player_handle(runtime), value);
 }
 
 int game_state_set_player_vx(Game_stateRuntime* runtime, float value) {
-    return game_state_set_player_slot_vx(runtime, game_state_player_slot_id(runtime), value);
+    return game_state_set_player_instance_vx(runtime, game_state_player_handle(runtime), value);
 }
 
 int game_state_set_player_vy(Game_stateRuntime* runtime, float value) {
-    return game_state_set_player_slot_vy(runtime, game_state_player_slot_id(runtime), value);
+    return game_state_set_player_instance_vy(runtime, game_state_player_handle(runtime), value);
 }
 
 int game_state_set_player_health(Game_stateRuntime* runtime, int32_t value) {
-    return game_state_set_player_slot_health(runtime, game_state_player_slot_id(runtime), value);
+    return game_state_set_player_instance_health(runtime, game_state_player_handle(runtime), value);
 }
 
 int game_state_set_player_max_health(Game_stateRuntime* runtime, int32_t value) {
-    return game_state_set_player_slot_max_health(runtime, game_state_player_slot_id(runtime), value);
+    return game_state_set_player_instance_max_health(runtime, game_state_player_handle(runtime), value);
 }
 
 int game_state_set_player_shield(Game_stateRuntime* runtime, int32_t value) {
-    return game_state_set_player_slot_shield(runtime, game_state_player_slot_id(runtime), value);
+    return game_state_set_player_instance_shield(runtime, game_state_player_handle(runtime), value);
 }
 
 int game_state_set_player_xp(Game_stateRuntime* runtime, int32_t value) {
-    return game_state_set_player_slot_xp(runtime, game_state_player_slot_id(runtime), value);
+    return game_state_set_player_instance_xp(runtime, game_state_player_handle(runtime), value);
 }
 
 int game_state_set_player_level(Game_stateRuntime* runtime, int32_t value) {
-    return game_state_set_player_slot_level(runtime, game_state_player_slot_id(runtime), value);
+    return game_state_set_player_instance_level(runtime, game_state_player_handle(runtime), value);
 }
 
 int game_state_set_player_fire_cooldown(Game_stateRuntime* runtime, float value) {
-    return game_state_set_player_slot_fire_cooldown(runtime, game_state_player_slot_id(runtime), value);
+    return game_state_set_player_instance_fire_cooldown(runtime, game_state_player_handle(runtime), value);
 }
 
 int game_state_set_player_dash_cooldown(Game_stateRuntime* runtime, float value) {
-    return game_state_set_player_slot_dash_cooldown(runtime, game_state_player_slot_id(runtime), value);
+    return game_state_set_player_instance_dash_cooldown(runtime, game_state_player_handle(runtime), value);
 }
 
 int game_state_set_player_rapid_timer(Game_stateRuntime* runtime, float value) {
-    return game_state_set_player_slot_rapid_timer(runtime, game_state_player_slot_id(runtime), value);
+    return game_state_set_player_instance_rapid_timer(runtime, game_state_player_handle(runtime), value);
 }
 
 int game_state_set_player_invulnerable_timer(Game_stateRuntime* runtime, float value) {
-    return game_state_set_player_slot_invulnerable_timer(runtime, game_state_player_slot_id(runtime), value);
+    return game_state_set_player_instance_invulnerable_timer(runtime, game_state_player_handle(runtime), value);
 }
 
 WaveDirector* game_state_wave(KekStateStore* store, const Game_stateStateSlots* slots) {
@@ -4517,37 +5557,41 @@ const WaveDirector* game_state_wave_current_const(const Game_stateRuntime* runti
     return game_state_wave_const(game_state_get_store_const(runtime), game_state_get_slots_const(runtime));
 }
 
-size_t game_state_wave_slot_id(const Game_stateRuntime* runtime) {
+KekStateHandle game_state_wave_handle(const Game_stateRuntime* runtime) {
     const Game_stateStateSlots* slots = game_state_get_slots_const(runtime);
     return slots ? slots->wave : KEK_STATE_INVALID_ID;
 }
 
-int game_state_update_wave(Game_stateRuntime* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return game_state_update_wave_director_slot(runtime, game_state_wave_slot_id(runtime), update, context, changed_fields);
+KekStateHandle game_state_wave_slot_id(const Game_stateRuntime* runtime) {
+    return game_state_wave_handle(runtime);
 }
 
-Game_stateUpdateItem game_state_wave_update_item(Game_stateRuntime* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return game_state_wave_director_slot_update_item(game_state_wave_slot_id(runtime), update, context, changed_fields);
+int game_state_update_wave(Game_stateRuntime* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_update_wave_director_instance(runtime, game_state_wave_handle(runtime), update, context, changed_fields);
+}
+
+Game_stateUpdateItem game_state_wave_update_item(Game_stateRuntime* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_wave_director_instance_update_item(game_state_wave_handle(runtime), update, context, changed_fields);
 }
 
 int game_state_set_wave_wave(Game_stateRuntime* runtime, int32_t value) {
-    return game_state_set_wave_director_slot_wave(runtime, game_state_wave_slot_id(runtime), value);
+    return game_state_set_wave_director_instance_wave(runtime, game_state_wave_handle(runtime), value);
 }
 
 int game_state_set_wave_spawn_budget(Game_stateRuntime* runtime, int32_t value) {
-    return game_state_set_wave_director_slot_spawn_budget(runtime, game_state_wave_slot_id(runtime), value);
+    return game_state_set_wave_director_instance_spawn_budget(runtime, game_state_wave_handle(runtime), value);
 }
 
 int game_state_set_wave_spawn_timer(Game_stateRuntime* runtime, float value) {
-    return game_state_set_wave_director_slot_spawn_timer(runtime, game_state_wave_slot_id(runtime), value);
+    return game_state_set_wave_director_instance_spawn_timer(runtime, game_state_wave_handle(runtime), value);
 }
 
 int game_state_set_wave_active_enemies(Game_stateRuntime* runtime, int32_t value) {
-    return game_state_set_wave_director_slot_active_enemies(runtime, game_state_wave_slot_id(runtime), value);
+    return game_state_set_wave_director_instance_active_enemies(runtime, game_state_wave_handle(runtime), value);
 }
 
 int game_state_set_wave_boss_spawned(Game_stateRuntime* runtime, bool value) {
-    return game_state_set_wave_director_slot_boss_spawned(runtime, game_state_wave_slot_id(runtime), value);
+    return game_state_set_wave_director_instance_boss_spawned(runtime, game_state_wave_handle(runtime), value);
 }
 
 CameraRig* game_state_camera(KekStateStore* store, const Game_stateStateSlots* slots) {
@@ -4572,29 +5616,33 @@ const CameraRig* game_state_camera_current_const(const Game_stateRuntime* runtim
     return game_state_camera_const(game_state_get_store_const(runtime), game_state_get_slots_const(runtime));
 }
 
-size_t game_state_camera_slot_id(const Game_stateRuntime* runtime) {
+KekStateHandle game_state_camera_handle(const Game_stateRuntime* runtime) {
     const Game_stateStateSlots* slots = game_state_get_slots_const(runtime);
     return slots ? slots->camera : KEK_STATE_INVALID_ID;
 }
 
-int game_state_update_camera(Game_stateRuntime* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return game_state_update_camera_rig_slot(runtime, game_state_camera_slot_id(runtime), update, context, changed_fields);
+KekStateHandle game_state_camera_slot_id(const Game_stateRuntime* runtime) {
+    return game_state_camera_handle(runtime);
 }
 
-Game_stateUpdateItem game_state_camera_update_item(Game_stateRuntime* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return game_state_camera_rig_slot_update_item(game_state_camera_slot_id(runtime), update, context, changed_fields);
+int game_state_update_camera(Game_stateRuntime* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_update_camera_rig_instance(runtime, game_state_camera_handle(runtime), update, context, changed_fields);
+}
+
+Game_stateUpdateItem game_state_camera_update_item(Game_stateRuntime* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_camera_rig_instance_update_item(game_state_camera_handle(runtime), update, context, changed_fields);
 }
 
 int game_state_set_camera_x(Game_stateRuntime* runtime, float value) {
-    return game_state_set_camera_rig_slot_x(runtime, game_state_camera_slot_id(runtime), value);
+    return game_state_set_camera_rig_instance_x(runtime, game_state_camera_handle(runtime), value);
 }
 
 int game_state_set_camera_y(Game_stateRuntime* runtime, float value) {
-    return game_state_set_camera_rig_slot_y(runtime, game_state_camera_slot_id(runtime), value);
+    return game_state_set_camera_rig_instance_y(runtime, game_state_camera_handle(runtime), value);
 }
 
 int game_state_set_camera_zoom(Game_stateRuntime* runtime, float value) {
-    return game_state_set_camera_rig_slot_zoom(runtime, game_state_camera_slot_id(runtime), value);
+    return game_state_set_camera_rig_instance_zoom(runtime, game_state_camera_handle(runtime), value);
 }
 
 Enemy* game_state_grunt_enemy(KekStateStore* store, const Game_stateStateSlots* slots) {
@@ -4619,57 +5667,61 @@ const Enemy* game_state_grunt_enemy_current_const(const Game_stateRuntime* runti
     return game_state_grunt_enemy_const(game_state_get_store_const(runtime), game_state_get_slots_const(runtime));
 }
 
-size_t game_state_grunt_enemy_slot_id(const Game_stateRuntime* runtime) {
+KekStateHandle game_state_grunt_enemy_handle(const Game_stateRuntime* runtime) {
     const Game_stateStateSlots* slots = game_state_get_slots_const(runtime);
     return slots ? slots->grunt_enemy : KEK_STATE_INVALID_ID;
 }
 
-int game_state_update_grunt_enemy(Game_stateRuntime* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return game_state_update_enemy_slot(runtime, game_state_grunt_enemy_slot_id(runtime), update, context, changed_fields);
+KekStateHandle game_state_grunt_enemy_slot_id(const Game_stateRuntime* runtime) {
+    return game_state_grunt_enemy_handle(runtime);
 }
 
-Game_stateUpdateItem game_state_grunt_enemy_update_item(Game_stateRuntime* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return game_state_enemy_slot_update_item(game_state_grunt_enemy_slot_id(runtime), update, context, changed_fields);
+int game_state_update_grunt_enemy(Game_stateRuntime* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_update_enemy_instance(runtime, game_state_grunt_enemy_handle(runtime), update, context, changed_fields);
+}
+
+Game_stateUpdateItem game_state_grunt_enemy_update_item(Game_stateRuntime* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_enemy_instance_update_item(game_state_grunt_enemy_handle(runtime), update, context, changed_fields);
 }
 
 int game_state_set_grunt_enemy_kind(Game_stateRuntime* runtime, EnemyKind value) {
-    return game_state_set_enemy_slot_kind(runtime, game_state_grunt_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_kind(runtime, game_state_grunt_enemy_handle(runtime), value);
 }
 
 int game_state_set_grunt_enemy_x(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_x(runtime, game_state_grunt_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_x(runtime, game_state_grunt_enemy_handle(runtime), value);
 }
 
 int game_state_set_grunt_enemy_y(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_y(runtime, game_state_grunt_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_y(runtime, game_state_grunt_enemy_handle(runtime), value);
 }
 
 int game_state_set_grunt_enemy_vx(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_vx(runtime, game_state_grunt_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_vx(runtime, game_state_grunt_enemy_handle(runtime), value);
 }
 
 int game_state_set_grunt_enemy_vy(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_vy(runtime, game_state_grunt_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_vy(runtime, game_state_grunt_enemy_handle(runtime), value);
 }
 
 int game_state_set_grunt_enemy_health(Game_stateRuntime* runtime, int32_t value) {
-    return game_state_set_enemy_slot_health(runtime, game_state_grunt_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_health(runtime, game_state_grunt_enemy_handle(runtime), value);
 }
 
 int game_state_set_grunt_enemy_damage(Game_stateRuntime* runtime, int32_t value) {
-    return game_state_set_enemy_slot_damage(runtime, game_state_grunt_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_damage(runtime, game_state_grunt_enemy_handle(runtime), value);
 }
 
 int game_state_set_grunt_enemy_radius(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_radius(runtime, game_state_grunt_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_radius(runtime, game_state_grunt_enemy_handle(runtime), value);
 }
 
 int game_state_set_grunt_enemy_flash(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_flash(runtime, game_state_grunt_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_flash(runtime, game_state_grunt_enemy_handle(runtime), value);
 }
 
 int game_state_set_grunt_enemy_active(Game_stateRuntime* runtime, bool value) {
-    return game_state_set_enemy_slot_active(runtime, game_state_grunt_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_active(runtime, game_state_grunt_enemy_handle(runtime), value);
 }
 
 Enemy* game_state_runner_enemy(KekStateStore* store, const Game_stateStateSlots* slots) {
@@ -4694,57 +5746,61 @@ const Enemy* game_state_runner_enemy_current_const(const Game_stateRuntime* runt
     return game_state_runner_enemy_const(game_state_get_store_const(runtime), game_state_get_slots_const(runtime));
 }
 
-size_t game_state_runner_enemy_slot_id(const Game_stateRuntime* runtime) {
+KekStateHandle game_state_runner_enemy_handle(const Game_stateRuntime* runtime) {
     const Game_stateStateSlots* slots = game_state_get_slots_const(runtime);
     return slots ? slots->runner_enemy : KEK_STATE_INVALID_ID;
 }
 
-int game_state_update_runner_enemy(Game_stateRuntime* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return game_state_update_enemy_slot(runtime, game_state_runner_enemy_slot_id(runtime), update, context, changed_fields);
+KekStateHandle game_state_runner_enemy_slot_id(const Game_stateRuntime* runtime) {
+    return game_state_runner_enemy_handle(runtime);
 }
 
-Game_stateUpdateItem game_state_runner_enemy_update_item(Game_stateRuntime* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return game_state_enemy_slot_update_item(game_state_runner_enemy_slot_id(runtime), update, context, changed_fields);
+int game_state_update_runner_enemy(Game_stateRuntime* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_update_enemy_instance(runtime, game_state_runner_enemy_handle(runtime), update, context, changed_fields);
+}
+
+Game_stateUpdateItem game_state_runner_enemy_update_item(Game_stateRuntime* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_enemy_instance_update_item(game_state_runner_enemy_handle(runtime), update, context, changed_fields);
 }
 
 int game_state_set_runner_enemy_kind(Game_stateRuntime* runtime, EnemyKind value) {
-    return game_state_set_enemy_slot_kind(runtime, game_state_runner_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_kind(runtime, game_state_runner_enemy_handle(runtime), value);
 }
 
 int game_state_set_runner_enemy_x(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_x(runtime, game_state_runner_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_x(runtime, game_state_runner_enemy_handle(runtime), value);
 }
 
 int game_state_set_runner_enemy_y(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_y(runtime, game_state_runner_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_y(runtime, game_state_runner_enemy_handle(runtime), value);
 }
 
 int game_state_set_runner_enemy_vx(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_vx(runtime, game_state_runner_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_vx(runtime, game_state_runner_enemy_handle(runtime), value);
 }
 
 int game_state_set_runner_enemy_vy(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_vy(runtime, game_state_runner_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_vy(runtime, game_state_runner_enemy_handle(runtime), value);
 }
 
 int game_state_set_runner_enemy_health(Game_stateRuntime* runtime, int32_t value) {
-    return game_state_set_enemy_slot_health(runtime, game_state_runner_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_health(runtime, game_state_runner_enemy_handle(runtime), value);
 }
 
 int game_state_set_runner_enemy_damage(Game_stateRuntime* runtime, int32_t value) {
-    return game_state_set_enemy_slot_damage(runtime, game_state_runner_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_damage(runtime, game_state_runner_enemy_handle(runtime), value);
 }
 
 int game_state_set_runner_enemy_radius(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_radius(runtime, game_state_runner_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_radius(runtime, game_state_runner_enemy_handle(runtime), value);
 }
 
 int game_state_set_runner_enemy_flash(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_flash(runtime, game_state_runner_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_flash(runtime, game_state_runner_enemy_handle(runtime), value);
 }
 
 int game_state_set_runner_enemy_active(Game_stateRuntime* runtime, bool value) {
-    return game_state_set_enemy_slot_active(runtime, game_state_runner_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_active(runtime, game_state_runner_enemy_handle(runtime), value);
 }
 
 Enemy* game_state_tank_enemy(KekStateStore* store, const Game_stateStateSlots* slots) {
@@ -4769,57 +5825,61 @@ const Enemy* game_state_tank_enemy_current_const(const Game_stateRuntime* runtim
     return game_state_tank_enemy_const(game_state_get_store_const(runtime), game_state_get_slots_const(runtime));
 }
 
-size_t game_state_tank_enemy_slot_id(const Game_stateRuntime* runtime) {
+KekStateHandle game_state_tank_enemy_handle(const Game_stateRuntime* runtime) {
     const Game_stateStateSlots* slots = game_state_get_slots_const(runtime);
     return slots ? slots->tank_enemy : KEK_STATE_INVALID_ID;
 }
 
-int game_state_update_tank_enemy(Game_stateRuntime* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return game_state_update_enemy_slot(runtime, game_state_tank_enemy_slot_id(runtime), update, context, changed_fields);
+KekStateHandle game_state_tank_enemy_slot_id(const Game_stateRuntime* runtime) {
+    return game_state_tank_enemy_handle(runtime);
 }
 
-Game_stateUpdateItem game_state_tank_enemy_update_item(Game_stateRuntime* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return game_state_enemy_slot_update_item(game_state_tank_enemy_slot_id(runtime), update, context, changed_fields);
+int game_state_update_tank_enemy(Game_stateRuntime* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_update_enemy_instance(runtime, game_state_tank_enemy_handle(runtime), update, context, changed_fields);
+}
+
+Game_stateUpdateItem game_state_tank_enemy_update_item(Game_stateRuntime* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_enemy_instance_update_item(game_state_tank_enemy_handle(runtime), update, context, changed_fields);
 }
 
 int game_state_set_tank_enemy_kind(Game_stateRuntime* runtime, EnemyKind value) {
-    return game_state_set_enemy_slot_kind(runtime, game_state_tank_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_kind(runtime, game_state_tank_enemy_handle(runtime), value);
 }
 
 int game_state_set_tank_enemy_x(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_x(runtime, game_state_tank_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_x(runtime, game_state_tank_enemy_handle(runtime), value);
 }
 
 int game_state_set_tank_enemy_y(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_y(runtime, game_state_tank_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_y(runtime, game_state_tank_enemy_handle(runtime), value);
 }
 
 int game_state_set_tank_enemy_vx(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_vx(runtime, game_state_tank_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_vx(runtime, game_state_tank_enemy_handle(runtime), value);
 }
 
 int game_state_set_tank_enemy_vy(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_vy(runtime, game_state_tank_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_vy(runtime, game_state_tank_enemy_handle(runtime), value);
 }
 
 int game_state_set_tank_enemy_health(Game_stateRuntime* runtime, int32_t value) {
-    return game_state_set_enemy_slot_health(runtime, game_state_tank_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_health(runtime, game_state_tank_enemy_handle(runtime), value);
 }
 
 int game_state_set_tank_enemy_damage(Game_stateRuntime* runtime, int32_t value) {
-    return game_state_set_enemy_slot_damage(runtime, game_state_tank_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_damage(runtime, game_state_tank_enemy_handle(runtime), value);
 }
 
 int game_state_set_tank_enemy_radius(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_radius(runtime, game_state_tank_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_radius(runtime, game_state_tank_enemy_handle(runtime), value);
 }
 
 int game_state_set_tank_enemy_flash(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_flash(runtime, game_state_tank_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_flash(runtime, game_state_tank_enemy_handle(runtime), value);
 }
 
 int game_state_set_tank_enemy_active(Game_stateRuntime* runtime, bool value) {
-    return game_state_set_enemy_slot_active(runtime, game_state_tank_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_active(runtime, game_state_tank_enemy_handle(runtime), value);
 }
 
 Enemy* game_state_boss_enemy(KekStateStore* store, const Game_stateStateSlots* slots) {
@@ -4844,109 +5904,137 @@ const Enemy* game_state_boss_enemy_current_const(const Game_stateRuntime* runtim
     return game_state_boss_enemy_const(game_state_get_store_const(runtime), game_state_get_slots_const(runtime));
 }
 
-size_t game_state_boss_enemy_slot_id(const Game_stateRuntime* runtime) {
+KekStateHandle game_state_boss_enemy_handle(const Game_stateRuntime* runtime) {
     const Game_stateStateSlots* slots = game_state_get_slots_const(runtime);
     return slots ? slots->boss_enemy : KEK_STATE_INVALID_ID;
 }
 
-int game_state_update_boss_enemy(Game_stateRuntime* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return game_state_update_enemy_slot(runtime, game_state_boss_enemy_slot_id(runtime), update, context, changed_fields);
+KekStateHandle game_state_boss_enemy_slot_id(const Game_stateRuntime* runtime) {
+    return game_state_boss_enemy_handle(runtime);
 }
 
-Game_stateUpdateItem game_state_boss_enemy_update_item(Game_stateRuntime* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return game_state_enemy_slot_update_item(game_state_boss_enemy_slot_id(runtime), update, context, changed_fields);
+int game_state_update_boss_enemy(Game_stateRuntime* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_update_enemy_instance(runtime, game_state_boss_enemy_handle(runtime), update, context, changed_fields);
+}
+
+Game_stateUpdateItem game_state_boss_enemy_update_item(Game_stateRuntime* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return game_state_enemy_instance_update_item(game_state_boss_enemy_handle(runtime), update, context, changed_fields);
 }
 
 int game_state_set_boss_enemy_kind(Game_stateRuntime* runtime, EnemyKind value) {
-    return game_state_set_enemy_slot_kind(runtime, game_state_boss_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_kind(runtime, game_state_boss_enemy_handle(runtime), value);
 }
 
 int game_state_set_boss_enemy_x(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_x(runtime, game_state_boss_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_x(runtime, game_state_boss_enemy_handle(runtime), value);
 }
 
 int game_state_set_boss_enemy_y(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_y(runtime, game_state_boss_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_y(runtime, game_state_boss_enemy_handle(runtime), value);
 }
 
 int game_state_set_boss_enemy_vx(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_vx(runtime, game_state_boss_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_vx(runtime, game_state_boss_enemy_handle(runtime), value);
 }
 
 int game_state_set_boss_enemy_vy(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_vy(runtime, game_state_boss_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_vy(runtime, game_state_boss_enemy_handle(runtime), value);
 }
 
 int game_state_set_boss_enemy_health(Game_stateRuntime* runtime, int32_t value) {
-    return game_state_set_enemy_slot_health(runtime, game_state_boss_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_health(runtime, game_state_boss_enemy_handle(runtime), value);
 }
 
 int game_state_set_boss_enemy_damage(Game_stateRuntime* runtime, int32_t value) {
-    return game_state_set_enemy_slot_damage(runtime, game_state_boss_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_damage(runtime, game_state_boss_enemy_handle(runtime), value);
 }
 
 int game_state_set_boss_enemy_radius(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_radius(runtime, game_state_boss_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_radius(runtime, game_state_boss_enemy_handle(runtime), value);
 }
 
 int game_state_set_boss_enemy_flash(Game_stateRuntime* runtime, float value) {
-    return game_state_set_enemy_slot_flash(runtime, game_state_boss_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_flash(runtime, game_state_boss_enemy_handle(runtime), value);
 }
 
 int game_state_set_boss_enemy_active(Game_stateRuntime* runtime, bool value) {
-    return game_state_set_enemy_slot_active(runtime, game_state_boss_enemy_slot_id(runtime), value);
+    return game_state_set_enemy_instance_active(runtime, game_state_boss_enemy_handle(runtime), value);
 }
 
-int game_state_is_declared_camera_rig_slot(const Game_stateRuntime* runtime, size_t slot_id) {
+int game_state_is_declared_camera_rig_handle(const Game_stateRuntime* runtime, KekStateHandle handle) {
     const Game_stateStateSlots* slots = game_state_get_slots_const(runtime);
     if (slots == 0) {
         return 0;
     }
-    return slot_id == slots->camera;
+    return handle == slots->camera;
 }
 
-int game_state_is_declared_enemy_slot(const Game_stateRuntime* runtime, size_t slot_id) {
+int game_state_is_declared_camera_rig_slot(const Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_is_declared_camera_rig_handle(runtime, handle);
+}
+
+int game_state_is_declared_enemy_handle(const Game_stateRuntime* runtime, KekStateHandle handle) {
     const Game_stateStateSlots* slots = game_state_get_slots_const(runtime);
     if (slots == 0) {
         return 0;
     }
-    return slot_id == slots->grunt_enemy || slot_id == slots->runner_enemy || slot_id == slots->tank_enemy || slot_id == slots->boss_enemy;
+    return handle == slots->grunt_enemy || handle == slots->runner_enemy || handle == slots->tank_enemy || handle == slots->boss_enemy;
 }
 
-int game_state_is_declared_frame_clock_slot(const Game_stateRuntime* runtime, size_t slot_id) {
+int game_state_is_declared_enemy_slot(const Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_is_declared_enemy_handle(runtime, handle);
+}
+
+int game_state_is_declared_frame_clock_handle(const Game_stateRuntime* runtime, KekStateHandle handle) {
     const Game_stateStateSlots* slots = game_state_get_slots_const(runtime);
     if (slots == 0) {
         return 0;
     }
-    return slot_id == slots->frame;
+    return handle == slots->frame;
 }
 
-int game_state_is_declared_game_session_slot(const Game_stateRuntime* runtime, size_t slot_id) {
+int game_state_is_declared_frame_clock_slot(const Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_is_declared_frame_clock_handle(runtime, handle);
+}
+
+int game_state_is_declared_game_session_handle(const Game_stateRuntime* runtime, KekStateHandle handle) {
     const Game_stateStateSlots* slots = game_state_get_slots_const(runtime);
     if (slots == 0) {
         return 0;
     }
-    return slot_id == slots->session;
+    return handle == slots->session;
 }
 
-int game_state_is_declared_input_intent_slot(const Game_stateRuntime* runtime, size_t slot_id) {
+int game_state_is_declared_game_session_slot(const Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_is_declared_game_session_handle(runtime, handle);
+}
+
+int game_state_is_declared_input_intent_handle(const Game_stateRuntime* runtime, KekStateHandle handle) {
     const Game_stateStateSlots* slots = game_state_get_slots_const(runtime);
     if (slots == 0) {
         return 0;
     }
-    return slot_id == slots->input;
+    return handle == slots->input;
 }
 
-int game_state_is_declared_wave_director_slot(const Game_stateRuntime* runtime, size_t slot_id) {
+int game_state_is_declared_input_intent_slot(const Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_is_declared_input_intent_handle(runtime, handle);
+}
+
+int game_state_is_declared_wave_director_handle(const Game_stateRuntime* runtime, KekStateHandle handle) {
     const Game_stateStateSlots* slots = game_state_get_slots_const(runtime);
     if (slots == 0) {
         return 0;
     }
-    return slot_id == slots->wave;
+    return handle == slots->wave;
+}
+
+int game_state_is_declared_wave_director_slot(const Game_stateRuntime* runtime, KekStateHandle handle) {
+    return game_state_is_declared_wave_director_handle(runtime, handle);
 }
 
 int kek_generated_state_store_add_defaults(KekStateStore* store,
-                                           size_t slot_ids[KEK_STATE_TYPE_COUNT]) {
+                                           KekStateHandle slot_ids[KEK_STATE_TYPE_COUNT]) {
     if (store == 0 || slot_ids == 0) {
         return 0;
     }

@@ -6,7 +6,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "runtime/state_storage.h"
+#include "runtime/state_store.h"
 #include "runtime/hook.h"
 #include "runtime/runtime.h"
 #include "runtime/app.h"
@@ -30,7 +30,7 @@ $instance_declarations
 extern const KekStateDescriptor KekGeneratedStateDescriptors[KEK_STATE_TYPE_COUNT];
 const KekStateDescriptor* kek_generated_state_descriptor(size_t type_id);
 int kek_generated_state_store_add_defaults(KekStateStore* store,
-                                           size_t slot_ids[KEK_STATE_TYPE_COUNT]);
+                                           KekStateHandle slot_ids[KEK_STATE_TYPE_COUNT]);
 
 #define KEK_GENERATED_HOOK_COUNT $hook_count
 $hook_declarations

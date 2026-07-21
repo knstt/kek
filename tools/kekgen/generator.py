@@ -134,8 +134,12 @@ def render_instance_access_helpers(prefix: str, hook_snake: str, access_type: st
     if emit_slot_id:
         lines.extend(
             [
-                f"static inline size_t {hook_snake}_{instance}_slot_id(const {access_type}* access) {{",
+                f"static inline KekStateHandle {hook_snake}_{instance}_handle(const {access_type}* access) {{",
                 f"    return access && access->slots ? access->slots->{instance} : KEK_STATE_INVALID_ID;",
+                "}",
+                "",
+                f"static inline KekStateHandle {hook_snake}_{instance}_slot_id(const {access_type}* access) {{",
+                f"    return {hook_snake}_{instance}_handle(access);",
                 "}",
                 "",
             ]
@@ -144,7 +148,7 @@ def render_instance_access_helpers(prefix: str, hook_snake: str, access_type: st
         lines.extend(
             [
                 f"static inline const {state.name}* {hook_snake}_read_{instance}(const {access_type}* access) {{",
-                f"    return access ? {prefix}_{state_snake}_slot_const(access->context->state_store, {hook_snake}_{instance}_slot_id(access)) : 0;",
+                f"    return access ? {prefix}_{state_snake}_instance_const(access->context->state_store, {hook_snake}_{instance}_handle(access)) : 0;",
                 "}",
                 "",
             ]
@@ -152,8 +156,8 @@ def render_instance_access_helpers(prefix: str, hook_snake: str, access_type: st
     if access.mode == "KEK_HOOK_ACCESS_WRITE":
         lines.extend(
             [
-                f"static inline int {hook_snake}_update_{instance}(const {access_type}* access, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {{",
-                f"    return access ? kek_state_store_update_fields(access->context->state_store, {hook_snake}_{instance}_slot_id(access), update, context, changed_fields) : 0;",
+                f"static inline int {hook_snake}_update_{instance}(const {access_type}* access, KekStateUpdateFn update, void* context, uint64_t changed_fields) {{",
+                f"    return access ? kek_state_store_update_fields(access->context->state_store, {hook_snake}_{instance}_handle(access), update, context, changed_fields) : 0;",
                 "}",
                 "",
             ]
@@ -168,7 +172,7 @@ def render_instance_access_helpers(prefix: str, hook_snake: str, access_type: st
                 lines.extend(
                     [
                         f"static inline int {hook_snake}_set_{instance}_{field.name}(const {access_type}* access, const char* data, size_t len) {{",
-                        f"    return access ? {prefix}_{state_snake}_set_{field.name}(access->context->state_store, {hook_snake}_{instance}_slot_id(access), data, len) : 0;",
+                        f"    return access ? {prefix}_{state_snake}_set_{field.name}(access->context->state_store, {hook_snake}_{instance}_handle(access), data, len) : 0;",
                         "}",
                         "",
                     ]
@@ -177,7 +181,7 @@ def render_instance_access_helpers(prefix: str, hook_snake: str, access_type: st
                 lines.extend(
                     [
                         f"static inline int {hook_snake}_set_{instance}_{field.name}(const {access_type}* access, {c_type(field.type_name)} value) {{",
-                        f"    return access ? {prefix}_{state_snake}_set_{field.name}(access->context->state_store, {hook_snake}_{instance}_slot_id(access), value) : 0;",
+                        f"    return access ? {prefix}_{state_snake}_set_{field.name}(access->context->state_store, {hook_snake}_{instance}_handle(access), value) : 0;",
                         "}",
                         "",
                     ]
@@ -186,7 +190,7 @@ def render_instance_access_helpers(prefix: str, hook_snake: str, access_type: st
         lines.extend(
             [
                 f"static inline int {hook_snake}_delete_{instance}(const {access_type}* access) {{",
-                f"    return access ? {prefix}_{state_snake}_delete(access->context->state_store, {hook_snake}_{instance}_slot_id(access)) : 0;",
+                f"    return access ? {prefix}_{state_snake}_delete(access->context->state_store, {hook_snake}_{instance}_handle(access)) : 0;",
                 "}",
                 "",
             ]
@@ -202,14 +206,17 @@ def render_state_access_helpers(prefix: str, hook_snake: str, access_type: str, 
     if access.mode == "KEK_HOOK_ACCESS_READ":
         lines.extend(
             [
-                f"static inline size_t {hook_snake}_first_{state_snake}(const {access_type}* access) {{",
+                f"static inline KekStateHandle {hook_snake}_first_{state_snake}(const {access_type}* access) {{",
                 f"    return access ? {prefix}_{state_snake}_first(access->context->state_store) : KEK_STATE_INVALID_ID;",
                 "}",
-                f"static inline size_t {hook_snake}_next_{state_snake}(const {access_type}* access, size_t after_slot_id) {{",
-                f"    return access ? {prefix}_{state_snake}_next(access->context->state_store, after_slot_id) : KEK_STATE_INVALID_ID;",
+                f"static inline KekStateHandle {hook_snake}_next_{state_snake}(const {access_type}* access, KekStateHandle after_handle) {{",
+                f"    return access ? {prefix}_{state_snake}_next(access->context->state_store, after_handle) : KEK_STATE_INVALID_ID;",
                 "}",
-                f"static inline const {state.name}* {hook_snake}_read_{state_snake}_slot(const {access_type}* access, size_t slot_id) {{",
-                f"    return access ? {prefix}_{state_snake}_slot_const(access->context->state_store, slot_id) : 0;",
+                f"static inline const {state.name}* {hook_snake}_read_{state_snake}_instance(const {access_type}* access, KekStateHandle handle) {{",
+                f"    return access ? {prefix}_{state_snake}_instance_const(access->context->state_store, handle) : 0;",
+                "}",
+                f"static inline const {state.name}* {hook_snake}_read_{state_snake}_slot(const {access_type}* access, KekStateHandle handle) {{",
+                f"    return {hook_snake}_read_{state_snake}_instance(access, handle);",
                 "}",
                 "",
             ]
@@ -217,8 +224,11 @@ def render_state_access_helpers(prefix: str, hook_snake: str, access_type: str, 
     if access.mode == "KEK_HOOK_ACCESS_WRITE":
         lines.extend(
             [
-                f"static inline int {hook_snake}_update_{state_snake}_slot(const {access_type}* access, size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {{",
-                "    return access ? kek_state_store_update_fields(access->context->state_store, slot_id, update, context, changed_fields) : 0;",
+                f"static inline int {hook_snake}_update_{state_snake}_instance(const {access_type}* access, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {{",
+                "    return access ? kek_state_store_update_fields(access->context->state_store, handle, update, context, changed_fields) : 0;",
+                "}",
+                f"static inline int {hook_snake}_update_{state_snake}_slot(const {access_type}* access, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {{",
+                f"    return {hook_snake}_update_{state_snake}_instance(access, handle, update, context, changed_fields);",
                 "}",
                 "",
             ]
@@ -226,10 +236,10 @@ def render_state_access_helpers(prefix: str, hook_snake: str, access_type: str, 
     if access.mode == "KEK_HOOK_ACCESS_CREATE":
         lines.extend(
             [
-                f"static inline size_t {hook_snake}_create_{state_snake}(const {access_type}* access) {{",
+                f"static inline KekStateHandle {hook_snake}_create_{state_snake}(const {access_type}* access) {{",
                 f"    return access ? {prefix}_{state_snake}_create(access->context->state_store) : KEK_STATE_INVALID_ID;",
                 "}",
-                f"static inline size_t {hook_snake}_create_{state_snake}_with(const {access_type}* access, const {state.name}* initial) {{",
+                f"static inline KekStateHandle {hook_snake}_create_{state_snake}_with(const {access_type}* access, const {state.name}* initial) {{",
                 f"    return access ? {prefix}_{state_snake}_create_with(access->context->state_store, initial) : KEK_STATE_INVALID_ID;",
                 "}",
                 "",
@@ -238,8 +248,11 @@ def render_state_access_helpers(prefix: str, hook_snake: str, access_type: str, 
     if access.mode == "KEK_HOOK_ACCESS_DELETE":
         lines.extend(
             [
-                f"static inline int {hook_snake}_delete_{state_snake}_slot(const {access_type}* access, size_t slot_id) {{",
-                f"    return access ? {prefix}_{state_snake}_delete(access->context->state_store, slot_id) : 0;",
+                f"static inline int {hook_snake}_delete_{state_snake}_instance(const {access_type}* access, KekStateHandle handle) {{",
+                f"    return access ? {prefix}_{state_snake}_delete(access->context->state_store, handle) : 0;",
+                "}",
+                f"static inline int {hook_snake}_delete_{state_snake}_slot(const {access_type}* access, KekStateHandle handle) {{",
+                f"    return {hook_snake}_delete_{state_snake}_instance(access, handle);",
                 "}",
                 "",
             ]

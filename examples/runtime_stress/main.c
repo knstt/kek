@@ -194,8 +194,8 @@ static int subscribe_runtime_events(Runtime_stress_stateRuntime* stress,
 }
 
 static int create_dynamic_slots(Runtime_stress_stateRuntime* stress,
-                                size_t agents[STRESS_AGENT_COUNT],
-                                size_t packets[STRESS_PACKET_COUNT]) {
+                                KekStateHandle agents[STRESS_AGENT_COUNT],
+                                KekStateHandle packets[STRESS_PACKET_COUNT]) {
     for (size_t i = 0; i < STRESS_AGENT_COUNT; i++) {
         Agent agent = (i % 3 == 0) ? Agent_scout() : Agent_guard();
         agent.id = (uint32_t)(1000u + i);
@@ -222,8 +222,8 @@ static int create_dynamic_slots(Runtime_stress_stateRuntime* stress,
 }
 
 static int run_batched_cycles(Runtime_stress_stateRuntime* stress,
-                              const size_t agents[STRESS_AGENT_COUNT],
-                              const size_t packets[STRESS_PACKET_COUNT],
+                              const KekStateHandle agents[STRESS_AGENT_COUNT],
+                              const KekStateHandle packets[STRESS_PACKET_COUNT],
                               size_t cycles) {
     for (size_t cycle = 0; cycle < cycles; cycle++) {
         Runtime_stress_stateUpdateItem updates[STRESS_BATCH_SIZE];
@@ -343,10 +343,10 @@ static int exercise_rollbacks(Runtime_stress_stateRuntime* stress,
 }
 
 static int exercise_delete_and_reuse(Runtime_stress_stateRuntime* stress,
-                                     size_t agents[STRESS_AGENT_COUNT],
-                                     size_t packets[STRESS_PACKET_COUNT]) {
-    size_t old_agent_slot = agents[3];
-    size_t old_packet_slot = packets[2];
+                                     KekStateHandle agents[STRESS_AGENT_COUNT],
+                                     KekStateHandle packets[STRESS_PACKET_COUNT]) {
+    KekStateHandle old_agent_slot = agents[3];
+    KekStateHandle old_packet_slot = packets[2];
     if (!runtime_stress_state_delete_agent(stress, old_agent_slot) ||
         !runtime_stress_state_delete_packet(stress, old_packet_slot) ||
         !runtime_stress_state_dispatch(stress)) {
@@ -360,7 +360,17 @@ static int exercise_delete_and_reuse(Runtime_stress_stateRuntime* stress,
     agents[3] = runtime_stress_state_create_agent_with(stress, &replacement_agent);
     packets[2] =
         runtime_stress_state_create_packet_with(stress, &replacement_packet);
-    return agents[3] == old_agent_slot && packets[2] == old_packet_slot &&
+    return agents[3] != old_agent_slot && packets[2] != old_packet_slot &&
+           kek_state_handle_index(agents[3]) ==
+               kek_state_handle_index(old_agent_slot) &&
+           kek_state_handle_index(packets[2]) ==
+               kek_state_handle_index(old_packet_slot) &&
+           kek_state_handle_generation(agents[3]) !=
+               kek_state_handle_generation(old_agent_slot) &&
+           kek_state_handle_generation(packets[2]) !=
+               kek_state_handle_generation(old_packet_slot) &&
+           runtime_stress_state_agent_at_const(stress, old_agent_slot) == NULL &&
+           runtime_stress_state_packet_at_const(stress, old_packet_slot) == NULL &&
            runtime_stress_state_dispatch(stress);
 }
 
@@ -564,8 +574,8 @@ int main(void) {
     Runtime_stress_stateRuntime stress;
     RuntimeStressApp app;
     WriteBenchmarkResult write_benchmark;
-    size_t agents[STRESS_AGENT_COUNT];
-    size_t packets[STRESS_PACKET_COUNT];
+    KekStateHandle agents[STRESS_AGENT_COUNT];
+    KekStateHandle packets[STRESS_PACKET_COUNT];
     size_t cycles = stress_cycle_count();
     uint64_t stress_start_ns = kek_trace_now_ns();
     int ok = 0;

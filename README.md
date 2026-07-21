@@ -106,7 +106,7 @@ Completed in the current runtime cleanup:
 - Added queue-capacity checks before generated state mutations that must publish events.
 - Added hook error propagation, hook self-updates for declared writable state types, changed-field event masks, and hook field filters.
 - Added idempotent duplicate event subscription handling and subscriber-list compaction on unsubscribe.
-- Split single-object state storage from the instance-aware state-store implementation.
+- Unified generated state instances around the arena-backed instance-aware state store.
 - Hardened stream readiness `EINTR` handling.
 - Hardened standard text bridge null/capacity checks.
 - Switched timers to monotonic time where available.

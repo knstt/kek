@@ -5,7 +5,7 @@
 
 #include "hook.h"
 #include "runtime.h"
-#include "state_storage.h"
+#include "state_store.h"
 
 typedef struct KekRuntimeApp {
     KekRuntime runtime;

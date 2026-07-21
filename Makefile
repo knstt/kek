@@ -104,7 +104,6 @@ RUNTIME_SRCS := \
 	runtime/timer.c \
 	runtime/trace.c \
 	runtime/runtime.c \
-	runtime/state_storage.c \
 	runtime/state_store.c
 RUNTIME_HEADERS := $(wildcard runtime/*.h)
 RUNTIME_OBJS := $(RUNTIME_SRCS:runtime/%.c=$(BUILD_DIR)/runtime/%.o)

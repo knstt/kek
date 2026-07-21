@@ -26,62 +26,77 @@ static inline OnFrameClockAccess on_frame_clock_access(KekHookContext* context, 
 
 /* OnFrameClock: opaque access forces serial scheduling. */
 
-static inline size_t on_frame_clock_frame_slot_id(const OnFrameClockAccess* access) {
+static inline KekStateHandle on_frame_clock_frame_handle(const OnFrameClockAccess* access) {
     return access && access->slots ? access->slots->frame : KEK_STATE_INVALID_ID;
 }
 
-static inline const FrameClock* on_frame_clock_read_frame(const OnFrameClockAccess* access) {
-    return access ? game_state_frame_clock_slot_const(access->context->state_store, on_frame_clock_frame_slot_id(access)) : 0;
+static inline KekStateHandle on_frame_clock_frame_slot_id(const OnFrameClockAccess* access) {
+    return on_frame_clock_frame_handle(access);
 }
 
-static inline size_t on_frame_clock_session_slot_id(const OnFrameClockAccess* access) {
+static inline const FrameClock* on_frame_clock_read_frame(const OnFrameClockAccess* access) {
+    return access ? game_state_frame_clock_instance_const(access->context->state_store, on_frame_clock_frame_handle(access)) : 0;
+}
+
+static inline KekStateHandle on_frame_clock_session_handle(const OnFrameClockAccess* access) {
     return access && access->slots ? access->slots->session : KEK_STATE_INVALID_ID;
 }
 
-static inline const GameSession* on_frame_clock_read_session(const OnFrameClockAccess* access) {
-    return access ? game_state_game_session_slot_const(access->context->state_store, on_frame_clock_session_slot_id(access)) : 0;
+static inline KekStateHandle on_frame_clock_session_slot_id(const OnFrameClockAccess* access) {
+    return on_frame_clock_session_handle(access);
 }
 
-static inline size_t on_frame_clock_wave_slot_id(const OnFrameClockAccess* access) {
+static inline const GameSession* on_frame_clock_read_session(const OnFrameClockAccess* access) {
+    return access ? game_state_game_session_instance_const(access->context->state_store, on_frame_clock_session_handle(access)) : 0;
+}
+
+static inline KekStateHandle on_frame_clock_wave_handle(const OnFrameClockAccess* access) {
     return access && access->slots ? access->slots->wave : KEK_STATE_INVALID_ID;
 }
 
-static inline const WaveDirector* on_frame_clock_read_wave(const OnFrameClockAccess* access) {
-    return access ? game_state_wave_director_slot_const(access->context->state_store, on_frame_clock_wave_slot_id(access)) : 0;
+static inline KekStateHandle on_frame_clock_wave_slot_id(const OnFrameClockAccess* access) {
+    return on_frame_clock_wave_handle(access);
 }
 
-static inline size_t on_frame_clock_first_enemy(const OnFrameClockAccess* access) {
+static inline const WaveDirector* on_frame_clock_read_wave(const OnFrameClockAccess* access) {
+    return access ? game_state_wave_director_instance_const(access->context->state_store, on_frame_clock_wave_handle(access)) : 0;
+}
+
+static inline KekStateHandle on_frame_clock_first_enemy(const OnFrameClockAccess* access) {
     return access ? game_state_enemy_first(access->context->state_store) : KEK_STATE_INVALID_ID;
 }
-static inline size_t on_frame_clock_next_enemy(const OnFrameClockAccess* access, size_t after_slot_id) {
-    return access ? game_state_enemy_next(access->context->state_store, after_slot_id) : KEK_STATE_INVALID_ID;
+static inline KekStateHandle on_frame_clock_next_enemy(const OnFrameClockAccess* access, KekStateHandle after_handle) {
+    return access ? game_state_enemy_next(access->context->state_store, after_handle) : KEK_STATE_INVALID_ID;
 }
-static inline const Enemy* on_frame_clock_read_enemy_slot(const OnFrameClockAccess* access, size_t slot_id) {
-    return access ? game_state_enemy_slot_const(access->context->state_store, slot_id) : 0;
+static inline const Enemy* on_frame_clock_read_enemy_instance(const OnFrameClockAccess* access, KekStateHandle handle) {
+    return access ? game_state_enemy_instance_const(access->context->state_store, handle) : 0;
+}
+static inline const Enemy* on_frame_clock_read_enemy_slot(const OnFrameClockAccess* access, KekStateHandle handle) {
+    return on_frame_clock_read_enemy_instance(access, handle);
 }
 
-static inline int on_frame_clock_update_wave(const OnFrameClockAccess* access, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return access ? kek_state_store_update_fields(access->context->state_store, on_frame_clock_wave_slot_id(access), update, context, changed_fields) : 0;
+static inline int on_frame_clock_update_wave(const OnFrameClockAccess* access, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return access ? kek_state_store_update_fields(access->context->state_store, on_frame_clock_wave_handle(access), update, context, changed_fields) : 0;
 }
 
 static inline int on_frame_clock_set_wave_wave(const OnFrameClockAccess* access, int32_t value) {
-    return access ? game_state_wave_director_set_wave(access->context->state_store, on_frame_clock_wave_slot_id(access), value) : 0;
+    return access ? game_state_wave_director_set_wave(access->context->state_store, on_frame_clock_wave_handle(access), value) : 0;
 }
 
 static inline int on_frame_clock_set_wave_spawn_budget(const OnFrameClockAccess* access, int32_t value) {
-    return access ? game_state_wave_director_set_spawn_budget(access->context->state_store, on_frame_clock_wave_slot_id(access), value) : 0;
+    return access ? game_state_wave_director_set_spawn_budget(access->context->state_store, on_frame_clock_wave_handle(access), value) : 0;
 }
 
 static inline int on_frame_clock_set_wave_spawn_timer(const OnFrameClockAccess* access, float value) {
-    return access ? game_state_wave_director_set_spawn_timer(access->context->state_store, on_frame_clock_wave_slot_id(access), value) : 0;
+    return access ? game_state_wave_director_set_spawn_timer(access->context->state_store, on_frame_clock_wave_handle(access), value) : 0;
 }
 
 static inline int on_frame_clock_set_wave_active_enemies(const OnFrameClockAccess* access, int32_t value) {
-    return access ? game_state_wave_director_set_active_enemies(access->context->state_store, on_frame_clock_wave_slot_id(access), value) : 0;
+    return access ? game_state_wave_director_set_active_enemies(access->context->state_store, on_frame_clock_wave_handle(access), value) : 0;
 }
 
 static inline int on_frame_clock_set_wave_boss_spawned(const OnFrameClockAccess* access, bool value) {
-    return access ? game_state_wave_director_set_boss_spawned(access->context->state_store, on_frame_clock_wave_slot_id(access), value) : 0;
+    return access ? game_state_wave_director_set_boss_spawned(access->context->state_store, on_frame_clock_wave_handle(access), value) : 0;
 }
 
 
@@ -95,60 +110,76 @@ static inline MoveGruntEnemyAccess move_grunt_enemy_access(KekHookContext* conte
     return access;
 }
 
-static inline size_t move_grunt_enemy_frame_slot_id(const MoveGruntEnemyAccess* access) {
+static inline KekStateHandle move_grunt_enemy_frame_handle(const MoveGruntEnemyAccess* access) {
     return access && access->slots ? access->slots->frame : KEK_STATE_INVALID_ID;
 }
 
-static inline const FrameClock* move_grunt_enemy_read_frame(const MoveGruntEnemyAccess* access) {
-    return access ? game_state_frame_clock_slot_const(access->context->state_store, move_grunt_enemy_frame_slot_id(access)) : 0;
+static inline KekStateHandle move_grunt_enemy_frame_slot_id(const MoveGruntEnemyAccess* access) {
+    return move_grunt_enemy_frame_handle(access);
 }
 
-static inline size_t move_grunt_enemy_session_slot_id(const MoveGruntEnemyAccess* access) {
+static inline const FrameClock* move_grunt_enemy_read_frame(const MoveGruntEnemyAccess* access) {
+    return access ? game_state_frame_clock_instance_const(access->context->state_store, move_grunt_enemy_frame_handle(access)) : 0;
+}
+
+static inline KekStateHandle move_grunt_enemy_session_handle(const MoveGruntEnemyAccess* access) {
     return access && access->slots ? access->slots->session : KEK_STATE_INVALID_ID;
 }
 
-static inline const GameSession* move_grunt_enemy_read_session(const MoveGruntEnemyAccess* access) {
-    return access ? game_state_game_session_slot_const(access->context->state_store, move_grunt_enemy_session_slot_id(access)) : 0;
+static inline KekStateHandle move_grunt_enemy_session_slot_id(const MoveGruntEnemyAccess* access) {
+    return move_grunt_enemy_session_handle(access);
 }
 
-static inline size_t move_grunt_enemy_player_slot_id(const MoveGruntEnemyAccess* access) {
+static inline const GameSession* move_grunt_enemy_read_session(const MoveGruntEnemyAccess* access) {
+    return access ? game_state_game_session_instance_const(access->context->state_store, move_grunt_enemy_session_handle(access)) : 0;
+}
+
+static inline KekStateHandle move_grunt_enemy_player_handle(const MoveGruntEnemyAccess* access) {
     return access && access->slots ? access->slots->player : KEK_STATE_INVALID_ID;
 }
 
-static inline const Player* move_grunt_enemy_read_player(const MoveGruntEnemyAccess* access) {
-    return access ? game_state_player_slot_const(access->context->state_store, move_grunt_enemy_player_slot_id(access)) : 0;
+static inline KekStateHandle move_grunt_enemy_player_slot_id(const MoveGruntEnemyAccess* access) {
+    return move_grunt_enemy_player_handle(access);
 }
 
-static inline size_t move_grunt_enemy_grunt_enemy_slot_id(const MoveGruntEnemyAccess* access) {
+static inline const Player* move_grunt_enemy_read_player(const MoveGruntEnemyAccess* access) {
+    return access ? game_state_player_instance_const(access->context->state_store, move_grunt_enemy_player_handle(access)) : 0;
+}
+
+static inline KekStateHandle move_grunt_enemy_grunt_enemy_handle(const MoveGruntEnemyAccess* access) {
     return access && access->slots ? access->slots->grunt_enemy : KEK_STATE_INVALID_ID;
 }
 
-static inline const Enemy* move_grunt_enemy_read_grunt_enemy(const MoveGruntEnemyAccess* access) {
-    return access ? game_state_enemy_slot_const(access->context->state_store, move_grunt_enemy_grunt_enemy_slot_id(access)) : 0;
+static inline KekStateHandle move_grunt_enemy_grunt_enemy_slot_id(const MoveGruntEnemyAccess* access) {
+    return move_grunt_enemy_grunt_enemy_handle(access);
 }
 
-static inline int move_grunt_enemy_update_grunt_enemy(const MoveGruntEnemyAccess* access, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return access ? kek_state_store_update_fields(access->context->state_store, move_grunt_enemy_grunt_enemy_slot_id(access), update, context, changed_fields) : 0;
+static inline const Enemy* move_grunt_enemy_read_grunt_enemy(const MoveGruntEnemyAccess* access) {
+    return access ? game_state_enemy_instance_const(access->context->state_store, move_grunt_enemy_grunt_enemy_handle(access)) : 0;
+}
+
+static inline int move_grunt_enemy_update_grunt_enemy(const MoveGruntEnemyAccess* access, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return access ? kek_state_store_update_fields(access->context->state_store, move_grunt_enemy_grunt_enemy_handle(access), update, context, changed_fields) : 0;
 }
 
 static inline int move_grunt_enemy_set_grunt_enemy_x(const MoveGruntEnemyAccess* access, float value) {
-    return access ? game_state_enemy_set_x(access->context->state_store, move_grunt_enemy_grunt_enemy_slot_id(access), value) : 0;
+    return access ? game_state_enemy_set_x(access->context->state_store, move_grunt_enemy_grunt_enemy_handle(access), value) : 0;
 }
 
 static inline int move_grunt_enemy_set_grunt_enemy_y(const MoveGruntEnemyAccess* access, float value) {
-    return access ? game_state_enemy_set_y(access->context->state_store, move_grunt_enemy_grunt_enemy_slot_id(access), value) : 0;
+    return access ? game_state_enemy_set_y(access->context->state_store, move_grunt_enemy_grunt_enemy_handle(access), value) : 0;
 }
 
 static inline int move_grunt_enemy_set_grunt_enemy_vx(const MoveGruntEnemyAccess* access, float value) {
-    return access ? game_state_enemy_set_vx(access->context->state_store, move_grunt_enemy_grunt_enemy_slot_id(access), value) : 0;
+    return access ? game_state_enemy_set_vx(access->context->state_store, move_grunt_enemy_grunt_enemy_handle(access), value) : 0;
 }
 
 static inline int move_grunt_enemy_set_grunt_enemy_vy(const MoveGruntEnemyAccess* access, float value) {
-    return access ? game_state_enemy_set_vy(access->context->state_store, move_grunt_enemy_grunt_enemy_slot_id(access), value) : 0;
+    return access ? game_state_enemy_set_vy(access->context->state_store, move_grunt_enemy_grunt_enemy_handle(access), value) : 0;
 }
 
 static inline int move_grunt_enemy_set_grunt_enemy_flash(const MoveGruntEnemyAccess* access, float value) {
-    return access ? game_state_enemy_set_flash(access->context->state_store, move_grunt_enemy_grunt_enemy_slot_id(access), value) : 0;
+    return access ? game_state_enemy_set_flash(access->context->state_store, move_grunt_enemy_grunt_enemy_handle(access), value) : 0;
 }
 
 
@@ -162,60 +193,76 @@ static inline MoveRunnerEnemyAccess move_runner_enemy_access(KekHookContext* con
     return access;
 }
 
-static inline size_t move_runner_enemy_frame_slot_id(const MoveRunnerEnemyAccess* access) {
+static inline KekStateHandle move_runner_enemy_frame_handle(const MoveRunnerEnemyAccess* access) {
     return access && access->slots ? access->slots->frame : KEK_STATE_INVALID_ID;
 }
 
-static inline const FrameClock* move_runner_enemy_read_frame(const MoveRunnerEnemyAccess* access) {
-    return access ? game_state_frame_clock_slot_const(access->context->state_store, move_runner_enemy_frame_slot_id(access)) : 0;
+static inline KekStateHandle move_runner_enemy_frame_slot_id(const MoveRunnerEnemyAccess* access) {
+    return move_runner_enemy_frame_handle(access);
 }
 
-static inline size_t move_runner_enemy_session_slot_id(const MoveRunnerEnemyAccess* access) {
+static inline const FrameClock* move_runner_enemy_read_frame(const MoveRunnerEnemyAccess* access) {
+    return access ? game_state_frame_clock_instance_const(access->context->state_store, move_runner_enemy_frame_handle(access)) : 0;
+}
+
+static inline KekStateHandle move_runner_enemy_session_handle(const MoveRunnerEnemyAccess* access) {
     return access && access->slots ? access->slots->session : KEK_STATE_INVALID_ID;
 }
 
-static inline const GameSession* move_runner_enemy_read_session(const MoveRunnerEnemyAccess* access) {
-    return access ? game_state_game_session_slot_const(access->context->state_store, move_runner_enemy_session_slot_id(access)) : 0;
+static inline KekStateHandle move_runner_enemy_session_slot_id(const MoveRunnerEnemyAccess* access) {
+    return move_runner_enemy_session_handle(access);
 }
 
-static inline size_t move_runner_enemy_player_slot_id(const MoveRunnerEnemyAccess* access) {
+static inline const GameSession* move_runner_enemy_read_session(const MoveRunnerEnemyAccess* access) {
+    return access ? game_state_game_session_instance_const(access->context->state_store, move_runner_enemy_session_handle(access)) : 0;
+}
+
+static inline KekStateHandle move_runner_enemy_player_handle(const MoveRunnerEnemyAccess* access) {
     return access && access->slots ? access->slots->player : KEK_STATE_INVALID_ID;
 }
 
-static inline const Player* move_runner_enemy_read_player(const MoveRunnerEnemyAccess* access) {
-    return access ? game_state_player_slot_const(access->context->state_store, move_runner_enemy_player_slot_id(access)) : 0;
+static inline KekStateHandle move_runner_enemy_player_slot_id(const MoveRunnerEnemyAccess* access) {
+    return move_runner_enemy_player_handle(access);
 }
 
-static inline size_t move_runner_enemy_runner_enemy_slot_id(const MoveRunnerEnemyAccess* access) {
+static inline const Player* move_runner_enemy_read_player(const MoveRunnerEnemyAccess* access) {
+    return access ? game_state_player_instance_const(access->context->state_store, move_runner_enemy_player_handle(access)) : 0;
+}
+
+static inline KekStateHandle move_runner_enemy_runner_enemy_handle(const MoveRunnerEnemyAccess* access) {
     return access && access->slots ? access->slots->runner_enemy : KEK_STATE_INVALID_ID;
 }
 
-static inline const Enemy* move_runner_enemy_read_runner_enemy(const MoveRunnerEnemyAccess* access) {
-    return access ? game_state_enemy_slot_const(access->context->state_store, move_runner_enemy_runner_enemy_slot_id(access)) : 0;
+static inline KekStateHandle move_runner_enemy_runner_enemy_slot_id(const MoveRunnerEnemyAccess* access) {
+    return move_runner_enemy_runner_enemy_handle(access);
 }
 
-static inline int move_runner_enemy_update_runner_enemy(const MoveRunnerEnemyAccess* access, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return access ? kek_state_store_update_fields(access->context->state_store, move_runner_enemy_runner_enemy_slot_id(access), update, context, changed_fields) : 0;
+static inline const Enemy* move_runner_enemy_read_runner_enemy(const MoveRunnerEnemyAccess* access) {
+    return access ? game_state_enemy_instance_const(access->context->state_store, move_runner_enemy_runner_enemy_handle(access)) : 0;
+}
+
+static inline int move_runner_enemy_update_runner_enemy(const MoveRunnerEnemyAccess* access, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return access ? kek_state_store_update_fields(access->context->state_store, move_runner_enemy_runner_enemy_handle(access), update, context, changed_fields) : 0;
 }
 
 static inline int move_runner_enemy_set_runner_enemy_x(const MoveRunnerEnemyAccess* access, float value) {
-    return access ? game_state_enemy_set_x(access->context->state_store, move_runner_enemy_runner_enemy_slot_id(access), value) : 0;
+    return access ? game_state_enemy_set_x(access->context->state_store, move_runner_enemy_runner_enemy_handle(access), value) : 0;
 }
 
 static inline int move_runner_enemy_set_runner_enemy_y(const MoveRunnerEnemyAccess* access, float value) {
-    return access ? game_state_enemy_set_y(access->context->state_store, move_runner_enemy_runner_enemy_slot_id(access), value) : 0;
+    return access ? game_state_enemy_set_y(access->context->state_store, move_runner_enemy_runner_enemy_handle(access), value) : 0;
 }
 
 static inline int move_runner_enemy_set_runner_enemy_vx(const MoveRunnerEnemyAccess* access, float value) {
-    return access ? game_state_enemy_set_vx(access->context->state_store, move_runner_enemy_runner_enemy_slot_id(access), value) : 0;
+    return access ? game_state_enemy_set_vx(access->context->state_store, move_runner_enemy_runner_enemy_handle(access), value) : 0;
 }
 
 static inline int move_runner_enemy_set_runner_enemy_vy(const MoveRunnerEnemyAccess* access, float value) {
-    return access ? game_state_enemy_set_vy(access->context->state_store, move_runner_enemy_runner_enemy_slot_id(access), value) : 0;
+    return access ? game_state_enemy_set_vy(access->context->state_store, move_runner_enemy_runner_enemy_handle(access), value) : 0;
 }
 
 static inline int move_runner_enemy_set_runner_enemy_flash(const MoveRunnerEnemyAccess* access, float value) {
-    return access ? game_state_enemy_set_flash(access->context->state_store, move_runner_enemy_runner_enemy_slot_id(access), value) : 0;
+    return access ? game_state_enemy_set_flash(access->context->state_store, move_runner_enemy_runner_enemy_handle(access), value) : 0;
 }
 
 
@@ -229,60 +276,76 @@ static inline MoveTankEnemyAccess move_tank_enemy_access(KekHookContext* context
     return access;
 }
 
-static inline size_t move_tank_enemy_frame_slot_id(const MoveTankEnemyAccess* access) {
+static inline KekStateHandle move_tank_enemy_frame_handle(const MoveTankEnemyAccess* access) {
     return access && access->slots ? access->slots->frame : KEK_STATE_INVALID_ID;
 }
 
-static inline const FrameClock* move_tank_enemy_read_frame(const MoveTankEnemyAccess* access) {
-    return access ? game_state_frame_clock_slot_const(access->context->state_store, move_tank_enemy_frame_slot_id(access)) : 0;
+static inline KekStateHandle move_tank_enemy_frame_slot_id(const MoveTankEnemyAccess* access) {
+    return move_tank_enemy_frame_handle(access);
 }
 
-static inline size_t move_tank_enemy_session_slot_id(const MoveTankEnemyAccess* access) {
+static inline const FrameClock* move_tank_enemy_read_frame(const MoveTankEnemyAccess* access) {
+    return access ? game_state_frame_clock_instance_const(access->context->state_store, move_tank_enemy_frame_handle(access)) : 0;
+}
+
+static inline KekStateHandle move_tank_enemy_session_handle(const MoveTankEnemyAccess* access) {
     return access && access->slots ? access->slots->session : KEK_STATE_INVALID_ID;
 }
 
-static inline const GameSession* move_tank_enemy_read_session(const MoveTankEnemyAccess* access) {
-    return access ? game_state_game_session_slot_const(access->context->state_store, move_tank_enemy_session_slot_id(access)) : 0;
+static inline KekStateHandle move_tank_enemy_session_slot_id(const MoveTankEnemyAccess* access) {
+    return move_tank_enemy_session_handle(access);
 }
 
-static inline size_t move_tank_enemy_player_slot_id(const MoveTankEnemyAccess* access) {
+static inline const GameSession* move_tank_enemy_read_session(const MoveTankEnemyAccess* access) {
+    return access ? game_state_game_session_instance_const(access->context->state_store, move_tank_enemy_session_handle(access)) : 0;
+}
+
+static inline KekStateHandle move_tank_enemy_player_handle(const MoveTankEnemyAccess* access) {
     return access && access->slots ? access->slots->player : KEK_STATE_INVALID_ID;
 }
 
-static inline const Player* move_tank_enemy_read_player(const MoveTankEnemyAccess* access) {
-    return access ? game_state_player_slot_const(access->context->state_store, move_tank_enemy_player_slot_id(access)) : 0;
+static inline KekStateHandle move_tank_enemy_player_slot_id(const MoveTankEnemyAccess* access) {
+    return move_tank_enemy_player_handle(access);
 }
 
-static inline size_t move_tank_enemy_tank_enemy_slot_id(const MoveTankEnemyAccess* access) {
+static inline const Player* move_tank_enemy_read_player(const MoveTankEnemyAccess* access) {
+    return access ? game_state_player_instance_const(access->context->state_store, move_tank_enemy_player_handle(access)) : 0;
+}
+
+static inline KekStateHandle move_tank_enemy_tank_enemy_handle(const MoveTankEnemyAccess* access) {
     return access && access->slots ? access->slots->tank_enemy : KEK_STATE_INVALID_ID;
 }
 
-static inline const Enemy* move_tank_enemy_read_tank_enemy(const MoveTankEnemyAccess* access) {
-    return access ? game_state_enemy_slot_const(access->context->state_store, move_tank_enemy_tank_enemy_slot_id(access)) : 0;
+static inline KekStateHandle move_tank_enemy_tank_enemy_slot_id(const MoveTankEnemyAccess* access) {
+    return move_tank_enemy_tank_enemy_handle(access);
 }
 
-static inline int move_tank_enemy_update_tank_enemy(const MoveTankEnemyAccess* access, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return access ? kek_state_store_update_fields(access->context->state_store, move_tank_enemy_tank_enemy_slot_id(access), update, context, changed_fields) : 0;
+static inline const Enemy* move_tank_enemy_read_tank_enemy(const MoveTankEnemyAccess* access) {
+    return access ? game_state_enemy_instance_const(access->context->state_store, move_tank_enemy_tank_enemy_handle(access)) : 0;
+}
+
+static inline int move_tank_enemy_update_tank_enemy(const MoveTankEnemyAccess* access, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return access ? kek_state_store_update_fields(access->context->state_store, move_tank_enemy_tank_enemy_handle(access), update, context, changed_fields) : 0;
 }
 
 static inline int move_tank_enemy_set_tank_enemy_x(const MoveTankEnemyAccess* access, float value) {
-    return access ? game_state_enemy_set_x(access->context->state_store, move_tank_enemy_tank_enemy_slot_id(access), value) : 0;
+    return access ? game_state_enemy_set_x(access->context->state_store, move_tank_enemy_tank_enemy_handle(access), value) : 0;
 }
 
 static inline int move_tank_enemy_set_tank_enemy_y(const MoveTankEnemyAccess* access, float value) {
-    return access ? game_state_enemy_set_y(access->context->state_store, move_tank_enemy_tank_enemy_slot_id(access), value) : 0;
+    return access ? game_state_enemy_set_y(access->context->state_store, move_tank_enemy_tank_enemy_handle(access), value) : 0;
 }
 
 static inline int move_tank_enemy_set_tank_enemy_vx(const MoveTankEnemyAccess* access, float value) {
-    return access ? game_state_enemy_set_vx(access->context->state_store, move_tank_enemy_tank_enemy_slot_id(access), value) : 0;
+    return access ? game_state_enemy_set_vx(access->context->state_store, move_tank_enemy_tank_enemy_handle(access), value) : 0;
 }
 
 static inline int move_tank_enemy_set_tank_enemy_vy(const MoveTankEnemyAccess* access, float value) {
-    return access ? game_state_enemy_set_vy(access->context->state_store, move_tank_enemy_tank_enemy_slot_id(access), value) : 0;
+    return access ? game_state_enemy_set_vy(access->context->state_store, move_tank_enemy_tank_enemy_handle(access), value) : 0;
 }
 
 static inline int move_tank_enemy_set_tank_enemy_flash(const MoveTankEnemyAccess* access, float value) {
-    return access ? game_state_enemy_set_flash(access->context->state_store, move_tank_enemy_tank_enemy_slot_id(access), value) : 0;
+    return access ? game_state_enemy_set_flash(access->context->state_store, move_tank_enemy_tank_enemy_handle(access), value) : 0;
 }
 
 
@@ -296,60 +359,76 @@ static inline MoveBossEnemyAccess move_boss_enemy_access(KekHookContext* context
     return access;
 }
 
-static inline size_t move_boss_enemy_frame_slot_id(const MoveBossEnemyAccess* access) {
+static inline KekStateHandle move_boss_enemy_frame_handle(const MoveBossEnemyAccess* access) {
     return access && access->slots ? access->slots->frame : KEK_STATE_INVALID_ID;
 }
 
-static inline const FrameClock* move_boss_enemy_read_frame(const MoveBossEnemyAccess* access) {
-    return access ? game_state_frame_clock_slot_const(access->context->state_store, move_boss_enemy_frame_slot_id(access)) : 0;
+static inline KekStateHandle move_boss_enemy_frame_slot_id(const MoveBossEnemyAccess* access) {
+    return move_boss_enemy_frame_handle(access);
 }
 
-static inline size_t move_boss_enemy_session_slot_id(const MoveBossEnemyAccess* access) {
+static inline const FrameClock* move_boss_enemy_read_frame(const MoveBossEnemyAccess* access) {
+    return access ? game_state_frame_clock_instance_const(access->context->state_store, move_boss_enemy_frame_handle(access)) : 0;
+}
+
+static inline KekStateHandle move_boss_enemy_session_handle(const MoveBossEnemyAccess* access) {
     return access && access->slots ? access->slots->session : KEK_STATE_INVALID_ID;
 }
 
-static inline const GameSession* move_boss_enemy_read_session(const MoveBossEnemyAccess* access) {
-    return access ? game_state_game_session_slot_const(access->context->state_store, move_boss_enemy_session_slot_id(access)) : 0;
+static inline KekStateHandle move_boss_enemy_session_slot_id(const MoveBossEnemyAccess* access) {
+    return move_boss_enemy_session_handle(access);
 }
 
-static inline size_t move_boss_enemy_player_slot_id(const MoveBossEnemyAccess* access) {
+static inline const GameSession* move_boss_enemy_read_session(const MoveBossEnemyAccess* access) {
+    return access ? game_state_game_session_instance_const(access->context->state_store, move_boss_enemy_session_handle(access)) : 0;
+}
+
+static inline KekStateHandle move_boss_enemy_player_handle(const MoveBossEnemyAccess* access) {
     return access && access->slots ? access->slots->player : KEK_STATE_INVALID_ID;
 }
 
-static inline const Player* move_boss_enemy_read_player(const MoveBossEnemyAccess* access) {
-    return access ? game_state_player_slot_const(access->context->state_store, move_boss_enemy_player_slot_id(access)) : 0;
+static inline KekStateHandle move_boss_enemy_player_slot_id(const MoveBossEnemyAccess* access) {
+    return move_boss_enemy_player_handle(access);
 }
 
-static inline size_t move_boss_enemy_boss_enemy_slot_id(const MoveBossEnemyAccess* access) {
+static inline const Player* move_boss_enemy_read_player(const MoveBossEnemyAccess* access) {
+    return access ? game_state_player_instance_const(access->context->state_store, move_boss_enemy_player_handle(access)) : 0;
+}
+
+static inline KekStateHandle move_boss_enemy_boss_enemy_handle(const MoveBossEnemyAccess* access) {
     return access && access->slots ? access->slots->boss_enemy : KEK_STATE_INVALID_ID;
 }
 
-static inline const Enemy* move_boss_enemy_read_boss_enemy(const MoveBossEnemyAccess* access) {
-    return access ? game_state_enemy_slot_const(access->context->state_store, move_boss_enemy_boss_enemy_slot_id(access)) : 0;
+static inline KekStateHandle move_boss_enemy_boss_enemy_slot_id(const MoveBossEnemyAccess* access) {
+    return move_boss_enemy_boss_enemy_handle(access);
 }
 
-static inline int move_boss_enemy_update_boss_enemy(const MoveBossEnemyAccess* access, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return access ? kek_state_store_update_fields(access->context->state_store, move_boss_enemy_boss_enemy_slot_id(access), update, context, changed_fields) : 0;
+static inline const Enemy* move_boss_enemy_read_boss_enemy(const MoveBossEnemyAccess* access) {
+    return access ? game_state_enemy_instance_const(access->context->state_store, move_boss_enemy_boss_enemy_handle(access)) : 0;
+}
+
+static inline int move_boss_enemy_update_boss_enemy(const MoveBossEnemyAccess* access, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return access ? kek_state_store_update_fields(access->context->state_store, move_boss_enemy_boss_enemy_handle(access), update, context, changed_fields) : 0;
 }
 
 static inline int move_boss_enemy_set_boss_enemy_x(const MoveBossEnemyAccess* access, float value) {
-    return access ? game_state_enemy_set_x(access->context->state_store, move_boss_enemy_boss_enemy_slot_id(access), value) : 0;
+    return access ? game_state_enemy_set_x(access->context->state_store, move_boss_enemy_boss_enemy_handle(access), value) : 0;
 }
 
 static inline int move_boss_enemy_set_boss_enemy_y(const MoveBossEnemyAccess* access, float value) {
-    return access ? game_state_enemy_set_y(access->context->state_store, move_boss_enemy_boss_enemy_slot_id(access), value) : 0;
+    return access ? game_state_enemy_set_y(access->context->state_store, move_boss_enemy_boss_enemy_handle(access), value) : 0;
 }
 
 static inline int move_boss_enemy_set_boss_enemy_vx(const MoveBossEnemyAccess* access, float value) {
-    return access ? game_state_enemy_set_vx(access->context->state_store, move_boss_enemy_boss_enemy_slot_id(access), value) : 0;
+    return access ? game_state_enemy_set_vx(access->context->state_store, move_boss_enemy_boss_enemy_handle(access), value) : 0;
 }
 
 static inline int move_boss_enemy_set_boss_enemy_vy(const MoveBossEnemyAccess* access, float value) {
-    return access ? game_state_enemy_set_vy(access->context->state_store, move_boss_enemy_boss_enemy_slot_id(access), value) : 0;
+    return access ? game_state_enemy_set_vy(access->context->state_store, move_boss_enemy_boss_enemy_handle(access), value) : 0;
 }
 
 static inline int move_boss_enemy_set_boss_enemy_flash(const MoveBossEnemyAccess* access, float value) {
-    return access ? game_state_enemy_set_flash(access->context->state_store, move_boss_enemy_boss_enemy_slot_id(access), value) : 0;
+    return access ? game_state_enemy_set_flash(access->context->state_store, move_boss_enemy_boss_enemy_handle(access), value) : 0;
 }
 
 
@@ -363,28 +442,36 @@ static inline OnPlayerHealthChangedAccess on_player_health_changed_access(KekHoo
     return access;
 }
 
-static inline size_t on_player_health_changed_player_slot_id(const OnPlayerHealthChangedAccess* access) {
+static inline KekStateHandle on_player_health_changed_player_handle(const OnPlayerHealthChangedAccess* access) {
     return access && access->slots ? access->slots->player : KEK_STATE_INVALID_ID;
 }
 
-static inline const Player* on_player_health_changed_read_player(const OnPlayerHealthChangedAccess* access) {
-    return access ? game_state_player_slot_const(access->context->state_store, on_player_health_changed_player_slot_id(access)) : 0;
+static inline KekStateHandle on_player_health_changed_player_slot_id(const OnPlayerHealthChangedAccess* access) {
+    return on_player_health_changed_player_handle(access);
 }
 
-static inline size_t on_player_health_changed_session_slot_id(const OnPlayerHealthChangedAccess* access) {
+static inline const Player* on_player_health_changed_read_player(const OnPlayerHealthChangedAccess* access) {
+    return access ? game_state_player_instance_const(access->context->state_store, on_player_health_changed_player_handle(access)) : 0;
+}
+
+static inline KekStateHandle on_player_health_changed_session_handle(const OnPlayerHealthChangedAccess* access) {
     return access && access->slots ? access->slots->session : KEK_STATE_INVALID_ID;
 }
 
-static inline const GameSession* on_player_health_changed_read_session(const OnPlayerHealthChangedAccess* access) {
-    return access ? game_state_game_session_slot_const(access->context->state_store, on_player_health_changed_session_slot_id(access)) : 0;
+static inline KekStateHandle on_player_health_changed_session_slot_id(const OnPlayerHealthChangedAccess* access) {
+    return on_player_health_changed_session_handle(access);
 }
 
-static inline int on_player_health_changed_update_session(const OnPlayerHealthChangedAccess* access, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return access ? kek_state_store_update_fields(access->context->state_store, on_player_health_changed_session_slot_id(access), update, context, changed_fields) : 0;
+static inline const GameSession* on_player_health_changed_read_session(const OnPlayerHealthChangedAccess* access) {
+    return access ? game_state_game_session_instance_const(access->context->state_store, on_player_health_changed_session_handle(access)) : 0;
+}
+
+static inline int on_player_health_changed_update_session(const OnPlayerHealthChangedAccess* access, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return access ? kek_state_store_update_fields(access->context->state_store, on_player_health_changed_session_handle(access), update, context, changed_fields) : 0;
 }
 
 static inline int on_player_health_changed_set_session_mode(const OnPlayerHealthChangedAccess* access, GameMode value) {
-    return access ? game_state_game_session_set_mode(access->context->state_store, on_player_health_changed_session_slot_id(access), value) : 0;
+    return access ? game_state_game_session_set_mode(access->context->state_store, on_player_health_changed_session_handle(access), value) : 0;
 }
 
 
@@ -398,28 +485,36 @@ static inline OnWaveChangedAccess on_wave_changed_access(KekHookContext* context
     return access;
 }
 
-static inline size_t on_wave_changed_wave_slot_id(const OnWaveChangedAccess* access) {
+static inline KekStateHandle on_wave_changed_wave_handle(const OnWaveChangedAccess* access) {
     return access && access->slots ? access->slots->wave : KEK_STATE_INVALID_ID;
 }
 
-static inline const WaveDirector* on_wave_changed_read_wave(const OnWaveChangedAccess* access) {
-    return access ? game_state_wave_director_slot_const(access->context->state_store, on_wave_changed_wave_slot_id(access)) : 0;
+static inline KekStateHandle on_wave_changed_wave_slot_id(const OnWaveChangedAccess* access) {
+    return on_wave_changed_wave_handle(access);
 }
 
-static inline size_t on_wave_changed_session_slot_id(const OnWaveChangedAccess* access) {
+static inline const WaveDirector* on_wave_changed_read_wave(const OnWaveChangedAccess* access) {
+    return access ? game_state_wave_director_instance_const(access->context->state_store, on_wave_changed_wave_handle(access)) : 0;
+}
+
+static inline KekStateHandle on_wave_changed_session_handle(const OnWaveChangedAccess* access) {
     return access && access->slots ? access->slots->session : KEK_STATE_INVALID_ID;
 }
 
-static inline const GameSession* on_wave_changed_read_session(const OnWaveChangedAccess* access) {
-    return access ? game_state_game_session_slot_const(access->context->state_store, on_wave_changed_session_slot_id(access)) : 0;
+static inline KekStateHandle on_wave_changed_session_slot_id(const OnWaveChangedAccess* access) {
+    return on_wave_changed_session_handle(access);
 }
 
-static inline int on_wave_changed_update_session(const OnWaveChangedAccess* access, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return access ? kek_state_store_update_fields(access->context->state_store, on_wave_changed_session_slot_id(access), update, context, changed_fields) : 0;
+static inline const GameSession* on_wave_changed_read_session(const OnWaveChangedAccess* access) {
+    return access ? game_state_game_session_instance_const(access->context->state_store, on_wave_changed_session_handle(access)) : 0;
+}
+
+static inline int on_wave_changed_update_session(const OnWaveChangedAccess* access, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return access ? kek_state_store_update_fields(access->context->state_store, on_wave_changed_session_handle(access), update, context, changed_fields) : 0;
 }
 
 static inline int on_wave_changed_set_session_mode(const OnWaveChangedAccess* access, GameMode value) {
-    return access ? game_state_game_session_set_mode(access->context->state_store, on_wave_changed_session_slot_id(access), value) : 0;
+    return access ? game_state_game_session_set_mode(access->context->state_store, on_wave_changed_session_handle(access), value) : 0;
 }
 
 
@@ -433,24 +528,28 @@ static inline OnScoreChangedAccess on_score_changed_access(KekHookContext* conte
     return access;
 }
 
-static inline size_t on_score_changed_session_slot_id(const OnScoreChangedAccess* access) {
+static inline KekStateHandle on_score_changed_session_handle(const OnScoreChangedAccess* access) {
     return access && access->slots ? access->slots->session : KEK_STATE_INVALID_ID;
 }
 
-static inline const GameSession* on_score_changed_read_session(const OnScoreChangedAccess* access) {
-    return access ? game_state_game_session_slot_const(access->context->state_store, on_score_changed_session_slot_id(access)) : 0;
+static inline KekStateHandle on_score_changed_session_slot_id(const OnScoreChangedAccess* access) {
+    return on_score_changed_session_handle(access);
 }
 
-static inline int on_score_changed_update_session(const OnScoreChangedAccess* access, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {
-    return access ? kek_state_store_update_fields(access->context->state_store, on_score_changed_session_slot_id(access), update, context, changed_fields) : 0;
+static inline const GameSession* on_score_changed_read_session(const OnScoreChangedAccess* access) {
+    return access ? game_state_game_session_instance_const(access->context->state_store, on_score_changed_session_handle(access)) : 0;
+}
+
+static inline int on_score_changed_update_session(const OnScoreChangedAccess* access, KekStateUpdateFn update, void* context, uint64_t changed_fields) {
+    return access ? kek_state_store_update_fields(access->context->state_store, on_score_changed_session_handle(access), update, context, changed_fields) : 0;
 }
 
 static inline int on_score_changed_set_session_mode(const OnScoreChangedAccess* access, GameMode value) {
-    return access ? game_state_game_session_set_mode(access->context->state_store, on_score_changed_session_slot_id(access), value) : 0;
+    return access ? game_state_game_session_set_mode(access->context->state_store, on_score_changed_session_handle(access), value) : 0;
 }
 
 static inline int on_score_changed_set_session_next_upgrade_score(const OnScoreChangedAccess* access, int32_t value) {
-    return access ? game_state_game_session_set_next_upgrade_score(access->context->state_store, on_score_changed_session_slot_id(access), value) : 0;
+    return access ? game_state_game_session_set_next_upgrade_score(access->context->state_store, on_score_changed_session_handle(access), value) : 0;
 }
 
 

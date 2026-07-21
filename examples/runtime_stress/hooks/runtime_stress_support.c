@@ -116,8 +116,8 @@ int runtime_stress_note_telemetry(KekHookContext* context, uint64_t stream_bytes
         app->hook_calls++;
     }
 
-    size_t slot_id = runtime_stress_state_telemetry_first(context->state_store);
-    if (slot_id == KEK_STATE_INVALID_ID) {
+    KekStateHandle handle = runtime_stress_state_telemetry_first(context->state_store);
+    if (handle == KEK_STATE_INVALID_ID) {
         return 0;
     }
 
@@ -137,7 +137,7 @@ int runtime_stress_note_telemetry(KekHookContext* context, uint64_t stream_bytes
     if (load_delta != 0.0) {
         fields |= KEK_STATE_TYPE_TELEMETRY_FIELD_LOAD;
     }
-    return kek_state_store_update_fields(context->state_store, slot_id,
+    return kek_state_store_update_fields(context->state_store, handle,
                                          update_telemetry, &delta, fields);
 }
 
@@ -153,8 +153,8 @@ int runtime_stress_note_audit(KekHookContext* context, uint64_t deleted_delta,
         app->hook_calls++;
     }
 
-    size_t slot_id = runtime_stress_state_audit_log_first(context->state_store);
-    if (slot_id == KEK_STATE_INVALID_ID) {
+    KekStateHandle handle = runtime_stress_state_audit_log_first(context->state_store);
+    if (handle == KEK_STATE_INVALID_ID) {
         return 0;
     }
 
@@ -172,7 +172,7 @@ int runtime_stress_note_audit(KekHookContext* context, uint64_t deleted_delta,
     if (error_delta > 0) {
         fields |= KEK_STATE_TYPE_AUDIT_LOG_FIELD_ERROR_COUNT;
     }
-    return kek_state_store_update_fields(context->state_store, slot_id,
+    return kek_state_store_update_fields(context->state_store, handle,
                                          update_audit, &delta, fields);
 }
 
@@ -195,14 +195,14 @@ int runtime_stress_check_forbidden_audit_write(KekHookContext* context) {
         return 1;
     }
 
-    size_t slot_id = runtime_stress_state_audit_log_first(context->state_store);
-    if (slot_id == KEK_STATE_INVALID_ID) {
+    KekStateHandle handle = runtime_stress_state_audit_log_first(context->state_store);
+    if (handle == KEK_STATE_INVALID_ID) {
         return 0;
     }
 
     AuditDelta delta = {1, 0, 0, 0, 0};
     int allowed = kek_state_store_update_fields(
-        context->state_store, slot_id, update_audit, &delta,
+        context->state_store, handle, update_audit, &delta,
         KEK_STATE_TYPE_AUDIT_LOG_FIELD_LAST_EVENT);
     if (allowed) {
         return 0;
@@ -223,11 +223,11 @@ int runtime_stress_readonly_probe(KekHookContext* context, uint64_t salt) {
         return 1;
     }
 
-    size_t clock_slot =
+    KekStateHandle clock_handle =
         runtime_stress_state_simulation_clock_first(context->state_store);
     const SimulationClock* clock =
         (const SimulationClock*)kek_state_store_current_const(context->state_store,
-                                                             clock_slot);
+                                                             clock_handle);
     uint64_t seed = salt ^ agent->id ^ agent->flags;
     if (clock) {
         seed ^= clock->tick + ((uint64_t)(uint32_t)clock->phase << 32);

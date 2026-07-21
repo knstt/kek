@@ -15,6 +15,8 @@ size_t kek_string_len(const KekString* text) {
 
 $state_definitions
 
+$field_descriptor_entries
+
 const KekStateDescriptor KekGeneratedStateDescriptors[KEK_STATE_TYPE_COUNT] = {
 $descriptor_entries
 };
@@ -31,7 +33,7 @@ $hook_access_arrays
 $instance_definitions
 
 int kek_generated_state_store_add_defaults(KekStateStore* store,
-                                           size_t slot_ids[KEK_STATE_TYPE_COUNT]) {
+                                           KekStateHandle slot_ids[KEK_STATE_TYPE_COUNT]) {
     if (store == 0 || slot_ids == 0) {
         return 0;
     }

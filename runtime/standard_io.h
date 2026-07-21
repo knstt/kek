@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-#include "state_storage.h"
+#include "state_store.h"
 #include "stream.h"
 
 typedef int (*KekStandardTextSetter)(KekStateStore* store, size_t slot_id,

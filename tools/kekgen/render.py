@@ -58,6 +58,7 @@ def emit_source(
         "generated.c.tpl",
         header_name=f"{name}.h",
         state_definitions=render_state_definitions(states, enums),
+        field_descriptor_entries=render_field_descriptor_entries(states),
         descriptor_entries=render_descriptor_entries(states),
         instance_definitions=render_instance_definitions(states, hooks, instances, name, enums),
         hook_dependency_arrays=render_hook_dependency_arrays(hooks),
@@ -233,7 +234,7 @@ def render_instance_declarations(states: list[State], hooks: list[Hook], instanc
     lines: list[str] = [f"typedef struct {slots_name} {{"]
     if instances:
         for instance in instances:
-            lines.append(f"    size_t {instance.name};")
+            lines.append(f"    KekStateHandle {instance.name};")
     else:
         lines.append("    size_t unused;")
     lines.append(f"}} {slots_name};")
@@ -299,29 +300,34 @@ def render_instance_declarations(states: list[State], hooks: list[Hook], instanc
     for state in states:
         snake = c_identifier_from_type(state.name)
         macro = state_type_macro(state.name)
-        lines.append(f"size_t {prefix}_{snake}_create(KekStateStore* store);")
-        lines.append(f"size_t {prefix}_{snake}_create_with(KekStateStore* store, const {state.name}* initial);")
-        lines.append(f"int {prefix}_{snake}_delete(KekStateStore* store, size_t slot_id);")
-        lines.append(f"{state.name}* {prefix}_{snake}_slot(KekStateStore* store, size_t slot_id);")
-        lines.append(f"const {state.name}* {prefix}_{snake}_slot_const(const KekStateStore* store, size_t slot_id);")
-        lines.append(f"size_t {prefix}_{snake}_first(const KekStateStore* store);")
-        lines.append(f"size_t {prefix}_{snake}_next(const KekStateStore* store, size_t after_slot_id);")
-        lines.append(f"size_t {prefix}_create_{snake}({runtime_name}* runtime);")
-        lines.append(f"size_t {prefix}_create_{snake}_with({runtime_name}* runtime, const {state.name}* initial);")
-        lines.append(f"int {prefix}_delete_{snake}({runtime_name}* runtime, size_t slot_id);")
-        lines.append(f"{state.name}* {prefix}_{snake}_at({runtime_name}* runtime, size_t slot_id);")
-        lines.append(f"const {state.name}* {prefix}_{snake}_at_const(const {runtime_name}* runtime, size_t slot_id);")
-        lines.append(f"size_t {prefix}_first_{snake}(const {runtime_name}* runtime);")
-        lines.append(f"size_t {prefix}_next_{snake}(const {runtime_name}* runtime, size_t after_slot_id);")
+        lines.append(f"KekStateHandle {prefix}_{snake}_create(KekStateStore* store);")
+        lines.append(f"KekStateHandle {prefix}_{snake}_create_with(KekStateStore* store, const {state.name}* initial);")
+        lines.append(f"int {prefix}_{snake}_delete(KekStateStore* store, KekStateHandle handle);")
+        lines.append(f"{state.name}* {prefix}_{snake}_instance(KekStateStore* store, KekStateHandle handle);")
+        lines.append(f"const {state.name}* {prefix}_{snake}_instance_const(const KekStateStore* store, KekStateHandle handle);")
+        lines.append(f"{state.name}* {prefix}_{snake}_slot(KekStateStore* store, KekStateHandle handle);")
+        lines.append(f"const {state.name}* {prefix}_{snake}_slot_const(const KekStateStore* store, KekStateHandle handle);")
+        lines.append(f"KekStateHandle {prefix}_{snake}_first(const KekStateStore* store);")
+        lines.append(f"KekStateHandle {prefix}_{snake}_next(const KekStateStore* store, KekStateHandle after_handle);")
+        lines.append(f"KekStateHandle {prefix}_create_{snake}({runtime_name}* runtime);")
+        lines.append(f"KekStateHandle {prefix}_create_{snake}_with({runtime_name}* runtime, const {state.name}* initial);")
+        lines.append(f"int {prefix}_delete_{snake}({runtime_name}* runtime, KekStateHandle handle);")
+        lines.append(f"{state.name}* {prefix}_{snake}_at({runtime_name}* runtime, KekStateHandle handle);")
+        lines.append(f"const {state.name}* {prefix}_{snake}_at_const(const {runtime_name}* runtime, KekStateHandle handle);")
+        lines.append(f"KekStateHandle {prefix}_first_{snake}(const {runtime_name}* runtime);")
+        lines.append(f"KekStateHandle {prefix}_next_{snake}(const {runtime_name}* runtime, KekStateHandle after_handle);")
         lines.append(f"int {prefix}_count_{snake}(const {runtime_name}* runtime);")
         if any(field.name == "active" and field.type_name == "bool" and field.array_length is None for field in state.fields):
             lines.append(f"int {prefix}_count_active_{snake}(const {runtime_name}* runtime);")
-        lines.append(f"int {prefix}_update_{snake}_slot({runtime_name}* runtime, size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields);")
-        lines.append(f"{item_name} {prefix}_{snake}_slot_update_item(size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields);")
+        lines.append(f"int {prefix}_update_{snake}_instance({runtime_name}* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields);")
+        lines.append(f"int {prefix}_update_{snake}_slot({runtime_name}* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields);")
+        lines.append(f"{item_name} {prefix}_{snake}_instance_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields);")
+        lines.append(f"{item_name} {prefix}_{snake}_slot_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields);")
         for field in state.fields:
             if field.array_length is None and field.type_name != "String":
-                lines.append(f"int {prefix}_{snake}_set_{field.name}(KekStateStore* store, size_t slot_id, {c_type(field.type_name)} value);")
-                lines.append(f"int {prefix}_set_{snake}_slot_{field.name}({runtime_name}* runtime, size_t slot_id, {c_type(field.type_name)} value);")
+                lines.append(f"int {prefix}_{snake}_set_{field.name}(KekStateStore* store, KekStateHandle handle, {c_type(field.type_name)} value);")
+                lines.append(f"int {prefix}_set_{snake}_instance_{field.name}({runtime_name}* runtime, KekStateHandle handle, {c_type(field.type_name)} value);")
+                lines.append(f"int {prefix}_set_{snake}_slot_{field.name}({runtime_name}* runtime, KekStateHandle handle, {c_type(field.type_name)} value);")
         lines.append(f"#define {prefix.upper()}_{snake.upper()}_STATE_TYPE {macro}")
         lines.append("")
     declared_predicates: set[str] = set()
@@ -333,16 +339,18 @@ def render_instance_declarations(states: list[State], hooks: list[Hook], instanc
         )
         lines.append(f"{instance.state_name}* {prefix}_{instance.name}_current({runtime_name}* runtime);")
         lines.append(f"const {instance.state_name}* {prefix}_{instance.name}_current_const(const {runtime_name}* runtime);")
-        lines.append(f"size_t {prefix}_{instance.name}_slot_id(const {runtime_name}* runtime);")
-        lines.append(f"int {prefix}_update_{instance.name}({runtime_name}* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields);")
-        lines.append(f"{item_name} {prefix}_{instance.name}_update_item({runtime_name}* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields);")
+        lines.append(f"KekStateHandle {prefix}_{instance.name}_handle(const {runtime_name}* runtime);")
+        lines.append(f"KekStateHandle {prefix}_{instance.name}_slot_id(const {runtime_name}* runtime);")
+        lines.append(f"int {prefix}_update_{instance.name}({runtime_name}* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields);")
+        lines.append(f"{item_name} {prefix}_{instance.name}_update_item({runtime_name}* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields);")
         if instance_state is not None:
             instance_snake = c_identifier_from_type(instance.state_name)
             for field in instance_state.fields:
                 if field.array_length is None and field.type_name != "String":
                     lines.append(f"int {prefix}_set_{instance.name}_{field.name}({runtime_name}* runtime, {c_type(field.type_name)} value);")
             if instance.name != instance_snake and instance_snake not in declared_predicates:
-                lines.append(f"int {prefix}_is_declared_{instance_snake}_slot(const {runtime_name}* runtime, size_t slot_id);")
+                lines.append(f"int {prefix}_is_declared_{instance_snake}_handle(const {runtime_name}* runtime, KekStateHandle handle);")
+                lines.append(f"int {prefix}_is_declared_{instance_snake}_slot(const {runtime_name}* runtime, KekStateHandle handle);")
                 declared_predicates.add(instance_snake)
         lines.append(f"#define {prefix.upper()}_{instance.name.upper()}_STATE_TYPE {state_type_macro(instance.state_name)}")
         lines.append("")
@@ -352,7 +360,7 @@ def render_instance_declarations(states: list[State], hooks: list[Hook], instanc
             snake = c_identifier_from_type(state.name)
             field_name = string_fields[0].name
             lines.append(
-                f"int {prefix}_{snake}_set_{field_name}(KekStateStore* store, size_t slot_id, const char* data, size_t len);"
+                f"int {prefix}_{snake}_set_{field_name}(KekStateStore* store, KekStateHandle handle, const char* data, size_t len);"
             )
     return "\n".join(lines).rstrip()
 
@@ -505,12 +513,37 @@ def render_descriptor_entries(states: list[State]) -> str:
         lines.append(f"        .type_id = {state_type_macro(state.name)},")
         lines.append(f"        .name = \"{state.name}\",")
         lines.append(f"        .size = sizeof({state.name}),")
+        lines.append(f"        .alignment = _Alignof({state.name}),")
+        if state.pool_capacity:
+            lines.append(f"        .pool_capacity = {state.pool_capacity},")
         lines.append(f"        .set_default = {state.name}_default_into,")
         lines.append(f"        .check = {state.name}_check_void,")
         lines.append(f"        .reset = {state.name}_reset_void,")
         lines.append(f"        .merge_fields = {state.name}_merge_fields,")
+        lines.append(f"        .fields = {state.name}_FieldDescriptors,")
+        lines.append(f"        .field_count = {len(state.fields)},")
         lines.append("    },")
     return "\n".join(lines)
+
+
+def render_field_descriptor_entries(states: list[State]) -> str:
+    blocks: list[str] = []
+    for state in states:
+        lines = [f"static const KekStateFieldDescriptor {state.name}_FieldDescriptors[] = {{"]
+        for field in state.fields:
+            field_ref = f"(({state.name}*)0)->{field.name}"
+            is_blob = field.type_name == "String" or field.array_length is not None
+            lines.append("    {")
+            lines.append(f"        .name = \"{field.name}\",")
+            lines.append(f"        .mask = {state_type_macro(state.name)}_FIELD_{field.name.upper()},")
+            lines.append(f"        .offset = offsetof({state.name}, {field.name}),")
+            lines.append(f"        .size = sizeof({field_ref}),")
+            lines.append(f"        .alignment = _Alignof(__typeof__({field_ref})),")
+            lines.append(f"        .is_blob = {1 if is_blob else 0},")
+            lines.append("    },")
+        lines.append("};")
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
 
 
 def render_instance_definitions(states: list[State], hooks: list[Hook], instances: list[Instance], name: str, enums: list[Enum] | None = None) -> str:
@@ -785,77 +818,85 @@ def render_instance_definitions(states: list[State], hooks: list[Hook], instance
         macro = state_type_macro(state.name)
         lines.extend(
             [
-                f"size_t {prefix}_{snake}_create(KekStateStore* store) {{",
+                f"KekStateHandle {prefix}_{snake}_create(KekStateStore* store) {{",
                 f"    return kek_state_store_add_default(store, &KekGeneratedStateDescriptors[{macro}]);",
                 "}",
                 "",
-                f"size_t {prefix}_{snake}_create_with(KekStateStore* store, const {state.name}* initial) {{",
+                f"KekStateHandle {prefix}_{snake}_create_with(KekStateStore* store, const {state.name}* initial) {{",
                 f"    return kek_state_store_add(store, &KekGeneratedStateDescriptors[{macro}], initial);",
                 "}",
                 "",
-                f"int {prefix}_{snake}_delete(KekStateStore* store, size_t slot_id) {{",
-                f"    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);",
+                f"int {prefix}_{snake}_delete(KekStateStore* store, KekStateHandle handle) {{",
+                f"    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);",
                 f"    if (descriptor == 0 || descriptor->type_id != {macro}) {{",
                 "        return 0;",
                 "    }",
-                "    return kek_state_store_remove(store, slot_id);",
+                "    return kek_state_store_remove(store, handle);",
                 "}",
                 "",
-                f"{state.name}* {prefix}_{snake}_slot(KekStateStore* store, size_t slot_id) {{",
-                f"    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);",
+                f"{state.name}* {prefix}_{snake}_instance(KekStateStore* store, KekStateHandle handle) {{",
+                f"    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);",
                 f"    if (descriptor == 0 || descriptor->type_id != {macro}) {{",
                 "        return 0;",
                 "    }",
-                f"    return ({state.name}*)kek_state_store_current(store, slot_id);",
+                f"    return ({state.name}*)kek_state_store_current(store, handle);",
                 "}",
                 "",
-                f"const {state.name}* {prefix}_{snake}_slot_const(const KekStateStore* store, size_t slot_id) {{",
-                f"    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);",
+                f"const {state.name}* {prefix}_{snake}_instance_const(const KekStateStore* store, KekStateHandle handle) {{",
+                f"    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);",
                 f"    if (descriptor == 0 || descriptor->type_id != {macro}) {{",
                 "        return 0;",
                 "    }",
-                f"    return (const {state.name}*)kek_state_store_current_const(store, slot_id);",
+                f"    return (const {state.name}*)kek_state_store_current_const(store, handle);",
                 "}",
                 "",
-                f"size_t {prefix}_{snake}_first(const KekStateStore* store) {{",
+                f"{state.name}* {prefix}_{snake}_slot(KekStateStore* store, KekStateHandle handle) {{",
+                f"    return {prefix}_{snake}_instance(store, handle);",
+                "}",
+                "",
+                f"const {state.name}* {prefix}_{snake}_slot_const(const KekStateStore* store, KekStateHandle handle) {{",
+                f"    return {prefix}_{snake}_instance_const(store, handle);",
+                "}",
+                "",
+                f"KekStateHandle {prefix}_{snake}_first(const KekStateStore* store) {{",
                 f"    return kek_state_store_find_first(store, {macro});",
                 "}",
                 "",
-                f"size_t {prefix}_{snake}_next(const KekStateStore* store, size_t after_slot_id) {{",
-                f"    return kek_state_store_find_next(store, {macro}, after_slot_id);",
+                f"KekStateHandle {prefix}_{snake}_next(const KekStateStore* store, KekStateHandle after_handle) {{",
+                f"    return kek_state_store_find_next(store, {macro}, after_handle);",
                 "}",
                 "",
-                f"size_t {prefix}_create_{snake}({runtime_name}* runtime) {{",
+                f"KekStateHandle {prefix}_create_{snake}({runtime_name}* runtime) {{",
                 f"    return {prefix}_{snake}_create({prefix}_get_store(runtime));",
                 "}",
                 "",
-                f"size_t {prefix}_create_{snake}_with({runtime_name}* runtime, const {state.name}* initial) {{",
+                f"KekStateHandle {prefix}_create_{snake}_with({runtime_name}* runtime, const {state.name}* initial) {{",
                 f"    return {prefix}_{snake}_create_with({prefix}_get_store(runtime), initial);",
                 "}",
                 "",
-                f"int {prefix}_delete_{snake}({runtime_name}* runtime, size_t slot_id) {{",
-                f"    return {prefix}_{snake}_delete({prefix}_get_store(runtime), slot_id);",
+                f"int {prefix}_delete_{snake}({runtime_name}* runtime, KekStateHandle handle) {{",
+                f"    return {prefix}_{snake}_delete({prefix}_get_store(runtime), handle);",
                 "}",
                 "",
-                f"{state.name}* {prefix}_{snake}_at({runtime_name}* runtime, size_t slot_id) {{",
-                f"    return {prefix}_{snake}_slot({prefix}_get_store(runtime), slot_id);",
+                f"{state.name}* {prefix}_{snake}_at({runtime_name}* runtime, KekStateHandle handle) {{",
+                f"    return {prefix}_{snake}_instance({prefix}_get_store(runtime), handle);",
                 "}",
                 "",
-                f"const {state.name}* {prefix}_{snake}_at_const(const {runtime_name}* runtime, size_t slot_id) {{",
-                f"    return {prefix}_{snake}_slot_const({prefix}_get_store_const(runtime), slot_id);",
+                f"const {state.name}* {prefix}_{snake}_at_const(const {runtime_name}* runtime, KekStateHandle handle) {{",
+                f"    return {prefix}_{snake}_instance_const({prefix}_get_store_const(runtime), handle);",
                 "}",
                 "",
-                f"size_t {prefix}_first_{snake}(const {runtime_name}* runtime) {{",
+                f"KekStateHandle {prefix}_first_{snake}(const {runtime_name}* runtime) {{",
                 f"    return {prefix}_{snake}_first({prefix}_get_store_const(runtime));",
                 "}",
                 "",
-                f"size_t {prefix}_next_{snake}(const {runtime_name}* runtime, size_t after_slot_id) {{",
-                f"    return {prefix}_{snake}_next({prefix}_get_store_const(runtime), after_slot_id);",
+                f"KekStateHandle {prefix}_next_{snake}(const {runtime_name}* runtime, KekStateHandle after_handle) {{",
+                f"    return {prefix}_{snake}_next({prefix}_get_store_const(runtime), after_handle);",
                 "}",
                 "",
                 f"int {prefix}_count_{snake}(const {runtime_name}* runtime) {{",
                 "    int count = 0;",
-                f"    for (size_t slot = {prefix}_first_{snake}(runtime); slot != KEK_STATE_INVALID_ID; slot = {prefix}_next_{snake}(runtime, slot)) {{",
+                f"    for (KekStateHandle handle = {prefix}_first_{snake}(runtime); handle != KEK_STATE_INVALID_ID; handle = {prefix}_next_{snake}(runtime, handle)) {{",
                 "        count++;",
                 "    }",
                 "    return count;",
@@ -868,8 +909,8 @@ def render_instance_definitions(states: list[State], hooks: list[Hook], instance
                 [
                     f"int {prefix}_count_active_{snake}(const {runtime_name}* runtime) {{",
                     "    int count = 0;",
-                    f"    for (size_t slot = {prefix}_first_{snake}(runtime); slot != KEK_STATE_INVALID_ID; slot = {prefix}_next_{snake}(runtime, slot)) {{",
-                    f"        const {state.name}* state = {prefix}_{snake}_at_const(runtime, slot);",
+                    f"    for (KekStateHandle handle = {prefix}_first_{snake}(runtime); handle != KEK_STATE_INVALID_ID; handle = {prefix}_next_{snake}(runtime, handle)) {{",
+                    f"        const {state.name}* state = {prefix}_{snake}_at_const(runtime, handle);",
                     "        if (state && state->active) {",
                     "            count++;",
                     "        }",
@@ -881,13 +922,21 @@ def render_instance_definitions(states: list[State], hooks: list[Hook], instance
             )
         lines.extend(
             [
-                f"int {prefix}_update_{snake}_slot({runtime_name}* runtime, size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {{",
-                f"    return kek_state_store_update_fields({prefix}_get_store(runtime), slot_id, update, context, changed_fields);",
+                f"int {prefix}_update_{snake}_instance({runtime_name}* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {{",
+                f"    return kek_state_store_update_fields({prefix}_get_store(runtime), handle, update, context, changed_fields);",
                 "}",
                 "",
-                f"{item_name} {prefix}_{snake}_slot_update_item(size_t slot_id, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {{",
-                f"    {item_name} item = {{slot_id, update, context, changed_fields}};",
+                f"int {prefix}_update_{snake}_slot({runtime_name}* runtime, KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {{",
+                f"    return {prefix}_update_{snake}_instance(runtime, handle, update, context, changed_fields);",
+                "}",
+                "",
+                f"{item_name} {prefix}_{snake}_instance_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {{",
+                f"    {item_name} item = {{handle, update, context, changed_fields}};",
                 "    return item;",
+                "}",
+                "",
+                f"{item_name} {prefix}_{snake}_slot_update_item(KekStateHandle handle, KekStateUpdateFn update, void* context, uint64_t changed_fields) {{",
+                f"    return {prefix}_{snake}_instance_update_item(handle, update, context, changed_fields);",
                 "}",
                 "",
             ]
@@ -910,13 +959,17 @@ def render_instance_definitions(states: list[State], hooks: list[Hook], instance
                     f"    state->{field.name} = update->value;",
                     "}",
                     "",
-                    f"int {prefix}_{snake}_set_{field.name}(KekStateStore* store, size_t slot_id, {c_type(field.type_name)} value) {{",
+                    f"int {prefix}_{snake}_set_{field.name}(KekStateStore* store, KekStateHandle handle, {c_type(field.type_name)} value) {{",
                     f"    {state.name}_{field.name}_FieldUpdate update = {{value}};",
-                    f"    return kek_state_store_update_fields(store, slot_id, {prefix}_{snake}_set_{field.name}_update, &update, {macro}_FIELD_{field.name.upper()});",
+                    f"    return kek_state_store_update_fields(store, handle, {prefix}_{snake}_set_{field.name}_update, &update, {macro}_FIELD_{field.name.upper()});",
                     "}",
                     "",
-                    f"int {prefix}_set_{snake}_slot_{field.name}({runtime_name}* runtime, size_t slot_id, {c_type(field.type_name)} value) {{",
-                    f"    return {prefix}_{snake}_set_{field.name}({prefix}_get_store(runtime), slot_id, value);",
+                    f"int {prefix}_set_{snake}_instance_{field.name}({runtime_name}* runtime, KekStateHandle handle, {c_type(field.type_name)} value) {{",
+                    f"    return {prefix}_{snake}_set_{field.name}({prefix}_get_store(runtime), handle, value);",
+                    "}",
+                    "",
+                    f"int {prefix}_set_{snake}_slot_{field.name}({runtime_name}* runtime, KekStateHandle handle, {c_type(field.type_name)} value) {{",
+                    f"    return {prefix}_set_{snake}_instance_{field.name}(runtime, handle, value);",
                     "}",
                     "",
                 ]
@@ -949,17 +1002,21 @@ def render_instance_definitions(states: list[State], hooks: list[Hook], instance
                 f"    return {prefix}_{instance.name}_const({prefix}_get_store_const(runtime), {prefix}_get_slots_const(runtime));",
                 "}",
                 "",
-                f"size_t {prefix}_{instance.name}_slot_id(const {runtime_name}* runtime) {{",
+                f"KekStateHandle {prefix}_{instance.name}_handle(const {runtime_name}* runtime) {{",
                 f"    const {slots_name}* slots = {prefix}_get_slots_const(runtime);",
                 f"    return slots ? slots->{instance.name} : KEK_STATE_INVALID_ID;",
                 "}",
                 "",
-                f"int {prefix}_update_{instance.name}({runtime_name}* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {{",
-                f"    return {prefix}_update_{snake}_slot(runtime, {prefix}_{instance.name}_slot_id(runtime), update, context, changed_fields);",
+                f"KekStateHandle {prefix}_{instance.name}_slot_id(const {runtime_name}* runtime) {{",
+                f"    return {prefix}_{instance.name}_handle(runtime);",
                 "}",
                 "",
-                f"{item_name} {prefix}_{instance.name}_update_item({runtime_name}* runtime, KekStateStorageUpdateFn update, void* context, uint64_t changed_fields) {{",
-                f"    return {prefix}_{snake}_slot_update_item({prefix}_{instance.name}_slot_id(runtime), update, context, changed_fields);",
+                f"int {prefix}_update_{instance.name}({runtime_name}* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields) {{",
+                f"    return {prefix}_update_{snake}_instance(runtime, {prefix}_{instance.name}_handle(runtime), update, context, changed_fields);",
+                "}",
+                "",
+                f"{item_name} {prefix}_{instance.name}_update_item({runtime_name}* runtime, KekStateUpdateFn update, void* context, uint64_t changed_fields) {{",
+                f"    return {prefix}_{snake}_instance_update_item({prefix}_{instance.name}_handle(runtime), update, context, changed_fields);",
                 "}",
                 "",
             ]
@@ -971,7 +1028,7 @@ def render_instance_definitions(states: list[State], hooks: list[Hook], instance
                 lines.extend(
                     [
                         f"int {prefix}_set_{instance.name}_{field.name}({runtime_name}* runtime, {c_type(field.type_name)} value) {{",
-                        f"    return {prefix}_set_{snake}_slot_{field.name}(runtime, {prefix}_{instance.name}_slot_id(runtime), value);",
+                        f"    return {prefix}_set_{snake}_instance_{field.name}(runtime, {prefix}_{instance.name}_handle(runtime), value);",
                         "}",
                         "",
                     ]
@@ -984,16 +1041,25 @@ def render_instance_definitions(states: list[State], hooks: list[Hook], instance
         snake = c_identifier_from_type(state_name)
         lines.extend(
             [
-                f"int {prefix}_is_declared_{snake}_slot(const {runtime_name}* runtime, size_t slot_id) {{",
+                f"int {prefix}_is_declared_{snake}_handle(const {runtime_name}* runtime, KekStateHandle handle) {{",
                 f"    const {slots_name}* slots = {prefix}_get_slots_const(runtime);",
                 "    if (slots == 0) {",
                 "        return 0;",
                 "    }",
             ]
         )
-        conditions = " || ".join(f"slot_id == slots->{instance.name}" for instance in state_instances)
+        conditions = " || ".join(f"handle == slots->{instance.name}" for instance in state_instances)
         lines.append(f"    return {conditions};")
-        lines.extend(["}", ""])
+        lines.extend(
+            [
+                "}",
+                "",
+                f"int {prefix}_is_declared_{snake}_slot(const {runtime_name}* runtime, KekStateHandle handle) {{",
+                f"    return {prefix}_is_declared_{snake}_handle(runtime, handle);",
+                "}",
+                "",
+            ]
+        )
     for state in states:
         string_fields = [field for field in state.fields if field.type_name == "String" and field.array_length is None]
         if len(string_fields) != 1:
@@ -1014,13 +1080,13 @@ def render_instance_definitions(states: list[State], hooks: list[Hook], instance
                 f"    state->{field_name} = (KekString){{update->data, update->len}};",
                 "}",
                 "",
-                f"int {prefix}_{snake}_set_{field_name}(KekStateStore* store, size_t slot_id, const char* data, size_t len) {{",
-                f"    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, slot_id);",
+                f"int {prefix}_{snake}_set_{field_name}(KekStateStore* store, KekStateHandle handle, const char* data, size_t len) {{",
+                f"    const KekStateDescriptor* descriptor = kek_state_store_descriptor(store, handle);",
                 f"    if (descriptor == 0 || descriptor->type_id != {macro}) {{",
                 "        return 0;",
                 "    }",
                 f"    {state.name}_{field_name}_TextUpdate update = {{data, len}};",
-                f"    return kek_state_store_update_fields(store, slot_id, {prefix}_{snake}_update_{field_name}, &update, {macro}_FIELD_{field_name.upper()});",
+                f"    return kek_state_store_update_fields(store, handle, {prefix}_{snake}_update_{field_name}, &update, {macro}_FIELD_{field_name.upper()});",
                 "}",
                 "",
             ]
@@ -1135,6 +1201,8 @@ def render_hook_scheduling_flags(hook: Hook) -> str:
         flags.append("KEK_HOOK_SCHEDULING_ALLOW_PARALLEL_WRITES")
     if hook.field_merge_safe:
         flags.append("KEK_HOOK_SCHEDULING_FIELD_MERGE_SAFE")
+    if hook.needs_event_state:
+        flags.append("KEK_HOOK_SCHEDULING_NEEDS_EVENT_STATE")
     return " | ".join(flags) if flags else "0"
 
 

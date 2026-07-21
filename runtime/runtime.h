@@ -20,6 +20,7 @@ typedef struct KekRuntime {
     int raw_mode_enabled;
     int raw_mode_fd;
     struct termios original_termios;
+    int state_snapshots_enabled;
     KekRuntimeTrace trace;
     KekThreadPool thread_pool;
 } KekRuntime;

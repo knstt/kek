@@ -30,8 +30,8 @@ It is responsible for event processing and runtime-managed states. It is not res
 | RT-FR-012 | Buffer writes for writable stream states. | Implemented | `kek_stream_write()`, `kek_stream_write_raw()` |
 | RT-FR-013 | Publish state-change events. | Implemented | `kek_runtime_publish_state_changed()` |
 | RT-FR-014 | Enable and disable raw terminal mode when applicable. | Implemented | `kek_runtime_enable_raw_mode()`, `kek_runtime_disable_raw_mode()` |
-| RT-FR-015 | Validate generated state updates before publishing them. | Implemented | `kek_state_storage_update()`, `kek_state_store_update()` |
-| RT-FR-016 | Store generated states independently. | Implemented | `KekStateStore`, `KekStateSlot` |
+| RT-FR-015 | Validate generated state updates before publishing them. | Implemented | `kek_state_store_update()` |
+| RT-FR-016 | Store generated state instances independently. | Implemented | `KekStateStore`, `KekStateHandle`, `KekStateSlot` |
 | RT-FR-017 | Support multiple instances of the same generated state type. | Implemented | Multiple slots can share one `KekStateDescriptor` |
 | RT-FR-018 | Publish state-changed events with state type, slot, and version metadata. | Implemented | `KekEvent.state_type_id`, `state_slot_id`, `state_version` |
 | RT-FR-019 | Register and dispatch generated hook descriptors. | Implemented | `KekHookRegistry`, `KekHookDescriptor` |
